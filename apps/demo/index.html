@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>futurCharts — démo</title>
+    <style>
+      :root {
+        --plane: #f9f9f7;
+        --surface: #fcfcfb;
+        --ink: #0b0b0b;
+        --ink-2: #52514e;
+        --border: rgba(11, 11, 11, 0.1);
+      }
+      :root[data-theme='dark'] {
+        --plane: #0d0d0d;
+        --surface: #1a1a19;
+        --ink: #f0efec;
+        --ink-2: #c3c2b7;
+        --border: rgba(255, 255, 255, 0.1);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--plane);
+        color: var(--ink);
+        font: 14px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+      header {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        flex-wrap: wrap;
+        padding: 24px 24px 8px;
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+      h1 { font-size: 20px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+      header p { margin: 0; color: var(--ink-2); flex: 1; min-width: 200px; }
+      button {
+        font: inherit;
+        color: var(--ink);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 6px 12px;
+        cursor: pointer;
+      }
+      main {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr));
+        gap: 16px;
+        padding: 16px 24px 32px;
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        height: 380px;
+      }
+      .card.wide { grid-column: 1 / -1; }
+      .hint { color: var(--ink-2); font-size: 12px; padding: 0 24px 24px; max-width: 1400px; margin: 0 auto; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>futurCharts</h1>
+      <p>Rendu WebGL2 · spec déclarative · thèmes</p>
+      <button id="theme" type="button">Thème sombre</button>
+    </header>
+    <main id="grid"></main>
+    <p class="hint">Molette pour zoomer, glisser pour déplacer, double-clic pour réinitialiser. Cliquer une entrée de légende masque la série.</p>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

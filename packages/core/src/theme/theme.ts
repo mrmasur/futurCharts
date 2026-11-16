@@ -1,0 +1,203 @@
+import type { PointShape } from '../render/layouts';
+import { deepMerge, type DeepPartial } from '../util/merge';
+
+export interface LineStyle {
+  visible: boolean;
+  color: string;
+  width: number;
+}
+
+export interface TextStyle {
+  color: string;
+  size: number;
+  weight: number | string;
+}
+
+/**
+ * Every visual decision of a chart lives here. A spec can override any leaf
+ * (`theme: { extends: 'dark', marks: { bar: { radius: 0 } } }`), and each layer
+ * can override its own mark style again.
+ */
+export interface Theme {
+  name: string;
+  /** Chart surface. `transparent` lets the host page show through. */
+  background: string;
+  /** Outer padding around the whole chart, px. */
+  padding: number;
+  font: { family: string; size: number };
+  text: { primary: string; secondary: string; muted: string };
+  palette: {
+    /** Fixed order: a series keeps its slot whatever is filtered. */
+    categorical: string[];
+    /** One hue, light to dark, for magnitude. */
+    sequential: string[];
+  };
+  title: TextStyle & { gap: number };
+  subtitle: TextStyle;
+  axis: {
+    line: LineStyle;
+    tick: LineStyle & { size: number };
+    label: TextStyle & { padding: number };
+    title: TextStyle & { padding: number };
+  };
+  grid: { x: LineStyle; y: LineStyle };
+  legend: {
+    visible: boolean;
+    label: TextStyle;
+    symbolSize: number;
+    itemGap: number;
+    /** Opacity of a series toggled off in the legend. */
+    hiddenOpacity: number;
+  };
+  marks: {
+    line: { width: number; curve: 'linear' | 'step' | 'smooth'; opacity: number };
+    bar: {
+      /** Radius of the data end, px. The baseline end stays square. */
+      radius: number;
+      /** Surface gap between touching bars and stacked segments, px. */
+      gap: number;
+      /** Cap on bar thickness, px (0 = fill the band). */
+      maxWidth: number;
+      /** Share of the band left empty between categories. */
+      bandPadding: number;
+      opacity: number;
+      strokeWidth: number;
+      stroke: string;
+    };
+    point: {
+      size: number;
+      shape: PointShape;
+      opacity: number;
+      /** Ring width, px. */
+      strokeWidth: number;
+      /** `surface` uses the chart background, so overlapping dots stay readable. */
+      stroke: string;
+      /** Size range in px when `size` is bound to a field. */
+      sizeRange: [number, number];
+    };
+    area: {
+      opacity: number;
+      stackedOpacity: number;
+      /** Fade the fill to transparent towards the baseline. */
+      gradient: boolean;
+      line: boolean;
+      lineWidth: number;
+      curve: 'linear' | 'step' | 'smooth';
+    };
+  };
+  tooltip: {
+    background: string;
+    color: string;
+    muted: string;
+    border: string;
+    radius: number;
+    padding: number;
+    shadow: string;
+    fontSize: number;
+  };
+  crosshair: LineStyle;
+  hover: { markerSize: number; bandFill: string };
+}
+
+const SANS = 'system-ui, -apple-system, "Segoe UI", sans-serif';
+
+export const lightTheme: Theme = {
+  name: 'light',
+  background: '#fcfcfb',
+  padding: 16,
+  font: { family: SANS, size: 12 },
+  text: { primary: '#0b0b0b', secondary: '#52514e', muted: '#898781' },
+  palette: {
+    categorical: ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'],
+    sequential: ['#cde2fb', '#86b6ef', '#3987e5', '#1c5cab', '#0d366b'],
+  },
+  title: { color: '#0b0b0b', size: 15, weight: 600, gap: 12 },
+  subtitle: { color: '#52514e', size: 12, weight: 400 },
+  axis: {
+    line: { visible: true, color: '#c3c2b7', width: 1 },
+    tick: { visible: false, color: '#c3c2b7', width: 1, size: 4 },
+    label: { color: '#898781', size: 11, weight: 400, padding: 8 },
+    title: { color: '#52514e', size: 11, weight: 500, padding: 8 },
+  },
+  grid: {
+    x: { visible: false, color: '#e1e0d9', width: 1 },
+    y: { visible: true, color: '#e1e0d9', width: 1 },
+  },
+  legend: {
+    visible: true,
+    label: { color: '#52514e', size: 12, weight: 400 },
+    symbolSize: 8,
+    itemGap: 16,
+    hiddenOpacity: 0.35,
+  },
+  marks: {
+    line: { width: 2, curve: 'linear', opacity: 1 },
+    bar: { radius: 4, gap: 2, maxWidth: 28, bandPadding: 0.3, opacity: 1, strokeWidth: 0, stroke: 'transparent' },
+    point: { size: 8, shape: 'circle', opacity: 1, strokeWidth: 2, stroke: 'surface', sizeRange: [4, 28] },
+    area: { opacity: 0.12, stackedOpacity: 0.8, gradient: false, line: true, lineWidth: 2, curve: 'linear' },
+  },
+  tooltip: {
+    background: '#ffffff',
+    color: '#0b0b0b',
+    muted: '#52514e',
+    border: 'rgba(11,11,11,0.10)',
+    radius: 8,
+    padding: 10,
+    shadow: '0 4px 16px rgba(11,11,11,0.10)',
+    fontSize: 12,
+  },
+  crosshair: { visible: true, color: '#898781', width: 1 },
+  hover: { markerSize: 9, bandFill: 'rgba(11,11,11,0.05)' },
+};
+
+export const darkTheme: Theme = deepMerge(lightTheme, {
+  name: 'dark',
+  background: '#1a1a19',
+  text: { primary: '#f0efec', secondary: '#c3c2b7', muted: '#898781' },
+  palette: {
+    categorical: ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#0ca30c', '#9085e9', '#e66767'],
+    sequential: ['#0d366b', '#1c5cab', '#3987e5', '#86b6ef', '#cde2fb'],
+  },
+  title: { color: '#f0efec' },
+  subtitle: { color: '#c3c2b7' },
+  axis: {
+    line: { color: '#383835' },
+    tick: { color: '#383835' },
+    title: { color: '#c3c2b7' },
+  },
+  grid: { x: { color: '#2c2c2a' }, y: { color: '#2c2c2a' } },
+  legend: { label: { color: '#c3c2b7' } },
+  tooltip: {
+    background: '#262624',
+    color: '#f0efec',
+    muted: '#c3c2b7',
+    border: 'rgba(255,255,255,0.10)',
+    shadow: '0 4px 16px rgba(0,0,0,0.45)',
+  },
+  hover: { bandFill: 'rgba(255,255,255,0.06)' },
+});
+
+const registry = new Map<string, Theme>([
+  ['light', lightTheme],
+  ['dark', darkTheme],
+]);
+
+/** Make a theme available by name in specs (`theme: 'my-brand'`). */
+export function registerTheme(name: string, theme: DeepPartial<Theme>, base: string = 'light'): Theme {
+  const full = deepMerge(registry.get(base) ?? lightTheme, theme, { name } as DeepPartial<Theme>);
+  registry.set(name, full);
+  return full;
+}
+
+export type ThemeSpec = string | (DeepPartial<Theme> & { extends?: string });
+
+export function resolveTheme(spec: ThemeSpec | undefined): Theme {
+  if (spec === undefined) return lightTheme;
+  if (typeof spec === 'string') {
+    const t = registry.get(spec);
+    if (!t) throw new Error(`futurCharts: unknown theme "${spec}". Registered: ${[...registry.keys()].join(', ')}`);
+    return t;
+  }
+  const { extends: base, ...overrides } = spec;
+  return deepMerge(resolveTheme(base ?? 'light'), overrides as DeepPartial<Theme>);
+}
