@@ -3,7 +3,7 @@ import type { RGBA } from '../render/types';
 import { parseColor, withAlpha } from '../util/color';
 import { curvePoints, type Polyline } from './curve';
 import type { SeriesData } from './prepare';
-import { buildHit, registerMark, type BuildContext, type MarkDefinition } from './registry';
+import { buildHit, hasMark, registerMark, type BuildContext, type MarkDefinition } from './registry';
 
 function normalized(ctx: BuildContext, s: SeriesData, y: Float64Array): { x: Float32Array; y: Float32Array } {
   const n = s.x.length;
@@ -167,7 +167,16 @@ const point: MarkDefinition = {
   },
 };
 
-registerMark('line', line);
-registerMark('area', area);
-registerMark('bar', bar);
-registerMark('point', point);
+const builtins: Record<string, MarkDefinition> = { line, area, bar, point };
+
+/**
+ * Register the built-in marks. Called when a chart is created rather than at
+ * import time: the package is marked side-effect free, so a bundler is allowed
+ * to drop an import that only exists for its side effect.
+ * A mark the app registered under the same name is left alone.
+ */
+export function ensureBuiltinMarks(): void {
+  for (const [name, definition] of Object.entries(builtins)) {
+    if (!hasMark(name)) registerMark(name, definition);
+  }
+}

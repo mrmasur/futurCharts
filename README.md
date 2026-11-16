@@ -7,6 +7,7 @@ npm install
 npm run dev        # démo sur http://localhost:5273
 npm test
 npm run typecheck
+npm run build      # dist/ de chaque paquet
 ```
 
 ## Utilisation
@@ -66,6 +67,24 @@ chart(res.data).fields(fields).bar({ x: 'month', y: 'mrr', color: 'plan' }, { st
 
 Les libellés et formats se lisent dans dbt via `label`, `description` et `meta.format` (une `FormatSpec`).
 
+## Wrappers
+
+Tous reposent sur `mountChart` (dans le cœur), qui gère la création asynchrone, les mises à jour et la
+destruction. Le graphique se met à jour quand l'objet `spec` est **remplacé** : gardez-le stable entre deux rendus.
+
+| Paquet | Usage |
+|---|---|
+| `@futurcharts/react` | `<FuturChart spec={spec} onClick={...} />` — mémoïser la spec avec `useMemo` ; `ref.current.chart` donne le graphique |
+| `@futurcharts/vue` | `<FuturChart :spec="spec" @click="..." />` — tenir la spec dans un `shallowRef` |
+| `@futurcharts/ember` | Modifier : `<div {{futurChart this.spec onClick=this.select}}></div>` |
+| `@futurcharts/element` | `defineFuturChart()` puis `<futur-chart>` : propriété `spec`, événements `chart-click`, `chart-hover`… |
+
+Le conteneur doit avoir une hauteur. En Ember classique (templates `.hbs`), réexportez le modifier dans
+`app/modifiers/futur-chart.js` : `export { default } from '@futurcharts/ember';`.
+
+`npm run build` produit `dist/` pour chaque paquet. La démo et les tests tournent sur les sources ;
+`apps/demo/wrappers.html` monte le même graphique via React, Vue et le Web Component.
+
 ## Règle : la porte WebGPU reste ouverte
 
 - Rien au-dessus de `render/` ne référence un concept WebGL. Les marques ne connaissent que `Renderer`,
@@ -76,7 +95,18 @@ Les libellés et formats se lisent dans dbt via `label`, `description` et `meta.
 - Un moteur WebGPU s'ajoute en implémentant `Renderer` dans `render/webgpu/` et en le sondant dans
   `createRenderer('auto')`. Il se branche aussi dès maintenant via `options.renderer`.
 
+## Prévu : animation et évolution dans le temps
+
+- **Animation d'entrée** : le graphique se construit en une seconde environ au chargement (barres qui montent,
+  lignes qui se tracent, points qui apparaissent), avec durée, courbe d'accélération et décalage réglables dans la spec.
+- **Transitions** : passage fluide d'un état de données à un autre (filtre, série masquée, nouvelle période).
+- **Évolution dans le temps** : une dimension de la spec joue le rôle d'images successives, pour les courses de
+  barres et autres graphiques animés, avec lecture, pause et curseur temporel.
+
+Conséquences sur l'architecture : une clé d'identité par donnée pour apparier deux états, et une interpolation
+faite sur GPU entre deux états de buffer, pilotée par un uniform de progression.
+
 ## Pas encore fait
 
-Lecture du format Arrow, wrappers React / Vue / Ember, moteur WebGPU,
+Lecture du format Arrow, moteur WebGPU, publication sur npm,
 export SVG/PDF, tirets sur les lignes, barres horizontales, gestion de la perte de contexte WebGL.

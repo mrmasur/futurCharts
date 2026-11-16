@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Table } from '../src/data/table';
+import { ensureBuiltinMarks } from '../src/marks/builtin';
 import { curvePoints } from '../src/marks/curve';
+import { getMark, registerMark } from '../src/marks/registry';
 import { prepareLayer } from '../src/marks/prepare';
 import { LAYOUTS } from '../src/render/layouts';
 import { BandScale, LinearScale, TimeScale, niceDomain } from '../src/scale/scales';
@@ -105,5 +107,15 @@ describe('render layouts', () => {
     for (const l of Object.values(LAYOUTS)) {
       expect(l.attributes.reduce((n, a) => n + a.size, 0)).toBe(l.stride);
     }
+  });
+});
+
+describe('marks registry', () => {
+  it('built-in marks are registered on demand and never override an app mark', () => {
+    const custom = { build: () => ({ draws: [], hit: {} as never }) };
+    registerMark('bar', custom);
+    ensureBuiltinMarks();
+    expect(getMark('bar')).toBe(custom);
+    expect(getMark('line').symbol).toBe('line');
   });
 });

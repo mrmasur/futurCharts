@@ -1,5 +1,5 @@
 import { Table, type DataInput, type Row } from '../data/table';
-import '../marks/builtin';
+import { ensureBuiltinMarks } from '../marks/builtin';
 import { prepareLayer, type LayerData, type SeriesData } from '../marks/prepare';
 import { getMark, type BuildContext, type BuiltMark, type MarkDefinition } from '../marks/registry';
 import { createRenderer, type RendererChoice } from '../render';
@@ -117,6 +117,7 @@ export class Chart {
 
   /** Async because acquiring a GPU device can be (WebGPU). */
   static async create(container: HTMLElement, spec: ChartSpec, options: ChartOptions = {}): Promise<Chart> {
+    ensureBuiltinMarks();
     const chart = new Chart(container, options);
     await chart.init();
     chart.update(spec);

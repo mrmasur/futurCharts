@@ -1,5 +1,7 @@
 export { Chart } from './chart/chart';
 export type { ChartOptions, ChartEvents, HoverItem, TooltipContext } from './chart/chart';
+export { mountChart } from './chart/mount';
+export type { ChartHandle, ChartHandlers } from './chart/mount';
 
 export { chart, ChartBuilder } from './spec/builder';
 export type * from './spec/types';

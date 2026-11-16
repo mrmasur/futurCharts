@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>futurCharts — wrappers</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #f9f9f7; color: #0b0b0b; font: 14px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+      header { padding: 24px 24px 8px; max-width: 1400px; margin: 0 auto; }
+      h1 { font-size: 20px; margin: 0; }
+      header p { margin: 4px 0 0; color: #52514e; }
+      main { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 16px; padding: 16px 24px 32px; max-width: 1400px; margin: 0 auto; }
+      section { background: #fcfcfb; border: 1px solid rgba(11, 11, 11, 0.1); border-radius: 12px; overflow: hidden; }
+      .bar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid rgba(11, 11, 11, 0.1); }
+      .bar strong { flex: 1; }
+      .bar output { color: #52514e; font-size: 12px; font-variant-numeric: tabular-nums; }
+      button { font: inherit; background: #fff; border: 1px solid rgba(11, 11, 11, 0.15); border-radius: 8px; padding: 4px 10px; cursor: pointer; }
+      .chart, futur-chart { height: 300px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>futurCharts — wrappers</h1>
+      <p>Le même graphique monté par React, Vue et le Web Component. « Nouvelles données » remplace la spec ; un clic sur une barre remonte un événement.</p>
+    </header>
+    <main>
+      <section id="react"></section>
+      <section id="vue"></section>
+      <section>
+        <div class="bar"><strong>Web Component</strong><output id="wc-out">—</output><button id="wc-btn" type="button">Nouvelles données</button></div>
+        <futur-chart id="wc"></futur-chart>
+      </section>
+    </main>
+    <script type="module" src="/src/wrappers.ts"></script>
+  </body>
+</html>

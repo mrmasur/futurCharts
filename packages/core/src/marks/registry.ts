@@ -63,6 +63,10 @@ export function registerMark(name: string, definition: MarkDefinition): void {
   registry.set(name, definition);
 }
 
+export function hasMark(name: string): boolean {
+  return registry.has(name);
+}
+
 export function getMark(name: string): MarkDefinition {
   const m = registry.get(name);
   if (!m) throw new Error(`futurCharts: unknown mark "${name}". Registered: ${[...registry.keys()].join(', ')}`);
