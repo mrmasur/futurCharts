@@ -108,6 +108,24 @@ export interface Theme {
      * `scale`: `width` gives every violin the full width (shapes compare), `area` keeps densities comparable across categories.
      */
     violin: { width: number; fillOpacity: number; strokeWidth: number; box: boolean; samples: number; scale: 'width' | 'area' };
+    /**
+     * Flow diagrams. `variant`: `pipeline` (small glyphs, thin curves, labels under) or `boxes` (boxes and
+     * arrows). `direction`: LR or TB. Sizes in px at 100 %; the diagram is scaled to fit.
+     * `edge`: link color (`auto` follows the muted ink). `tint`: how much of the node color fills a box.
+     */
+    flow: {
+      variant: 'pipeline' | 'boxes';
+      /** Steps can be dragged; the chart then emits `layout` with every position. */
+      editable: boolean;
+      direction: 'TB' | 'LR';
+      rankGap: number;
+      nodeGap: number;
+      fontSize: number;
+      edge: string;
+      edgeWidth: number;
+      tint: number;
+      radius: number;
+    };
     /** Map shapes (basemap, choropleth). */
     geoshape: {
       fill: string;
@@ -200,6 +218,7 @@ export const lightTheme: Theme = {
     waffle: { rows: 10, columns: 10, gap: 2, radius: 2 },
     rose: { levels: 3, gap: 2, innerRadius: 0.08, labels: true },
     violin: { width: 0.8, fillOpacity: 0.28, strokeWidth: 1.5, box: true, samples: 64, scale: 'width' },
+    flow: { variant: 'pipeline', editable: true, direction: 'LR', rankGap: 56, nodeGap: 28, fontSize: 13, edge: 'auto', edgeWidth: 1.5, tint: 0.16, radius: 6 },
   },
   tooltip: {
     background: '#ffffff',

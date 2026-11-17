@@ -93,6 +93,8 @@ export interface LayerSpec {
   data?: DataInput;
   /** GeoJSON to draw (shape marks): a FeatureCollection, Feature or Geometry. */
   geo?: unknown;
+  /** Boxes and arrows (`flow` mark): a whole process, branches and loops included. */
+  graph?: FlowGraph;
   /** Where a shape's join key and name live, e.g. `properties.iso_a3`. Default: `properties.name`, then `id`. */
   geoKey?: string;
   encode: Encoding;
@@ -140,7 +142,8 @@ export type MarkStyle = { color?: string } & DeepPartial<
     Theme['marks']['kpi'] &
     Theme['marks']['waffle'] &
     Theme['marks']['rose'] &
-    Theme['marks']['violin']
+    Theme['marks']['violin'] &
+    Theme['marks']['flow']
 >;
 
 /** A condition on one field of a row. Several conditions in an array must all hold. */
@@ -153,6 +156,43 @@ export interface Predicate {
   gte?: number;
   lt?: number;
   lte?: number;
+}
+
+export type FlowShape = 'step' | 'start' | 'end' | 'decision' | 'io' | 'subprocess';
+
+export interface FlowNode {
+  id: string;
+  /** Text in the box; defaults to the id. */
+  label?: string;
+  /** `step` (default), `start` / `end` (pill), `decision` (diamond), `io` (parallelogram), `subprocess`. */
+  shape?: FlowShape;
+  /** A figure shown under the label (count, duration…), formatted with `fields[valueField]` if given. */
+  value?: number;
+  /** Groups color the boxes and form the legend (team, system, lane…). */
+  group?: string;
+  /** Explicit color (theme tokens allowed). */
+  color?: string;
+  /** Extra text in the tooltip (and under the name in the pipeline look). */
+  description?: string;
+  /** Position by hand (px, center of the node, from the top-left of the drawing). Unset: automatic placement. */
+  x?: number;
+  y?: number;
+}
+
+export interface FlowEdge {
+  from: string;
+  to: string;
+  /** Text on the arrow ("Oui", "Non", "Relance"). */
+  label?: string;
+  /** Volume on the arrow: thickens it, shown in the tooltip. */
+  value?: number;
+  /** Dashed arrow (optional path, asynchronous message). */
+  dashed?: boolean;
+}
+
+export interface FlowGraph {
+  nodes: FlowNode[];
+  edges: FlowEdge[];
 }
 
 export interface Highlight {

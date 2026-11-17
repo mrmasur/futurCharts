@@ -208,11 +208,50 @@ Un panneau par valeur du champ, avec le même ordre de catégories, les mêmes c
 Conséquences sur l'architecture : une clé d'identité par donnée pour apparier deux états, et une interpolation
 faite sur GPU entre deux états de buffer, pilotée par un uniform de progression.
 
-## Prévu : diagrammes de flux
+## Diagrammes de flux
 
-Des boîtes reliées pour tracer un processus de bout en bout : début et fin, embranchements, boucles. À la différence
-du Sankey, les liens ne sont pas proportionnels à un volume : il faut un placement de graphe orienté qui gère les
-cycles, des liens routés avec flèches et des formes de nœuds (étape, décision, début / fin).
+Des boîtes reliées pour tracer un processus de bout en bout, embranchements et boucles compris :
+
+```json
+{
+  "mark": "flow",
+  "graph": {
+    "nodes": [
+      { "id": "recue", "label": "Commande reçue", "shape": "start" },
+      { "id": "paiement", "label": "Paiement validé ?", "shape": "decision" },
+      { "id": "relance", "label": "Relancer le client", "group": "Service client", "value": 42 }
+    ],
+    "edges": [
+      { "from": "recue", "to": "paiement" },
+      { "from": "paiement", "to": "relance", "label": "Non" },
+      { "from": "relance", "to": "paiement", "label": "Relance", "dashed": true }
+    ]
+  },
+  "style": { "variant": "pipeline", "direction": "LR" }
+}
+```
+
+- Deux styles (`style.variant`) :
+  - `pipeline` (par défaut) : pictogrammes compacts et colorés, nom dessous, fines courbes grises sans flèches,
+    de gauche à droite. Source = pastille, étape = barre, `decision` = deux anneaux croisés aux couleurs de ses
+    entrées (jointure, choix), `io` = tuiles empilées (union), `subprocess` = double barre, `end` = tuile sombre
+    (sortie). Les couleurs partent des sources et suivent le flux ; jointures et unions en ouvrent une nouvelle.
+    `description` s'affiche sous le nom (la base d'origine d'une source, par exemple).
+  - `boxes` : boîtes et flèches, losanges de décision, pour la documentation de processus.
+- Placement automatique en couches : les boucles sont détectées et contournent les boîtes, les croisements
+  sont réduits, de haut en bas (`TB`) ou de gauche à droite (`LR`).
+- `value` sur une étape s'affiche sous son nom ; sur une flèche, il l'épaissit. `group` colore les boîtes et
+  forme la légende. `highlight` met un chemin en avant (par identifiant ou libellé d'étape).
+- Survol : détail de l'étape ou de la flèche. Clic sur une étape : événement `drill` avec son identifiant.
+- Le texte suit la taille du diagramme ; trop petit pour être lu (75 % en pipeline, 85 % en boîtes), le diagramme
+  s'ouvre à taille lisible et se parcourt en le glissant.
+- Les boucles (et seulement elles) portent une pointe de flèche, pour montrer qu'elles remontent le flux.
+- **Disposition à la main** (style pipeline) : glisser une étape la déplace (grille de 4 px), ses liens suivent.
+  Au lâcher, l'événement `layout` (`onLayout`, `@layout`, `chart-layout`) donne la position de chaque étape ;
+  l'app l'enregistre en `x` / `y` sur les nœuds du JSON, et la disposition revient telle quelle au prochain
+  chargement. Une IA peut aussi écrire `x` / `y` directement. Les étapes sans position sont placées
+  automatiquement. `chart.resetInteractions()` revient à la disposition automatique ;
+  `style.editable: false` interdit le déplacement.
 
 ## Pas encore fait
 

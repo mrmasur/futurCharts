@@ -1,4 +1,4 @@
-import { createChart, type ChartSpec, type ChartView } from '@futurcharts/core';
+import { createChart, type ChartSpec, type ChartView, type FlowGraph } from '@futurcharts/core';
 import { registerGeo } from '@futurcharts/geo';
 import { feature } from 'topojson-client';
 import world from 'world-atlas/countries-110m.json';
@@ -211,9 +211,95 @@ for (const [team, mu, sd, bimodal] of [['Support', 12, 4, false], ['Ventes', 25,
   }
 }
 
+// Flow diagrams.
+const dataFlow: FlowGraph = {
+  nodes: [
+    { id: 'web', label: 'Ventes web', shape: 'start', description: 'ClickHouse' },
+    { id: 'shop', label: 'Ventes magasin', shape: 'start', description: 'PostgreSQL' },
+    { id: 'union', label: 'Toutes les ventes', shape: 'io' },
+    { id: 'cleanSales', label: 'Nettoyer les ventes' },
+    { id: 'catalog', label: 'Catalogue', shape: 'start', description: 'API produits' },
+    { id: 'cleanCatalog', label: 'Normaliser les SKU' },
+    { id: 'join', label: 'Ventes × catalogue', shape: 'decision' },
+    { id: 'margin', label: 'Calculer la marge' },
+    { id: 'out', label: 'Entrepôt des ventes', shape: 'end' },
+    { id: 'reviews', label: 'Avis clients', shape: 'start', description: 'Elasticsearch' },
+    { id: 'sentiment', label: 'Analyse de sentiment', shape: 'subprocess' },
+    { id: 'out2', label: 'Tableau des avis', shape: 'end' },
+  ],
+  edges: [
+    { from: 'web', to: 'union' },
+    { from: 'shop', to: 'union' },
+    { from: 'union', to: 'cleanSales' },
+    { from: 'catalog', to: 'cleanCatalog' },
+    { from: 'cleanSales', to: 'join' },
+    { from: 'cleanCatalog', to: 'join' },
+    { from: 'join', to: 'margin' },
+    { from: 'margin', to: 'out' },
+    { from: 'reviews', to: 'sentiment' },
+    { from: 'sentiment', to: 'out2' },
+  ],
+};
+const orderFlow: FlowGraph = {
+  nodes: [
+    { id: 'recue', label: 'Commande reçue', shape: 'start' },
+    { id: 'paiement', label: 'Paiement validé ?', shape: 'decision' },
+    { id: 'relance', label: 'Relancer le client' },
+    { id: 'stock', label: 'Article en stock ?', shape: 'decision' },
+    { id: 'fournisseur', label: 'Commander au fournisseur', shape: 'io' },
+    { id: 'preparer', label: 'Préparer le colis' },
+    { id: 'expedier', label: 'Expédier', shape: 'subprocess' },
+    { id: 'livre', label: 'Livré ?', shape: 'decision' },
+    { id: 'tentative', label: 'Nouvelle tentative' },
+    { id: 'terminee', label: 'Commande terminée', shape: 'end' },
+    { id: 'annulee', label: 'Commande annulée', shape: 'end' },
+  ],
+  edges: [
+    { from: 'recue', to: 'paiement' },
+    { from: 'paiement', to: 'stock', label: 'Oui' },
+    { from: 'paiement', to: 'relance', label: 'Non' },
+    { from: 'relance', to: 'paiement', label: 'Relance' },
+    { from: 'relance', to: 'annulee', label: '3 échecs', dashed: true },
+    { from: 'stock', to: 'preparer', label: 'Oui' },
+    { from: 'stock', to: 'fournisseur', label: 'Non' },
+    { from: 'fournisseur', to: 'preparer' },
+    { from: 'preparer', to: 'expedier' },
+    { from: 'expedier', to: 'livre' },
+    { from: 'livre', to: 'terminee', label: 'Oui' },
+    { from: 'livre', to: 'tentative', label: 'Non' },
+    { from: 'tentative', to: 'livre' },
+  ],
+};
+const supportFlow: FlowGraph = {
+  nodes: [
+    { id: 'ouvert', label: 'Ticket ouvert', shape: 'start', group: 'Client', value: 1240 },
+    { id: 'tri', label: 'Tri automatique', shape: 'io', group: 'Plateforme', value: 1240 },
+    { id: 'n1', label: 'Support niveau 1', group: 'Niveau 1', value: 1310, description: 'Inclut 70 tickets réouverts' },
+    { id: 'resolu', label: 'Résolu ?', shape: 'decision', group: 'Niveau 1' },
+    { id: 'n2', label: 'Support niveau 2', group: 'Niveau 2', value: 410 },
+    { id: 'bug', label: 'Bug produit ?', shape: 'decision', group: 'Niveau 2' },
+    { id: 'inge', label: 'Correctif', shape: 'subprocess', group: 'Ingénierie', value: 120 },
+    { id: 'reponse', label: 'Réponse au client', group: 'Niveau 2', value: 410 },
+    { id: 'clos', label: 'Clôturé', shape: 'end', group: 'Client', value: 1240 },
+  ],
+  edges: [
+    { from: 'ouvert', to: 'tri', value: 1240 },
+    { from: 'tri', to: 'n1', value: 1240 },
+    { from: 'n1', to: 'resolu', value: 1310 },
+    { from: 'resolu', to: 'clos', label: 'Oui', value: 900 },
+    { from: 'resolu', to: 'n2', label: 'Non', value: 410 },
+    { from: 'n2', to: 'bug', value: 410 },
+    { from: 'bug', to: 'inge', label: 'Oui', value: 120 },
+    { from: 'bug', to: 'reponse', label: 'Non', value: 290 },
+    { from: 'inge', to: 'reponse', value: 120 },
+    { from: 'reponse', to: 'clos', value: 340 },
+    { from: 'reponse', to: 'n1', label: 'Réouvert', value: 70, dashed: true },
+  ],
+};
+
 const quarterly = ['T1', 'T2', 'T3', 'T4'].flatMap((quarter) => ['France', 'Allemagne', 'Espagne'].map((country) => ({ quarter, country, sales: Math.round(80 + r() * 120) })));
 
-type Entry = { title: string; caption: string; wide?: boolean; spec?: ChartSpec; tiles?: ChartSpec[] };
+type Entry = { title: string; caption: string; wide?: boolean; spec?: ChartSpec; tiles?: ChartSpec[]; showLayout?: boolean };
 const entries: Entry[] = [
   {
     title: 'Barres horizontales triées',
@@ -806,6 +892,53 @@ const entries: Entry[] = [
       layers: [{ mark: 'bar', encode: { x: 'quarter', y: 'nps' }, style: { labels: true, thickness: 18 }, highlight: { values: ['T4'], dim: 0.4 } }],
     },
   },
+  {
+    title: 'Pipeline de données',
+    caption: 'flow · glissez une étape pour la déplacer : les liens suivent, et l’événement layout donne les positions à enregistrer',
+    wide: true,
+    showLayout: true,
+    spec: {
+      title: 'Préparation des données de vente',
+      subtitle: 'Glissez les étapes pour réorganiser · survolez pour le détail',
+      layers: [{ mark: 'flow', graph: dataFlow, encode: {} }],
+    },
+  },
+  {
+    title: 'Diagramme de flux',
+    caption: 'flow · décisions, branches et boucles (les boucles portent une flèche)',
+    wide: true,
+    spec: {
+      title: 'Traitement d’une commande',
+      layers: [{ mark: 'flow', graph: orderFlow, encode: {} }],
+    },
+  },
+  {
+    title: 'Processus avec volumes',
+    caption: 'flow · couleurs par équipe · épaisseur des liens selon le volume',
+    wide: true,
+    spec: {
+      title: 'Parcours d’un ticket de support',
+      subtitle: 'Tickets du mois',
+      fields: { tickets: { label: 'Tickets' } },
+      layers: [{ mark: 'flow', graph: supportFlow, encode: { value: 'tickets' } }],
+    },
+  },
+  {
+    title: 'Chemin mis en avant',
+    caption: 'highlight sur les étapes du parcours nominal',
+    wide: true,
+    spec: {
+      title: 'Le parcours sans incident',
+      layers: [
+        {
+          mark: 'flow',
+          graph: orderFlow,
+          encode: {},
+          highlight: { values: ['recue', 'paiement', 'stock', 'preparer', 'expedier', 'livre', 'terminee'], dim: 0.25 },
+        },
+      ],
+    },
+  },
 ];
 
 // --------------------------------------------------------------- organisation
@@ -818,7 +951,7 @@ const GROUPS: [string, string[]][] = [
   ['Petits multiples', ['Petits multiples de courbes', 'Petits multiples de barres']],
   ['Corrélation', ['Nuage de points et régression', 'Bulles']],
   ['Parts et hiérarchies', ['Camembert', 'Anneau', 'Treemap', 'Sunburst', 'Gaufre']],
-  ['Flux', ['Sankey', 'Entonnoir', 'Cascade']],
+  ['Flux', ['Pipeline de données', 'Diagramme de flux', 'Processus avec volumes', 'Chemin mis en avant', 'Sankey', 'Entonnoir', 'Cascade']],
   ['Matrices et polaires', ['Carte de chaleur', 'Radar', 'Rose polaire']],
   ['Indicateurs', ['Tuiles KPI', 'Jauge']],
   ['Cartes', ['Points sur une carte du monde', 'Choroplèthe mondiale', 'Bulles sur une carte', 'Zoom sur l’Europe et mise en avant']],
@@ -896,10 +1029,31 @@ for (const [name, list] of sections) {
     inner.appendChild(fig);
     for (const spec of e.tiles ?? [e.spec!]) {
       const box = document.createElement('div');
-      box.className = e.tiles ? 'chart tile' : spec.facet ? 'chart auto' : 'chart';
+      box.className = e.tiles ? 'chart tile' : spec.facet ? 'chart auto' : spec.layers.some((l) => l.mark === 'flow') ? 'chart tall' : 'chart';
       row.appendChild(box);
       try {
-        charts.push({ chart: await createChart(box, { ...spec, theme: themeFor() }), spec });
+        const chart = await createChart(box, { ...spec, theme: themeFor() });
+        charts.push({ chart, spec });
+        if (e.showLayout) {
+          // What an app would save: the positions, written back as x / y on each node.
+          const pre = document.createElement('pre');
+          pre.className = 'layout';
+          pre.textContent = 'Déplacez une étape : ses nouvelles positions s’affichent ici.';
+          fig.insertBefore(pre, cap);
+          const reset = document.createElement('button');
+          reset.type = 'button';
+          reset.textContent = 'Disposition automatique';
+          reset.className = 'reset';
+          reset.addEventListener('click', () => {
+            (chart as any).resetInteractions?.();
+            pre.textContent = 'Déplacez une étape : ses nouvelles positions s’affichent ici.';
+          });
+          fig.insertBefore(reset, pre);
+          chart.on('layout', ({ positions }) => {
+            const lines = Object.entries(positions).map(([id, p]) => `  "${id}": { "x": ${p.x}, "y": ${p.y} }`);
+            pre.textContent = `{\n${lines.join(',\n')}\n}`;
+          });
+        }
       } catch (error) {
         box.textContent = String(error);
         console.error(e.title, error);

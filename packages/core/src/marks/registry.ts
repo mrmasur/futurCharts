@@ -74,6 +74,13 @@ export interface MarkLabel {
   fallback?: MarkLabel;
   /** Spread apart from other `avoid` labels at the same x, with a leader line when moved (line ends). */
   avoid?: boolean;
+  /**
+   * Scale the text with the view: font size (and dx / dy) are in units of this
+   * many scale-space units per px (diagrams laid out in pixels, then fitted).
+   */
+  fontScale?: number;
+  /** A rounded pill behind the text (arrow labels). */
+  background?: string;
 }
 
 /** What a standalone mark tells the chart about its own coordinate system. */
@@ -86,6 +93,11 @@ export interface MarkScales {
   axes?: { x?: boolean; y?: boolean };
   /** Which gridlines to draw. Default none. */
   grid?: { x?: boolean; y?: boolean };
+  /**
+   * Never fit the view narrower than this many px: below it the chart opens
+   * zoomed in at its top-left corner and pans by dragging (diagrams stay readable).
+   */
+  minWidth?: number;
 }
 
 /** Per-datum lookup used for hover, tooltips and events. Positions are in scale space. */
@@ -114,6 +126,8 @@ export interface MarkDraw {
    */
   perDatum?: boolean;
   data?: Float32Array;
+  /** How this draw enters: grow / reveal (default), `fade`, or `none`. */
+  enter?: 'fade' | 'none';
 }
 
 /** What a shape mark reports under the pointer (tooltip content). */
@@ -139,6 +153,16 @@ export interface BuiltMark {
   animate?(now: number): boolean;
   /** Legend entries to show dimmed because the mark's own focus leaves them out. */
   muted?(): string[];
+  /**
+   * Direct manipulation (moving the boxes of a diagram). `start` says whether
+   * the press is on something draggable; `end` returns the new state, which the
+   * chart emits as a `layout` event.
+   */
+  drag?: {
+    start(tx: number, ty: number): boolean;
+    move(tx: number, ty: number): void;
+    end(): Record<string, { x: number; y: number }>;
+  };
 }
 
 export interface MarkDefinition {

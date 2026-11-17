@@ -16,7 +16,7 @@ Librairie de graphiques GPU pour une future app de BI (sources : Elasticsearch, 
   et graphiques qui évoluent dans le temps (« bar chart race »). Ne rien concevoir qui l'empêche : chaque donnée doit
   pouvoir garder une identité stable d'un état à l'autre, et l'interpolation doit pouvoir se faire sur GPU
   (deux états de buffer + un uniform de progression), sans reconstruire les batches à chaque image.
-- **Diagrammes de flux à venir** (demandés le 2026-11-17, pas encore implémentés) : boîtes reliées pour tracer un
-  processus entier (début, fin, embranchements, boucles). Différent du Sankey : des nœuds positionnés par un layout
-  de graphe orienté (cycles compris) et des liens routés, pas des flux proportionnels.
+- **Diagrammes de flux** (`mark: 'flow'`, `marks/flow.ts` + `marks/flowLayout.ts`) : placement en couches maison
+  (rupture des cycles, plus long chemin, nœuds intermédiaires, barycentres). Pas encore : couloirs (swimlanes),
+  routage orthogonal, édition à la souris.
 - Les échelles produisent des positions normalisées ; le zoom ne modifie que la transformation de vue, jamais les batches.

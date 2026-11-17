@@ -61,6 +61,8 @@ export interface ChartEvents {
   select: SelectionPayload;
   /** A drill-down mark (sunburst, rose) changed its focus. `path` is empty when back to everything. */
   drill: { layer: number; path: string[] };
+  /** Boxes of a diagram were moved by hand: every position, to save as `x` / `y` in the spec. */
+  layout: { layer: number; positions: Record<string, { x: number; y: number }> };
 }
 
 interface Zoom {
@@ -178,6 +180,8 @@ export class Chart {
   private picked: Picked[] = [];
   private pointer?: { x: number; y: number };
   private drag?: { x: number; y: number; moved: number };
+  /** A mark-level drag in progress (a diagram box). */
+  private markDrag?: { layer: number; moved: number; x: number; y: number };
   private geo = false;
   /** Category scale and value scale (x and y, swapped when horizontal). */
   private cat: Scale = this.xScale;
@@ -187,6 +191,10 @@ export class Chart {
   private markScales = false;
   private axesShown = { x: true, y: true };
   private markGrid = { x: false, y: false };
+  /** Readability floor of a diagram (px); see `MarkScales.minWidth`. */
+  private minViewWidth?: number;
+  /** The user moved or zoomed the view: leave it alone. */
+  private userZoomed = false;
   /** Width / height the view must keep (maps). */
   private aspect?: number;
   private lasso?: { points: Point[]; additive: boolean; rect: boolean };
@@ -256,6 +264,7 @@ export class Chart {
     this.spec = spec;
     this.theme = resolveTheme(spec.theme);
     this.zoom = { kx: 1, ky: 1, tx: 0, ty: 0 };
+    this.userZoomed = false;
     this.compile();
   }
 
@@ -285,8 +294,20 @@ export class Chart {
     return () => set!.delete(handler);
   }
 
+  /**
+   * Forget everything the user did inside the marks: drill-down focus, boxes
+   * moved by hand, zoom. Positions written in the spec stay.
+   */
+  resetInteractions(): void {
+    this.layerState.clear();
+    this.zoom = { kx: 1, ky: 1, tx: 0, ty: 0 };
+    this.userZoomed = false;
+    this.compile();
+  }
+
   resetZoom(): void {
     if (!this.zoomConfig()) return;
+    this.userZoomed = false;
     this.zoom = { kx: 1, ky: 1, tx: 0, ty: 0 };
     this.emit('zoom', { ...this.zoom });
     this.requestRender();
@@ -396,7 +417,7 @@ export class Chart {
       let t = tables.get(i);
       if (t) return t;
       const layer = spec.layers[i];
-      const raw = layer.data ? Table.from(layer.data, types) : (base ?? (defs[i].standalone && layer.geo ? Table.from([]) : undefined));
+      const raw = layer.data ? Table.from(layer.data, types) : (base ?? (defs[i].standalone && (layer.geo || layer.graph) ? Table.from([]) : undefined));
       if (!raw) throw new Error(`futurCharts: layer ${i} has no data (set spec.data or layer.data).`);
       t = applyTransforms(raw, layer.transform);
       tables.set(i, t);
@@ -465,6 +486,7 @@ export class Chart {
     let xStep = 0;
     this.aspect = undefined;
     this.markScales = false;
+    this.minViewWidth = undefined;
     this.axesShown = { x: !geo, y: !geo };
     if (geo) {
       this.aspect = this.projectionScales(spec.projection!);
@@ -478,6 +500,7 @@ export class Chart {
       this.aspect = ms?.aspect;
       this.axesShown = { x: !!ms?.axes?.x, y: !!ms?.axes?.y };
       this.markGrid = { x: !!ms?.grid?.x, y: !!ms?.grid?.y };
+      this.minViewWidth = ms?.minWidth;
       this.markScales = true;
       this.cat = this.xScale;
       this.val = this.yScale;
@@ -779,7 +802,15 @@ export class Chart {
   private renderNow(): void {
     if (this.destroyed || !this.gridBatch) return;
     const { theme } = this;
-    const L = (this.layout = this.computeLayout());
+    let L = (this.layout = this.computeLayout());
+    // A diagram too big to read once fitted opens at its readable size, anchored top-left.
+    if (this.minViewWidth && !this.userZoomed) {
+      const k = Math.max(1, this.minViewWidth / L.view.width);
+      if (Math.abs(k - this.zoom.kx) > 1e-3) {
+        this.zoom = { kx: k, ky: k, tx: 0, ty: 1 - k };
+        L = this.layout = this.computeLayout();
+      }
+    }
     const { plot, transform: T } = L;
     const calls: DrawCall[] = [];
 
@@ -842,6 +873,12 @@ export class Chart {
       for (const d of b.mark.draws) {
         const opacity = selecting && d.perDatum ? theme.selection.dimOpacity : 1;
         const kind = d.batch.kind;
+        if (d.enter) {
+          // Fade (diagrams) or appear at once.
+          const o = d.enter === 'fade' ? opacity * reveal : opacity;
+          calls.push({ batch: d.batch, transform: T, clip, pixelSnap: d.pixelSnap, opacity: o, progress: 1 });
+          continue;
+        }
         const grows = kind === 'rect' || kind === 'arc' || kind === 'point';
         const c = !grows && reveal < 1 ? { ...clip, width: clip.width * reveal } : clip;
         calls.push({ batch: d.batch, transform: T, clip: c, pixelSnap: d.pixelSnap, opacity, progress: grows ? enterT : 1 });
@@ -1061,9 +1098,12 @@ export class Chart {
     const ay = T.oy + l.ty * T.sy;
     // Anchored outside the visible plot (zoomed away): skip.
     if (ax < plot.x - 1 || ax > plot.x + plot.width + 1 || ay < plot.y - 1 || ay > plot.y + plot.height + 1) return;
-    const x = ax + (l.dx ?? 0);
-    const y = ay + (l.dy ?? 0);
-    const size = l.size ?? 11;
+    // Diagram labels scale with the view (and the zoom).
+    const k = l.fontScale ? Math.abs(T.sx) * l.fontScale : 1;
+    const x = ax + (l.dx ?? 0) * k;
+    const y = ay + (l.dy ?? 0) * k;
+    const size = (l.size ?? 11) * k;
+    if (size < 5) return;
     ctx.font = font(l.weight ?? 500, size, theme.font.family);
     const align = l.align ?? 'center';
     const baseline = l.baseline ?? 'middle';
@@ -1080,6 +1120,16 @@ export class Chart {
         if (l.fallback) this.drawLabel(l.fallback, L);
         return;
       }
+    }
+    if (l.background) {
+      const left = align === 'center' ? x - w / 2 : align === 'right' || align === 'end' ? x - w : x;
+      const top = baseline === 'middle' ? y - size / 2 : baseline === 'top' || baseline === 'hanging' ? y : y - size;
+      const px = 5 * k;
+      const py = 2.5 * k;
+      ctx.fillStyle = l.background;
+      ctx.beginPath();
+      ctx.roundRect(left - px, top - py, w + 2 * px, size + 2 * py, (size + 2 * py) / 2);
+      ctx.fill();
     }
     ctx.textAlign = align;
     ctx.textBaseline = baseline;
@@ -1172,7 +1222,8 @@ export class Chart {
 
   private zoomConfig(): { axes: 'x' | 'y' | 'xy'; max: number } | null {
     const z = this.spec.interactions?.zoom;
-    if (!z) return null;
+    // A diagram opened zoomed in can at least be panned.
+    if (!z) return this.minViewWidth ? { axes: 'xy', max: Math.max(1, this.zoom.kx) } : null;
     return { axes: (typeof z === 'object' && z.axes) || 'x', max: (typeof z === 'object' && z.max) || 200 };
   }
 
@@ -1276,6 +1327,15 @@ export class Chart {
   private onMove(e: PointerEvent): void {
     const p = this.local(e);
     this.pointer = p;
+    if (this.markDrag) {
+      const L = this.layout!;
+      this.markDrag.moved += Math.abs(p.x - this.markDrag.x) + Math.abs(p.y - this.markDrag.y);
+      this.markDrag.x = p.x;
+      this.markDrag.y = p.y;
+      this.built[this.markDrag.layer].mark.drag?.move((p.x - L.transform.ox) / L.transform.sx, (p.y - L.transform.oy) / L.transform.sy);
+      this.requestRender();
+      return;
+    }
     if (this.lasso) {
       const pts = this.lasso.points;
       const last = pts[pts.length - 1];
@@ -1310,7 +1370,8 @@ export class Chart {
     if (this.spec.interactions?.tooltip === false) return;
     const picked = this.pick(p);
     this.shape = picked.length ? undefined : this.pickShape(p);
-    if (this.shape && this.built.some((b) => b.mark.click)) this.root.style.cursor = 'pointer';
+    if (this.shape && this.built.some((b) => b.mark.drag)) this.root.style.cursor = 'grab';
+    else if (this.shape && this.built.some((b) => b.mark.click)) this.root.style.cursor = 'pointer';
     this.setPicked(picked);
     this.showTooltip(p);
     if (picked.length) this.emit('hover', { items: this.describe(picked), x: p.x, y: p.y });
@@ -1326,6 +1387,20 @@ export class Chart {
 
   private onDown(e: PointerEvent): void {
     const p = this.local(e);
+    // Marks that can be moved by hand (diagram boxes) take the press first.
+    const L0 = this.layout;
+    if (L0 && e.button === 0 && this.inPlot(p)) {
+      const tx = (p.x - L0.transform.ox) / L0.transform.sx;
+      const ty = (p.y - L0.transform.oy) / L0.transform.sy;
+      for (let i = this.built.length - 1; i >= 0; i--) {
+        if (!this.built[i].mark.drag?.start(tx, ty)) continue;
+        this.markDrag = { layer: i, moved: 0, x: p.x, y: p.y };
+        this.root.setPointerCapture(e.pointerId);
+        this.root.style.cursor = 'grabbing';
+        this.tip.style.opacity = '0';
+        return;
+      }
+    }
     const select = this.selectConfig();
     // With selection on, a drag draws the selection; Shift-drag keeps panning.
     if (select && e.button === 0 && !e.shiftKey && this.inPlot(p) && !this.legendAt(p)) {
@@ -1337,6 +1412,7 @@ export class Chart {
       return;
     }
     if (this.zoomConfig() && this.inPlot(p) && (this.zoom.kx > 1 || this.zoom.ky > 1)) {
+      this.userZoomed = true;
       this.drag = { x: p.x, y: p.y, moved: 0 };
       this.root.setPointerCapture(e.pointerId);
       this.root.style.cursor = 'grabbing';
@@ -1346,6 +1422,18 @@ export class Chart {
 
   private onUp(e: PointerEvent): void {
     const p = this.local(e);
+    if (this.markDrag) {
+      const { layer, moved } = this.markDrag;
+      this.markDrag = undefined;
+      this.root.releasePointerCapture(e.pointerId);
+      this.root.style.cursor = 'grab';
+      const positions = this.built[layer].mark.drag!.end();
+      // A real move reports the new layout; a press without moving is a click.
+      if (moved > 3) {
+        this.emit('layout', { layer, positions });
+        return;
+      }
+    }
     if (this.lasso) {
       const { points, additive, rect } = this.lasso;
       this.lasso = undefined;
@@ -1402,8 +1490,10 @@ export class Chart {
   private onWheel(e: WheelEvent): void {
     const cfg = this.zoomConfig();
     const p = this.local(e);
-    if (!cfg || !this.inPlot(p)) return;
+    // Without zoom in the spec, the wheel scrolls the page.
+    if (!cfg || !this.inPlot(p) || !this.spec.interactions?.zoom) return;
     e.preventDefault();
+    this.userZoomed = true;
     const plot = this.layout!.view;
     const factor = Math.exp(-e.deltaY * 0.0015);
     const z = this.zoom;
