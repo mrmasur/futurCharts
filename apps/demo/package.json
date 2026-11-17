@@ -11,6 +11,12 @@
     "@futurcharts/adapters": "*",
     "@futurcharts/element": "*",
     "@futurcharts/react": "*",
-    "@futurcharts/vue": "*"
+    "@futurcharts/vue": "*",
+    "@futurcharts/geo": "*"
+  },
+  "devDependencies": {
+    "world-atlas": "^2.0.2",
+    "topojson-client": "^3.1.0",
+    "@types/topojson-client": "^3.1.5"
   }
 }

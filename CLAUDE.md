@@ -8,6 +8,8 @@ Librairie de graphiques GPU pour une future app de BI (sources : Elasticsearch, 
 - Pas de mot-clé `ember-addon` dans `@futurcharts/ember` : Ember CLI chargerait le paquet comme un addon v1.
 - **WebGPU doit toujours rester possible.** Aucun concept WebGL hors de `packages/core/src/render/webgl2/`.
   Toute nouvelle primitive passe par `render/types.ts` et `render/layouts.ts`, et doit être traduisible en WebGPU.
+- Un seul contexte WebGL2 partagé par page (`SharedWebGL2Renderer`) : ne jamais revenir à un contexte par graphique
+  par défaut, la galerie (19 graphiques) dépasse la limite des navigateurs.
 - La spec reste du JSON sérialisable ; ce qui exige une fonction va dans `ChartOptions`.
 - **Animation et évolution dans le temps sont des exigences à venir** (demandées le 2026-11-16, pas encore implémentées) :
   animation d'entrée (le graphique se construit en ~1 s au chargement), transitions entre deux états de données,

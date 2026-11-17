@@ -25,6 +25,7 @@ layout(location=1) in vec4 a_fill;
 layout(location=2) in vec4 a_stroke;
 layout(location=3) in vec4 a_radii;
 layout(location=4) in vec4 a_params;
+layout(location=5) in float a_axis;
 out vec2 v_p;
 flat out vec2 v_half;
 flat out vec4 v_fill;
@@ -34,6 +35,11 @@ flat out float v_sw;
 void main() {
   vec2 a = toPx(a_rect.xy), b = toPx(a_rect.zw);
   vec2 mn = min(a, b), mx = max(a, b);
+  // Work in the frame of a vertical bar (thickness along x, data growing up),
+  // then swap back for horizontal bars.
+  bool horiz = a_axis > 0.5;
+  if (horiz) { mn = mn.yx; mx = mx.yx; }
+  float stackGap = horiz ? -a_params.z : a_params.z;
   float mw = a_params.w;
   if (mw > 0.0 && mx.x - mn.x > mw) {
     float c = (mn.x + mx.x) * 0.5;
@@ -42,8 +48,10 @@ void main() {
   vec2 size = mx - mn;
   float gx = min(a_params.y, max(size.x - 1.0, 0.0)) * 0.5;
   mn.x += gx; mx.x -= gx;
-  float gy = min(abs(a_params.z), max(size.y - 1.0, 0.0));
-  if (a_params.z > 0.0) mn.y += gy; else mx.y -= gy;
+  float gy = min(abs(stackGap), max(size.y - 1.0, 0.0));
+  if (stackGap > 0.0) mn.y += gy; else if (stackGap < 0.0) mx.y -= gy;
+  if (horiz) { mn = mn.yx; mx = mx.yx; }
+  size = mx - mn;
   if (u_snap > 0.5) {
     vec2 smn = round(mn * u_dpr) / u_dpr, smx = round(mx * u_dpr) / u_dpr;
     if (size.x > 0.0) smx.x = max(smx.x, smn.x + 1.0 / u_dpr);

@@ -43,6 +43,7 @@ export const FuturChart = forwardRef<FuturChartRef, FuturChartProps>(function Fu
       onClick: (p) => latest.current.onClick?.(p),
       onZoom: (p) => latest.current.onZoom?.(p),
       onLegend: (p) => latest.current.onLegend?.(p),
+      onSelect: (p) => latest.current.onSelect?.(p),
     });
     handle.current = h;
     return () => {

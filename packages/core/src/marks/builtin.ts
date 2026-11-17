@@ -1,9 +1,11 @@
 import { LAYOUTS, SHAPES, type PointShape } from '../render/layouts';
 import type { RGBA } from '../render/types';
 import { parseColor, withAlpha } from '../util/color';
+import { STANDALONE_MARKS } from './charts';
 import { curvePoints, type Polyline } from './curve';
 import type { SeriesData } from './prepare';
-import { buildHit, hasMark, registerMark, type BuildContext, type MarkDefinition } from './registry';
+import { pushRect, pushSegment, pushVertex } from './primitives';
+import { buildHit, hasMark, registerMark, type BuildContext, type MarkDefinition, type MarkLabel } from './registry';
 
 function normalized(ctx: BuildContext, s: SeriesData, y: Float64Array): { x: Float32Array; y: Float32Array } {
   const n = s.x.length;
@@ -16,16 +18,18 @@ function normalized(ctx: BuildContext, s: SeriesData, y: Float64Array): { x: Flo
   return { x, y: out };
 }
 
-/** Append one polyline as round-capped segments. Returns the new write offset. */
-function pushSegments(out: number[], line: Polyline, color: RGBA, width: number): void {
+/** Append a polyline (in category / value space) as round-capped segments. */
+function pushPolyline(ctx: BuildContext, out: number[], line: Polyline, color: RGBA, width: number): void {
   for (let i = 0; i < line.x.length - 1; i++) {
-    const x0 = line.x[i];
-    const y0 = line.y[i];
-    const x1 = line.x[i + 1];
-    const y1 = line.y[i + 1];
-    if (!Number.isFinite(x0 + y0 + x1 + y1)) continue;
-    out.push(x0, y0, x1, y1, color[0], color[1], color[2], color[3], width);
+    const [ax, ay] = ctx.pos(line.x[i], line.y[i]);
+    const [bx, by] = ctx.pos(line.x[i + 1], line.y[i + 1]);
+    pushSegment(out, ax, ay, bx, by, color, width);
   }
+}
+
+/** Width of one category slot in scale space: the band, or the smallest step on a continuous axis. */
+function slotWidth(ctx: BuildContext): number {
+  return ctx.x.band > 0 ? ctx.x.band : ctx.xStep * (1 - (ctx.style.bandPadding ?? ctx.theme.marks.bar.bandPadding));
 }
 
 const line: MarkDefinition = {
@@ -39,10 +43,11 @@ const line: MarkDefinition = {
       const color = withAlpha(ctx.color(s, 0), style.opacity ?? 1);
       if (s.x.length === 1) {
         // A single datum still has to be visible: draw a dot-sized segment.
-        data.push(p.x[0], p.y[0], p.x[0], p.y[0], ...color, Math.max(style.width, 4));
+        const [x, y] = ctx.pos(p.x[0], p.y[0]);
+        pushSegment(data, x, y, x, y, color, Math.max(style.width, 4));
         continue;
       }
-      pushSegments(data, curvePoints(p.x, p.y, style.curve), color, style.width);
+      pushPolyline(ctx, data, curvePoints(p.x, p.y, style.curve), color, style.width);
     }
     const batch = ctx.renderer.createBatch('line');
     batch.update(new Float32Array(data), data.length / LAYOUTS.line.stride);
@@ -67,8 +72,11 @@ const area: MarkDefinition = {
       const base = ctx.color(s, 0);
       const ct = withAlpha(base, opacity);
       const cb = withAlpha(base, style.gradient ? opacity * 0.04 : opacity);
+      const v = (c: number, val: number, color: RGBA) => {
+        const [x, y] = ctx.pos(c, val);
+        pushVertex(mesh, x, y, color);
+      };
       for (let i = 0; i < t.x.length - 1; i++) {
-        const v = (x: number, y: number, c: RGBA) => mesh.push(x, y, c[0], c[1], c[2], c[3]);
         v(t.x[i], t.y[i], ct);
         v(t.x[i + 1], t.y[i + 1], ct);
         v(b.x[i + 1], b.y[i + 1], cb);
@@ -76,7 +84,7 @@ const area: MarkDefinition = {
         v(b.x[i + 1], b.y[i + 1], cb);
         v(b.x[i], b.y[i], cb);
       }
-      if (style.line) pushSegments(lines, t, base, style.lineWidth);
+      if (style.line) pushPolyline(ctx, lines, t, base, style.lineWidth);
     }
     const fill = ctx.renderer.createBatch('mesh');
     fill.update(new Float32Array(mesh), mesh.length / LAYOUTS.mesh.stride);
@@ -96,39 +104,69 @@ const bar: MarkDefinition = {
   symbol: 'square',
   build(ctx) {
     const { style, data } = ctx;
+    const H = ctx.horizontal;
     const visible = data.series.filter((s) => !s.hidden);
-    const groups = data.stacked ? 1 : Math.max(1, visible.length);
-    // Band scales give the slot width; continuous scales use the smallest x step.
-    const slot = ctx.x.band > 0 ? ctx.x.band : ctx.xStep * (1 - style.bandPadding);
+    // Stacks and ranges (Gantt, waterfall) share the full slot; plain series sit side by side.
+    const groups = data.stacked || data.ranged ? 1 : Math.max(1, visible.length);
+    const slot = slotWidth(ctx);
     const sub = slot / groups;
     const stroke = parseColor(style.stroke);
     const out: number[] = [];
+    const labels: MarkLabel[] = [];
     const center = new Map<SeriesData, number>();
     visible.forEach((s, vi) => {
-      const offset = data.stacked ? 0 : -slot / 2 + sub * (vi + 0.5);
+      const offset = groups === 1 ? 0 : -slot / 2 + sub * (vi + 0.5);
       center.set(s, offset);
       const lastInStack = vi === visible.length - 1;
       for (let i = 0; i < s.x.length; i++) {
-        const cx = ctx.x.norm(s.x[i]) + offset;
+        const c = ctx.x.norm(s.x[i]) + offset;
+        const v0 = ctx.y.norm(s.y0[i]);
+        const v1 = ctx.y.norm(s.y1[i]);
         const up = s.y1[i] >= s.y0[i];
-        const c = withAlpha(ctx.color(s, i), style.opacity ?? 1);
-        // Round only the data end; in a stack, only the outermost segment.
-        // The width cap is dropped for grouped bars: it would pull them apart inside the band.
-        const r = !data.stacked || lastInStack ? style.radius : 0;
-        const gapY = data.stacked && !lastInStack ? (up ? style.gap : -style.gap) : 0;
-        out.push(
-          cx - sub / 2, ctx.y.norm(s.y0[i]), cx + sub / 2, ctx.y.norm(s.y1[i]),
-          c[0], c[1], c[2], c[3],
-          stroke[0], stroke[1], stroke[2], stroke[3],
-          up ? r : 0, up ? r : 0, up ? 0 : r, up ? 0 : r,
-          style.strokeWidth, groups > 1 || ctx.x.band === 0 ? style.gap : 0, gapY, groups > 1 ? 0 : style.maxWidth,
-        );
+        const fill = withAlpha(ctx.color(s, i), style.opacity ?? 1);
+        // Round the data end only (both ends of a range); in a stack, only the outermost segment.
+        const r = data.ranged || !data.stacked || lastInStack ? style.radius : 0;
+        const radii: [number, number, number, number] = data.ranged
+          ? [r, r, r, r]
+          : H
+            ? up ? [0, r, r, 0] : [r, 0, 0, r]
+            : up ? [r, r, 0, 0] : [0, 0, r, r];
+        const [ax, ay] = ctx.pos(c - sub / 2, v0);
+        const [bx, by] = ctx.pos(c + sub / 2, v1);
+        pushRect(out, {
+          x0: ax, y0: ay, x1: bx, y1: by,
+          fill, stroke, radii,
+          strokeWidth: style.strokeWidth,
+          // The width cap is dropped for grouped bars: it would pull them apart inside the band.
+          gap: groups > 1 || ctx.x.band === 0 ? style.gap : 0,
+          stackGap: data.stacked && !lastInStack ? (up ? style.gap : -style.gap) : 0,
+          maxWidth: groups > 1 ? 0 : style.maxWidth,
+          axis: H ? 1 : 0,
+        });
+        if (!style.labels) continue;
+        // A range (start = y, end = y2) is labelled with its signed length: the step of a waterfall.
+        const text = ctx.format(data.ranged ? s.y0[i] - s.y1[i] : s.value[i]);
+        if (data.stacked) {
+          // Inside the segment, only when it fits: an interior segment has no free end.
+          const [mx, my] = ctx.pos(c, (v0 + v1) / 2);
+          labels.push({ tx: mx, ty: my, text, on: fill, align: 'center', baseline: 'middle', box: [ax, ay, bx, by] });
+        } else {
+          const end = data.ranged ? Math.max(v0, v1) : v1;
+          const forward = data.ranged || up;
+          const [lx, ly] = ctx.pos(c, end);
+          labels.push(
+            H
+              ? { tx: lx, ty: ly, text, align: forward ? 'left' : 'right', baseline: 'middle', dx: forward ? 6 : -6 }
+              : { tx: lx, ty: ly, text, align: 'center', baseline: forward ? 'bottom' : 'top', dy: forward ? -5 : 5 },
+          );
+        }
       }
     });
     const batch = ctx.renderer.createBatch('rect');
-    batch.update(new Float32Array(out), out.length / LAYOUTS.rect.stride);
+    const instances = new Float32Array(out);
+    batch.update(instances, out.length / LAYOUTS.rect.stride);
     const hit = buildHit(ctx, (s, _si, i) => ctx.x.norm(s.x[i]) + (center.get(s) ?? 0));
-    return { draws: [{ batch, pixelSnap: true }], hit };
+    return { draws: [{ batch, pixelSnap: true, perDatum: true, data: instances }], hit, labels };
   },
 };
 
@@ -146,8 +184,9 @@ const point: MarkDefinition = {
       if (s.hidden) continue;
       for (let i = 0; i < s.x.length; i++) {
         const c = ctx.color(s, i);
-        out[k++] = ctx.x.norm(s.x[i]);
-        out[k++] = ctx.y.norm(s.y1[i]);
+        const [x, y] = ctx.pos(ctx.x.norm(s.x[i]), ctx.y.norm(s.y1[i]));
+        out[k++] = x;
+        out[k++] = y;
         out[k++] = ctx.size(s, i);
         out[k++] = shape;
         out[k++] = c[0];
@@ -163,11 +202,62 @@ const point: MarkDefinition = {
     }
     const batch = ctx.renderer.createBatch('point');
     batch.update(out, n);
-    return { draws: [{ batch }], hit: buildHit(ctx) };
+    return { draws: [{ batch, perDatum: true, data: out }], hit: buildHit(ctx) };
   },
 };
 
-const builtins: Record<string, MarkDefinition> = { line, area, bar, point };
+/**
+ * `rule`: a segment along the value axis at each category, from `y2` to `y`
+ * (or from zero without `y2`). Whiskers, error bars, lollipop stems, ranges.
+ */
+const rule: MarkDefinition = {
+  baseline: true,
+  symbol: 'line',
+  build(ctx) {
+    const { style } = ctx;
+    const out: number[] = [];
+    for (const s of ctx.data.series) {
+      if (s.hidden) continue;
+      for (let i = 0; i < s.x.length; i++) {
+        const c = ctx.x.norm(s.x[i]);
+        const [ax, ay] = ctx.pos(c, ctx.y.norm(s.y0[i]));
+        const [bx, by] = ctx.pos(c, ctx.y.norm(s.y1[i]));
+        pushSegment(out, ax, ay, bx, by, withAlpha(ctx.color(s, i), style.opacity ?? 1), style.width);
+      }
+    }
+    const batch = ctx.renderer.createBatch('line');
+    batch.update(new Float32Array(out), out.length / LAYOUTS.line.stride);
+    return { draws: [{ batch, pixelSnap: true }], hit: buildHit(ctx) };
+  },
+};
+
+/** `tick`: a short segment across the category slot at each value. Medians, targets, strip plots. */
+const tick: MarkDefinition = {
+  symbol: 'line',
+  // A pixel cap depends on the chart size.
+  sizeDependent: true,
+  build(ctx) {
+    const { style } = ctx;
+    let half = (slotWidth(ctx) * style.length) / 2;
+    if (style.maxWidth > 0) half = Math.min(half, (style.maxWidth / 2) * ctx.pixel[ctx.horizontal ? 1 : 0]);
+    const out: number[] = [];
+    for (const s of ctx.data.series) {
+      if (s.hidden) continue;
+      for (let i = 0; i < s.x.length; i++) {
+        const c = ctx.x.norm(s.x[i]);
+        const v = ctx.y.norm(s.y1[i]);
+        const [ax, ay] = ctx.pos(c - half, v);
+        const [bx, by] = ctx.pos(c + half, v);
+        pushSegment(out, ax, ay, bx, by, withAlpha(ctx.color(s, i), style.opacity ?? 1), style.width);
+      }
+    }
+    const batch = ctx.renderer.createBatch('line');
+    batch.update(new Float32Array(out), out.length / LAYOUTS.line.stride);
+    return { draws: [{ batch, pixelSnap: true }], hit: buildHit(ctx) };
+  },
+};
+
+const builtins: Record<string, MarkDefinition> = { line, area, bar, point, rule, tick, ...STANDALONE_MARKS };
 
 /**
  * Register the built-in marks. Called when a chart is created rather than at

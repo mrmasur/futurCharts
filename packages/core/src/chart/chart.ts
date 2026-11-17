@@ -1,12 +1,14 @@
 import { Table, type DataInput, type Row } from '../data/table';
 import { ensureBuiltinMarks } from '../marks/builtin';
-import { prepareLayer, type LayerData, type SeriesData } from '../marks/prepare';
-import { getMark, type BuildContext, type BuiltMark, type MarkDefinition } from '../marks/registry';
+import { applyTransforms } from '../data/transforms';
+import { luminance } from '../marks/primitives';
+import { prepareLayer, standaloneLayer, type LayerData, type SeriesData } from '../marks/prepare';
+import { getMark, type BuildContext, type BuiltMark, type MarkDefinition, type MarkDraw, type MarkLabel, type ShapeHit } from '../marks/registry';
 import { createRenderer, type RendererChoice } from '../render';
 import { LAYOUTS } from '../render/layouts';
 import type { Batch, ClipRect, DrawCall, Renderer, RGBA, ViewTransform } from '../render/types';
-import { BandScale, LinearScale, LogScale, TimeScale, niceDomain, type Scale, type Tick } from '../scale/scales';
-import type { AxisSpec, ChartSpec, ScaleSpec } from '../spec/types';
+import { BandScale, LinearScale, LogScale, MercatorScale, TimeScale, niceDomain, type Scale, type Tick } from '../scale/scales';
+import type { AxisSpec, ChartSpec, ProjectionSpec, ScaleSpec } from '../spec/types';
 import { resolveTheme, type Theme } from '../theme/theme';
 import { parseColor, sampleRamp, toCss } from '../util/color';
 import { numberFormatter } from '../util/format';
@@ -24,10 +26,20 @@ export interface HoverItem {
   row: Row;
 }
 
+/** The current selection, as rows of each layer's table (what a cross-filter needs). */
+export interface SelectionPayload {
+  count: number;
+  layers: { layer: number; rows: Int32Array }[];
+  /** Describe the selected marks; capped, since a lasso can hold hundreds of thousands. */
+  items(limit?: number): HoverItem[];
+}
+
 export interface TooltipContext {
   mode: 'x' | 'nearest';
   title: string;
   items: HoverItem[];
+  /** Set instead of `items` when the pointer is over a shape (a country on a map). */
+  shape?: ShapeHit;
   theme: Theme;
 }
 
@@ -45,6 +57,7 @@ export interface ChartEvents {
   click: { items: HoverItem[]; x: number; y: number };
   zoom: { kx: number; ky: number; tx: number; ty: number };
   legend: { series: string; hidden: boolean };
+  select: SelectionPayload;
 }
 
 interface Zoom {
@@ -65,6 +78,13 @@ interface Built {
   data: LayerData;
   def: MarkDefinition;
   mark: BuiltMark;
+  /** Selected datums of this layer, and the batches that redraw them at full strength. */
+  sel?: { mask: Uint8Array; count: number; draws: MarkDraw[] };
+}
+
+interface Point {
+  x: number;
+  y: number;
 }
 
 interface Picked {
@@ -73,7 +93,10 @@ interface Picked {
 }
 
 interface Layout {
+  /** Area the marks may draw in. */
   plot: ClipRect;
+  /** Rectangle the unzoomed scale space maps to: the plot, or a letterboxed part of it when an aspect ratio is imposed. */
+  view: ClipRect;
   titleY: number;
   legendY: number;
   xTicks: Tick[];
@@ -110,6 +133,18 @@ export class Chart {
   private picked: Picked[] = [];
   private pointer?: { x: number; y: number };
   private drag?: { x: number; y: number; moved: number };
+  private geo = false;
+  /** Category scale and value scale (x and y, swapped when horizontal). */
+  private cat: Scale = this.xScale;
+  private val: Scale = this.yScale;
+  private horizontal = false;
+  /** The scales come from a standalone mark (no grid by default). */
+  private markScales = false;
+  private axesShown = { x: true, y: true };
+  /** Width / height the view must keep (maps). */
+  private aspect?: number;
+  private lasso?: { points: Point[]; additive: boolean; rect: boolean };
+  private shape?: ShapeHit;
   private frame = 0;
   private destroyed = false;
 
@@ -126,7 +161,8 @@ export class Chart {
 
   private async init(): Promise<void> {
     const root = (this.root = document.createElement('div'));
-    root.style.cssText = 'position:relative;width:100%;height:100%;overflow:hidden;touch-action:pan-y;';
+    root.style.cssText = 'position:relative;width:100%;height:100%;overflow:hidden;touch-action:pan-y;outline:none;';
+    root.tabIndex = -1;
     const gl = document.createElement('canvas');
     this.overlay = document.createElement('canvas');
     for (const c of [gl, this.overlay]) {
@@ -149,6 +185,8 @@ export class Chart {
     root.addEventListener('pointerup', (e) => this.onUp(e), { signal });
     root.addEventListener('wheel', (e) => this.onWheel(e), { signal, passive: false });
     root.addEventListener('dblclick', () => this.resetZoom(), { signal });
+    // Escape clears the selection (the chart root is focusable for that).
+    root.addEventListener('keydown', (e) => e.key === 'Escape' && this.clearSelection(), { signal });
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(this.container);
     this.measure();
@@ -196,9 +234,40 @@ export class Chart {
     this.compile();
   }
 
+  /** The marks currently selected with the lasso or rectangle. */
+  getSelection(): SelectionPayload {
+    const layers: SelectionPayload['layers'] = [];
+    const picked: Picked[] = [];
+    let count = 0;
+    this.built.forEach((b, layer) => {
+      if (!b.sel) return;
+      const rows = new Int32Array(b.sel.count);
+      let k = 0;
+      for (let i = 0; i < b.sel.mask.length; i++) {
+        if (!b.sel.mask[i]) continue;
+        rows[k++] = b.mark.hit.row[i];
+        picked.push({ layer, index: i });
+      }
+      count += b.sel.count;
+      layers.push({ layer, rows });
+    });
+    return { count, layers, items: (limit = 1000) => this.describe(picked.slice(0, limit)) };
+  }
+
+  clearSelection(): void {
+    if (!this.built.some((b) => b.sel)) return;
+    for (const b of this.built) this.setLayerSelection(b, null);
+    this.emit('select', this.getSelection());
+    this.requestRender();
+  }
+
   resize(): void {
     if (this.destroyed) return;
     this.measure();
+    if (this.built.some((b) => b.def.sizeDependent)) {
+      this.layout = undefined;
+      this.compile();
+    }
     this.renderNow();
   }
 
@@ -229,22 +298,32 @@ export class Chart {
   // ------------------------------------------------------------------ compile
 
   private disposeMarks(): void {
-    for (const b of this.built) for (const d of b.mark.draws) d.batch.destroy();
+    for (const b of this.built) {
+      for (const d of b.mark.draws) d.batch.destroy();
+      for (const d of b.sel?.draws ?? []) d.batch.destroy();
+    }
     this.built = [];
   }
 
   private compile(): void {
     this.disposeMarks();
     this.picked = [];
+    this.shape = undefined;
     const { spec, theme } = this;
     const fields = spec.fields ?? {};
     const types = Object.fromEntries(Object.entries(fields).map(([k, f]) => [k, f.type]));
     const base = spec.data ? Table.from(spec.data, types) : undefined;
+    const defs = spec.layers.map((l) => getMark(l.mark));
+    const tables = new Map<number, Table>();
     const tableOf = (i: number): Table => {
-      const d = spec.layers[i].data;
-      if (d) return Table.from(d, types);
-      if (!base) throw new Error(`futurCharts: layer ${i} has no data (set spec.data or layer.data).`);
-      return base;
+      let t = tables.get(i);
+      if (t) return t;
+      const layer = spec.layers[i];
+      const raw = layer.data ? Table.from(layer.data, types) : (base ?? (defs[i].standalone && layer.geo ? Table.from([]) : undefined));
+      if (!raw) throw new Error(`futurCharts: layer ${i} has no data (set spec.data or layer.data).`);
+      t = applyTransforms(raw, layer.transform);
+      tables.set(i, t);
+      return t;
     };
     if (spec.layers.length === 0) {
       this.legend = [];
@@ -252,20 +331,40 @@ export class Chart {
       return;
     }
 
-    // 1. Scale type of x, from the spec or from the first layer's x column.
-    const firstX = tableOf(0).column(spec.layers[0].encode.x);
-    const xType: NonNullable<ScaleSpec['type']> =
-      spec.scales?.x?.type ?? (firstX.type === 'string' ? 'band' : firstX.type === 'time' ? 'time' : 'linear');
+    const geo = (this.geo = !!spec.projection);
+    // The first layer with x / y encodings decides orientation, scales and default formats.
+    const refIndex = spec.layers.findIndex((_, i) => !defs[i].standalone);
+    const ref = refIndex >= 0 ? spec.layers[refIndex] : undefined;
+    let horizontal = false;
+    if (!geo && ref?.encode.x && ref.encode.y) {
+      const t = tableOf(refIndex);
+      const xc = t.column(ref.encode.x);
+      const yc = t.column(ref.encode.y);
+      // Categories on y and numbers on x: bars run left to right.
+      horizontal = spec.scales?.y?.type === 'band' || (yc.type === 'string' && xc.type !== 'string');
+    }
+    this.horizontal = horizontal;
+    const catSpec = (horizontal ? spec.scales?.y : spec.scales?.x) ?? {};
+    const valSpec = (horizontal ? spec.scales?.x : spec.scales?.y) ?? {};
+    const valAxis = (horizontal ? spec.axes?.x : spec.axes?.y) || undefined;
+    const catField = ref ? (horizontal ? ref.encode.y : ref.encode.x) : undefined;
+    const valField = ref ? (horizontal ? ref.encode.x : ref.encode.y) : undefined;
 
-    // 2. Prepare each layer: grouping into series, stacking.
+    let catType: NonNullable<ScaleSpec['type']> = 'linear';
+    if (!geo && ref && catField) {
+      const c = tableOf(refIndex).column(catField);
+      catType = catSpec.type ?? (c.type === 'string' ? 'band' : c.type === 'time' ? 'time' : 'linear');
+    }
+
+    // 1. Prepare each layer: grouping into series, stacking, ranges.
     const categories = new Map<string, number>();
-    const prep = { band: xType === 'band', categories, fields, hidden: this.hidden };
+    const prep = { band: catType === 'band', horizontal, categories, fields, hidden: this.hidden };
     const layers = spec.layers.map((layer, i) => ({
-      data: prepareLayer(layer, i, tableOf(i), prep),
-      def: getMark(layer.mark),
+      data: defs[i].standalone ? standaloneLayer(layer, i, tableOf(i)) : prepareLayer(layer, i, tableOf(i), prep),
+      def: defs[i],
     }));
 
-    // 3. Color slots: fixed by entity, never by rank, so filters don't repaint survivors.
+    // 2. Color slots: fixed by entity, never by rank, so filters don't repaint survivors.
     const slots = new Map<string, number>();
     for (const key of spec.scales?.color?.domain ?? []) slots.set(key, slots.size);
     for (const { data } of layers) {
@@ -275,107 +374,170 @@ export class Chart {
     const palette = theme.palette.categorical.map(parseColor);
     const ramp = theme.palette.sequential.map(parseColor);
     const explicit = spec.scales?.color?.colors ?? {};
-    const seriesColor = (data: LayerData, s: SeriesData): RGBA => {
-      if (data.layer.style?.color) return parseColor(data.layer.style.color);
-      if (explicit[s.key]) return parseColor(explicit[s.key]);
-      return palette[(slots.get(s.key) ?? 0) % palette.length];
+    const categorical = (key: string): RGBA => {
+      if (explicit[key]) return parseColor(explicit[key]);
+      if (!slots.has(key)) slots.set(key, slots.size);
+      return palette[slots.get(key)! % palette.length];
     };
+    const seriesColor = (data: LayerData, s: SeriesData): RGBA =>
+      data.layer.style?.color ? parseColor(data.layer.style.color) : categorical(s.key);
 
-    // 4. Domains.
-    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-    let step = Infinity;
-    let baseline = false;
-    let banded = false;
-    for (const { data, def } of layers) {
-      baseline ||= !!def.baseline;
-      banded ||= !!def.banded;
-      for (const s of data.series) {
-        if (s.hidden) continue;
-        for (let i = 0; i < s.x.length; i++) {
-          const x = s.x[i];
-          if (x < x0) x0 = x;
-          if (x > x1) x1 = x;
-          const lo = Math.min(s.y0[i], s.y1[i]);
-          const hi = Math.max(s.y0[i], s.y1[i]);
-          if (lo < y0) y0 = lo;
-          if (hi > y1) y1 = hi;
-          if (def.banded && i > 0 && x - s.x[i - 1] > 0) step = Math.min(step, x - s.x[i - 1]);
+    // 3. Scales: from a projection, from a standalone mark, or from the data.
+    let xStep = 0;
+    this.aspect = undefined;
+    this.markScales = false;
+    this.axesShown = { x: !geo, y: !geo };
+    if (geo) {
+      this.aspect = this.projectionScales(spec.projection!);
+      this.cat = this.xScale;
+      this.val = this.yScale;
+    } else if (!ref) {
+      const owner = layers.find((l) => l.def.scales);
+      const ms = owner?.def.scales?.({ layer: owner.data.layer, table: owner.data.table, fields });
+      this.xScale = ms?.x ?? new LinearScale(0, 1);
+      this.yScale = ms?.y ?? new LinearScale(0, 1);
+      this.aspect = ms?.aspect;
+      this.axesShown = { x: !!ms?.axes?.x, y: !!ms?.axes?.y };
+      this.markScales = true;
+      this.cat = this.xScale;
+      this.val = this.yScale;
+    } else {
+      let c0 = Infinity, c1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+      let step = Infinity;
+      let baseline = false;
+      let banded = false;
+      for (const { data, def } of layers) {
+        // A range (y2) has its own start: it does not pull zero into the domain.
+        baseline ||= !!def.baseline && !data.ranged;
+        banded ||= !!def.banded;
+        for (const s of data.series) {
+          if (s.hidden) continue;
+          for (let i = 0; i < s.x.length; i++) {
+            const x = s.x[i];
+            if (x < c0) c0 = x;
+            if (x > c1) c1 = x;
+            const lo = Math.min(s.y0[i], s.y1[i]);
+            const hi = Math.max(s.y0[i], s.y1[i]);
+            if (lo < v0) v0 = lo;
+            if (hi > v1) v1 = hi;
+            if (def.banded && i > 0 && x - s.x[i - 1] > 0) step = Math.min(step, x - s.x[i - 1]);
+          }
         }
       }
-    }
-    if (x0 > x1) [x0, x1] = [0, 1];
-    if (y0 > y1) [y0, y1] = [0, 1];
-    if (!Number.isFinite(step)) step = x1 > x0 ? x1 - x0 : 1;
+      if (c0 > c1) [c0, c1] = [0, 1];
+      if (v0 > v1) [v0, v1] = [0, 1];
+      if (!Number.isFinite(step)) step = c1 > c0 ? c1 - c0 : 1;
 
-    const xs = spec.scales?.x ?? {};
-    const onlyPoints = spec.layers.every((l) => l.mark === 'point');
-    let xStep = 0;
-    if (xType === 'band') {
-      const pad = theme.marks.bar.bandPadding;
-      this.xScale = new BandScale([...categories.keys()], pad, pad / 2);
-    } else {
-      if (banded) {
-        x0 -= step / 2;
-        x1 += step / 2;
+      let cat: Scale;
+      if (catType === 'band') {
+        const pad = theme.marks.bar.bandPadding;
+        cat = new BandScale([...categories.keys()], pad, pad / 2, horizontal);
+      } else {
+        if (banded) {
+          c0 -= step / 2;
+          c1 += step / 2;
+        }
+        const onlyPoints = spec.layers.every((l) => l.mark === 'point');
+        if (catType !== 'time' && (catSpec.nice ?? (onlyPoints && !banded))) [c0, c1] = niceDomain(c0, c1, 8);
+        if (catSpec.zero) [c0, c1] = [Math.min(0, c0), Math.max(0, c1)];
+        c0 = catSpec.domain?.[0] ?? c0;
+        c1 = catSpec.domain?.[1] ?? c1;
+        const fmt = fields[catField ?? '']?.format;
+        cat = catType === 'time' ? new TimeScale(c0, c1) : catType === 'log' ? new LogScale(c0, c1, fmt) : new LinearScale(c0, c1, fmt);
+        xStep = Math.abs(cat.norm(c0 + step) - cat.norm(c0));
       }
-      if (xType !== 'time' && (xs.nice ?? (onlyPoints && !banded))) [x0, x1] = niceDomain(x0, x1, 8);
-      if (xs.zero) [x0, x1] = [Math.min(0, x0), Math.max(0, x1)];
-      x0 = xs.domain?.[0] ?? x0;
-      x1 = xs.domain?.[1] ?? x1;
-      const xFormat = fields[spec.layers[0].encode.x]?.format;
-      this.xScale =
-        xType === 'time' ? new TimeScale(x0, x1) : xType === 'log' ? new LogScale(x0, x1, xFormat) : new LinearScale(x0, x1, xFormat);
-      xStep = Math.abs(this.xScale.norm(x0 + step) - this.xScale.norm(x0));
+
+      const valCol = valField ? tableOf(refIndex).column(valField) : undefined;
+      const valType = valSpec.type ?? (valCol?.type === 'time' ? 'time' : 'linear');
+      const valFormat = valAxis?.format ?? fields[valField ?? '']?.format;
+      let val: Scale;
+      if (valType === 'time') {
+        val = new TimeScale(valSpec.domain?.[0] ?? v0, valSpec.domain?.[1] ?? v1);
+      } else if (valType === 'log') {
+        val = new LogScale(valSpec.domain?.[0] ?? v0, valSpec.domain?.[1] ?? v1, valFormat);
+      } else {
+        if (valSpec.zero ?? baseline) [v0, v1] = [Math.min(0, v0), Math.max(0, v1)];
+        // Value labels outside the bar ends need room past the longest bar.
+        const outsideLabels = layers.some(({ data }) => data.layer.style?.labels && !data.stacked && data.layer.mark === 'bar');
+        if (outsideLabels && !valSpec.domain) {
+          const pad = (v1 - v0) * (horizontal ? 0.14 : 0.08);
+          if (v1 > 0) v1 += pad;
+          if (v0 < 0) v0 -= pad;
+        }
+        if (valSpec.nice ?? true) [v0, v1] = niceDomain(v0, v1, 5);
+        val = new LinearScale(valSpec.domain?.[0] ?? v0, valSpec.domain?.[1] ?? v1, valFormat);
+      }
+      this.cat = cat;
+      this.val = val;
+      this.xScale = horizontal ? val : cat;
+      this.yScale = horizontal ? cat : val;
     }
 
-    const ys = spec.scales?.y ?? {};
-    const yAxis = spec.axes?.y || undefined;
-    const yFormat = yAxis?.format ?? fields[spec.layers[0].encode.y]?.format;
-    if (ys.type === 'log') {
-      this.yScale = new LogScale(ys.domain?.[0] ?? y0, ys.domain?.[1] ?? y1, yFormat);
-    } else {
-      if (ys.zero ?? baseline) [y0, y1] = [Math.min(0, y0), Math.max(0, y1)];
-      if (ys.nice ?? true) [y0, y1] = niceDomain(y0, y1, 5);
-      this.yScale = new LinearScale(ys.domain?.[0] ?? y0, ys.domain?.[1] ?? y1, yFormat);
-    }
-
-    // 5. Build GPU batches.
+    // 4. Build GPU batches. Size-dependent marks (treemap) need the real view
+    //    size, known only once the legend is in: build, lay out, rebuild if needed.
     const surface = parseColor(theme.background);
     const opaqueSurface: RGBA = surface[3] === 0 ? [1, 1, 1, 1] : surface;
-    this.built = layers.map(({ data, def }) => {
-      const style = deepMerge((theme.marks as Record<string, any>)[data.layer.mark] ?? {}, data.layer.style ?? {});
-      const [c0, c1] = data.colorExtent;
-      const [s0, s1] = data.sizeExtent;
-      const [r0, r1] = (style.sizeRange as [number, number] | undefined) ?? [4, 28];
-      const ctx: BuildContext = {
-        renderer: this.renderer,
-        data,
-        x: this.xScale,
-        y: this.yScale,
-        theme,
-        style,
-        surface: opaqueSurface,
-        xStep,
-        color: (s, i) =>
-          s.colorValue && !data.layer.style?.color
-            ? sampleRamp(ramp, c1 > c0 ? (s.colorValue[i] - c0) / (c1 - c0) : 0.5)
-            : seriesColor(data, s),
-        // Area-proportional sizing: the eye reads surface, not diameter.
-        size: (s, i) =>
-          s.sizeValue ? r0 + (r1 - r0) * Math.sqrt(s1 > s0 ? Math.max(0, (s.sizeValue[i] - s0) / (s1 - s0)) : 0.5) : (style.size ?? 8),
-      };
-      return { data, def, mark: def.build(ctx) };
-    });
+    const pos = horizontal ? (c: number, v: number): [number, number] => [v, c] : (c: number, v: number): [number, number] => [c, v];
+    const buildAll = (view: { width: number; height: number }): Built[] =>
+      layers.map(({ data, def }) => {
+        const themeKey = def.themeKey ?? data.layer.mark;
+        const style = deepMerge((theme.marks as Record<string, any>)[themeKey] ?? {}, data.layer.style ?? {});
+        const [k0, k1] = data.colorExtent;
+        const [s0, s1] = data.sizeExtent;
+        const [r0, r1] = (style.sizeRange as [number, number] | undefined) ?? [4, 28];
+        const enc = data.layer.encode;
+        const layerValue = def.standalone ? (enc.value ?? enc.color ?? enc.y) : horizontal ? enc.x : enc.y;
+        const axisFormat = def.standalone ? undefined : valAxis?.format;
+        const ctx: BuildContext = {
+          renderer: this.renderer,
+          data,
+          x: this.cat,
+          y: this.val,
+          horizontal: !def.standalone && horizontal,
+          pos: def.standalone ? (c, v) => [c, v] : pos,
+          theme,
+          style,
+          surface: opaqueSurface,
+          xStep,
+          fields,
+          hidden: this.hidden,
+          pixel: [1 / Math.max(1, view.width), 1 / Math.max(1, view.height)],
+          categorical,
+          format: (v, field = layerValue) => numberFormatter(fields[field ?? '']?.format ?? axisFormat)(v),
+          ramp: (t) => sampleRamp(ramp, t),
+          color: (s, i) =>
+            s.colorValue && !data.layer.style?.color
+              ? sampleRamp(ramp, k1 > k0 ? (s.colorValue[i] - k0) / (k1 - k0) : 0.5)
+              : seriesColor(data, s),
+          // Area-proportional sizing: the eye reads surface, not diameter.
+          size: (s, i) =>
+            s.sizeValue ? r0 + (r1 - r0) * Math.sqrt(s1 > s0 ? Math.max(0, (s.sizeValue[i] - s0) / (s1 - s0)) : 0.5) : (style.size ?? 8),
+        };
+        return { data, def, mark: def.build(ctx) };
+      });
 
-    // 6. Legend: one entry per series slot, in slot order.
+    const guess = this.layout?.view ?? { width: Math.max(1, this.width - 80), height: Math.max(1, this.height - 120) };
+    this.built = buildAll(guess);
+
+    // 5. Legend: series and mark entries, in slot order.
     const entries = new Map<string, LegendEntry>();
-    for (const { data, def } of layers) {
-      if (data.colorMode !== 'series') continue;
-      for (const s of data.series) {
-        if (!entries.has(s.key)) entries.set(s.key, { key: s.key, color: seriesColor(data, s), symbol: def.symbol });
+    for (const { data, def, mark } of this.built) {
+      if (data.colorMode === 'series') {
+        for (const s of data.series) {
+          if (!entries.has(s.key)) entries.set(s.key, { key: s.key, color: seriesColor(data, s), symbol: def.symbol });
+        }
       }
+      for (const e of mark.legend ?? []) if (!entries.has(e.key)) entries.set(e.key, { key: e.key, color: e.color, symbol: def.symbol });
     }
     this.legend = [...slots.keys()].map((k) => entries.get(k)!).filter(Boolean);
+
+    if (this.built.some((b) => b.def.sizeDependent)) {
+      const view = (this.layout = this.computeLayout()).view;
+      if (Math.abs(view.width - guess.width) > 0.5 || Math.abs(view.height - guess.height) > 0.5) {
+        this.disposeMarks();
+        this.built = buildAll(view);
+      }
+    }
     this.requestRender();
   }
 
@@ -390,7 +552,21 @@ export class Chart {
     this.overlay.height = Math.round(this.height * this.dpr);
   }
 
+  /** Install the map scales and return the aspect ratio (width / height) to keep. */
+  private projectionScales(p: ProjectionSpec): number {
+    const [[west, south], [east, north]] = p.bounds ?? [[-180, -58], [180, 84]];
+    this.xScale = new LinearScale(west, east);
+    if (p.type === 'equirectangular') {
+      this.yScale = new LinearScale(south, north);
+      return (east - west) / (north - south);
+    }
+    const lat = new MercatorScale(south, north);
+    this.yScale = lat;
+    return ((east - west) * Math.PI) / 180 / lat.span;
+  }
+
   private axis(channel: 'x' | 'y'): AxisSpec | null {
+    if (!this.axesShown[channel]) return null; // maps, pies, treemaps…
     const a = this.spec.axes?.[channel];
     return a === false ? null : (a ?? {});
   }
@@ -459,13 +635,20 @@ export class Chart {
     const xCount = xAxis?.tickCount ?? Math.min(12, Math.max(2, Math.round(plotW / 90)));
     const xTicks = this.xScale.ticks(vx0, vx1, xCount);
 
+    // With an imposed aspect ratio, letterbox the view inside the plot.
+    let view: ClipRect = plot;
+    if (this.aspect) {
+      const w = Math.min(plotW, plotH * this.aspect);
+      const h = w / this.aspect;
+      view = { x: left + (plotW - w) / 2, y: top + (plotH - h) / 2, width: w, height: h };
+    }
     const transform: ViewTransform = {
-      sx: zoom.kx * plotW,
-      ox: left + zoom.tx * plotW,
-      sy: -zoom.ky * plotH,
-      oy: top + plotH - zoom.ty * plotH,
+      sx: zoom.kx * view.width,
+      ox: view.x + zoom.tx * view.width,
+      sy: -zoom.ky * view.height,
+      oy: view.y + view.height - zoom.ty * view.height,
     };
-    return { plot, titleY, legendY, xTicks, yTicks, transform };
+    return { plot, view, titleY, legendY, xTicks, yTicks, transform };
   }
 
   // ------------------------------------------------------------------- render
@@ -493,13 +676,16 @@ export class Chart {
       const c = parseColor(color);
       grid.push(x0, y0, x1, y1, c[0], c[1], c[2], c[3], width);
     };
-    if (yAxis && (yAxis.grid ?? theme.grid.y.visible)) {
+    // The value axis carries the grid: y normally, x on a horizontal chart. Mark-owned scales (heatmap) have none.
+    const gridY = this.markScales ? false : this.horizontal ? theme.grid.x.visible : theme.grid.y.visible;
+    const gridX = this.markScales ? false : this.horizontal ? theme.grid.y.visible : theme.grid.x.visible;
+    if (yAxis && (yAxis.grid ?? gridY)) {
       for (const t of L.yTicks) {
         const y = T.oy + t.t * T.sy;
         if (y >= plot.y - 0.5 && y <= plot.y + plot.height + 0.5) addLine(plot.x, y, plot.x + plot.width, y, theme.grid.y.color, theme.grid.y.width);
       }
     }
-    if (xAxis && (xAxis.grid ?? theme.grid.x.visible)) {
+    if (xAxis && (xAxis.grid ?? gridX)) {
       for (const t of L.xTicks) {
         const x = T.ox + t.t * T.sx;
         if (x >= plot.x - 0.5 && x <= plot.x + plot.width + 0.5) addLine(x, plot.y, x, plot.y + plot.height, theme.grid.x.color, theme.grid.x.width);
@@ -511,9 +697,23 @@ export class Chart {
     // Marks. Unzoomed, leave a little room so markers on the edge are not cut.
     const zoomed = this.zoom.kx !== 1 || this.zoom.ky !== 1;
     const m = zoomed ? 0 : 6;
-    const clip = { x: plot.x - m, y: plot.y - m, width: plot.width + 2 * m, height: plot.height + 2 * m };
+    let clip = { x: plot.x - m, y: plot.y - m, width: plot.width + 2 * m, height: plot.height + 2 * m };
+    if (this.geo) {
+      // A map stops at the edge of the projected world, wherever the zoom has moved it.
+      const x0 = Math.max(plot.x, T.ox);
+      const y0 = Math.max(plot.y, T.oy + T.sy);
+      const x1 = Math.min(plot.x + plot.width, T.ox + T.sx);
+      const y1 = Math.min(plot.y + plot.height, T.oy);
+      clip = { x: x0, y: y0, width: Math.max(0, x1 - x0), height: Math.max(0, y1 - y0) };
+    }
+    // With a selection, selectable marks are dimmed and the selected ones redrawn on top.
+    const selecting = this.built.some((b) => b.sel);
     for (const b of this.built) {
-      for (const d of b.mark.draws) calls.push({ batch: d.batch, transform: T, clip, pixelSnap: d.pixelSnap });
+      for (const d of b.mark.draws) {
+        const opacity = selecting && d.perDatum ? theme.selection.dimOpacity : 1;
+        calls.push({ batch: d.batch, transform: T, clip, pixelSnap: d.pixelSnap, opacity });
+      }
+      for (const d of b.sel?.draws ?? []) calls.push({ batch: d.batch, transform: T, clip, pixelSnap: d.pixelSnap });
     }
     this.renderer.render({ clearColor: parseColor(theme.background), calls });
     this.drawOverlay(L);
@@ -579,7 +779,7 @@ export class Chart {
 
     // X axis.
     if (xAxis) {
-      if (xAxis.line ?? theme.axis.line.visible) {
+      if (xAxis.line ?? (!this.horizontal && !this.markScales && theme.axis.line.visible)) {
         const w = theme.axis.line.width;
         const y = crisp(bottom, w);
         ctx.strokeStyle = theme.axis.line.color;
@@ -620,7 +820,7 @@ export class Chart {
 
     // Y axis.
     if (yAxis) {
-      if (yAxis.line ?? false) {
+      if (yAxis.line ?? (this.horizontal && theme.axis.line.visible)) {
         const w = theme.axis.line.width;
         const x = crisp(plot.x, w);
         ctx.strokeStyle = theme.axis.line.color;
@@ -654,7 +854,50 @@ export class Chart {
       }
     }
 
+    this.drawLabels(L);
     this.drawHover(L);
+    this.drawLasso();
+  }
+
+  /** Labels the marks asked for. A label with a box is drawn only if it fits inside it. */
+  private drawLabels(L: Layout): void {
+    const { ctx } = this;
+    ctx.save();
+    for (const b of this.built) for (const l of b.mark.labels ?? []) this.drawLabel(l, L);
+    ctx.restore();
+  }
+
+  private drawLabel(l: MarkLabel, L: Layout): void {
+    const { ctx, theme } = this;
+    const { plot, transform: T } = L;
+    const ax = T.ox + l.tx * T.sx;
+    const ay = T.oy + l.ty * T.sy;
+    // Anchored outside the visible plot (zoomed away): skip.
+    if (ax < plot.x - 1 || ax > plot.x + plot.width + 1 || ay < plot.y - 1 || ay > plot.y + plot.height + 1) return;
+    const x = ax + (l.dx ?? 0);
+    const y = ay + (l.dy ?? 0);
+    const size = l.size ?? 11;
+    ctx.font = font(l.weight ?? 500, size, theme.font.family);
+    const align = l.align ?? 'center';
+    const baseline = l.baseline ?? 'middle';
+    const w = ctx.measureText(l.text).width;
+    if (l.box) {
+      const bx0 = Math.min(T.ox + l.box[0] * T.sx, T.ox + l.box[2] * T.sx);
+      const bx1 = Math.max(T.ox + l.box[0] * T.sx, T.ox + l.box[2] * T.sx);
+      const by0 = Math.min(T.oy + l.box[1] * T.sy, T.oy + l.box[3] * T.sy);
+      const by1 = Math.max(T.oy + l.box[1] * T.sy, T.oy + l.box[3] * T.sy);
+      const left = align === 'center' ? x - w / 2 : align === 'right' || align === 'end' ? x - w : x;
+      const top = baseline === 'middle' ? y - size / 2 : baseline === 'top' || baseline === 'hanging' ? y : y - size;
+      // Measure first: a label that does not fit is never clipped, it moves out or disappears.
+      if (left < bx0 + 4 || left + w > bx1 - 4 || top < by0 + 2 || top + size > by1 - 2) {
+        if (l.fallback) this.drawLabel(l.fallback, L);
+        return;
+      }
+    }
+    ctx.textAlign = align;
+    ctx.textBaseline = baseline;
+    ctx.fillStyle = l.color ?? (l.on ? (luminance(l.on) > 0.4 ? '#0b0b0b' : '#ffffff') : theme.text.secondary);
+    ctx.fillText(l.text, x, y);
   }
 
   private drawHover(L: Layout): void {
@@ -669,16 +912,20 @@ export class Chart {
     ctx.clip();
 
     if (this.tooltipMode() === 'x' && (this.spec.interactions?.crosshair ?? true)) {
-      const cx = T.ox + this.xScale.norm(fx) * T.sx;
+      const H = this.horizontal;
+      const c = H ? T.oy + this.cat.norm(fx) * T.sy : T.ox + this.cat.norm(fx) * T.sx;
       const hasBand = this.built.some((b) => b.def.banded);
       if (hasBand) {
-        const span = this.xScale.band > 0 ? this.xScale.band / (1 - theme.marks.bar.bandPadding) : this.xStepNorm();
-        const w = span * T.sx;
+        const span = this.cat.band > 0 ? this.cat.band / (1 - theme.marks.bar.bandPadding) : this.xStepNorm();
+        const w = Math.abs(span * (H ? T.sy : T.sx));
         ctx.fillStyle = theme.hover.bandFill;
-        ctx.fillRect(cx - w / 2, plot.y, w, plot.height);
+        if (H) ctx.fillRect(plot.x, c - w / 2, plot.width, w);
+        else ctx.fillRect(c - w / 2, plot.y, w, plot.height);
       } else if (theme.crosshair.visible) {
+        const cw = theme.crosshair.width;
         ctx.fillStyle = theme.crosshair.color;
-        ctx.fillRect(Math.round(cx) - theme.crosshair.width / 2, plot.y, theme.crosshair.width, plot.height);
+        if (H) ctx.fillRect(plot.x, Math.round(c) - cw / 2, plot.width, cw);
+        else ctx.fillRect(Math.round(c) - cw / 2, plot.y, cw, plot.height);
       }
     }
 
@@ -709,7 +956,7 @@ export class Chart {
       if (!b.def.banded) continue;
       for (const s of b.data.series) {
         for (let i = 1; i < s.x.length; i++) {
-          const d = Math.abs(this.xScale.norm(s.x[i]) - this.xScale.norm(s.x[i - 1]));
+          const d = Math.abs(this.cat.norm(s.x[i]) - this.cat.norm(s.x[i - 1]));
           if (d > 0 && d < step) step = d;
         }
       }
@@ -722,7 +969,8 @@ export class Chart {
   private tooltipMode(): 'x' | 'nearest' {
     const t = this.spec.interactions?.tooltip;
     if (typeof t === 'object' && t.mode) return t.mode;
-    return this.spec.layers.length > 0 && this.spec.layers.every((l) => l.mark === 'point') && this.xScale.band === 0
+    if (this.geo) return 'nearest';
+    return this.spec.layers.length > 0 && this.spec.layers.every((l) => l.mark === 'point') && this.cat.band === 0
       ? 'nearest'
       : 'x';
   }
@@ -753,7 +1001,8 @@ export class Chart {
     if (!L || !this.inPlot(p, 8)) return [];
     const T = L.transform;
     const { plot } = L;
-    const visible = (x: number) => x >= plot.x - 1 && x <= plot.x + plot.width + 1;
+    const H = this.horizontal;
+    const visible = (c: number) => (H ? c >= plot.y - 1 && c <= plot.y + plot.height + 1 : c >= plot.x - 1 && c <= plot.x + plot.width + 1);
     if (this.tooltipMode() === 'nearest') {
       let best: Picked | undefined;
       let bestD = 30 * 30;
@@ -777,9 +1026,10 @@ export class Chart {
     for (const b of this.built) {
       const h = b.mark.hit;
       for (let i = 0; i < h.n; i++) {
-        const px = T.ox + this.xScale.norm(h.x[i]) * T.sx;
-        const d = Math.abs(px - p.x);
-        if (d < bestD && visible(px)) {
+        // Distance along the category axis only.
+        const c = H ? T.oy + this.cat.norm(h.x[i]) * T.sy : T.ox + this.cat.norm(h.x[i]) * T.sx;
+        const d = Math.abs(c - (H ? p.y : p.x));
+        if (d < bestD && visible(c)) {
           bestD = d;
           bestX = h.x[i];
         }
@@ -809,15 +1059,19 @@ export class Chart {
       const h = b.mark.hit;
       const i = p.index;
       const raw = h.x[i];
-      const yField = b.data.layer.encode.y;
-      const yFmt = (this.spec.axes?.y || undefined)?.format ?? fields[yField]?.format;
+      const enc = b.data.layer.encode;
+      const vField = (this.horizontal ? enc.x : enc.y) ?? '';
+      const axisFmt = ((this.horizontal ? this.spec.axes?.x : this.spec.axes?.y) || undefined)?.format;
+      const fmt = this.val.type === 'time' ? (v: number) => this.val.format(v) : numberFormatter(fields[vField]?.format ?? axisFmt);
+      // A range (Gantt, waterfall) reads "start → end".
+      const valueLabel = h.value2 ? `${fmt(h.value[i])} → ${fmt(h.value2[i])}` : fmt(h.value[i]);
       return {
         layer: p.layer,
         series: b.data.series[h.series[i]].key,
-        x: this.xScale.type === 'band' ? this.xScale.format(raw) : this.xScale.type === 'time' ? new Date(raw) : raw,
-        xLabel: this.xScale.format(raw),
+        x: this.cat.type === 'band' ? this.cat.format(raw) : this.cat.type === 'time' ? new Date(raw) : raw,
+        xLabel: this.cat.format(raw),
         value: h.value[i],
-        valueLabel: numberFormatter(fields[yField]?.format ?? yFmt)(h.value[i]),
+        valueLabel,
         color: toCss([h.color[i * 4], h.color[i * 4 + 1], h.color[i * 4 + 2], 1]),
         row: b.data.table.row(h.row[i]),
       };
@@ -827,8 +1081,16 @@ export class Chart {
   private onMove(e: PointerEvent): void {
     const p = this.local(e);
     this.pointer = p;
+    if (this.lasso) {
+      const pts = this.lasso.points;
+      const last = pts[pts.length - 1];
+      if (this.lasso.rect) pts[1] = p;
+      else if (Math.hypot(p.x - last.x, p.y - last.y) > 2) pts.push(p);
+      this.requestRender();
+      return;
+    }
     if (this.drag) {
-      const plot = this.layout!.plot;
+      const plot = this.layout!.view;
       const cfg = this.zoomConfig()!;
       const dx = p.x - this.drag.x;
       const dy = p.y - this.drag.y;
@@ -844,9 +1106,15 @@ export class Chart {
       return;
     }
     const overLegend = this.legendAt(p);
-    this.root.style.cursor = overLegend ? 'pointer' : this.zoomConfig() && this.inPlot(p) && (this.zoom.kx > 1 || this.zoom.ky > 1) ? 'grab' : 'default';
+    const zoomed = this.zoom.kx > 1 || this.zoom.ky > 1;
+    this.root.style.cursor = overLegend
+      ? 'pointer'
+      : this.selectConfig() && this.inPlot(p)
+        ? e.shiftKey && zoomed ? 'grab' : 'crosshair'
+        : this.zoomConfig() && this.inPlot(p) && zoomed ? 'grab' : 'default';
     if (this.spec.interactions?.tooltip === false) return;
     const picked = this.pick(p);
+    this.shape = picked.length ? undefined : this.pickShape(p);
     this.setPicked(picked);
     this.showTooltip(p);
     if (picked.length) this.emit('hover', { items: this.describe(picked), x: p.x, y: p.y });
@@ -854,6 +1122,7 @@ export class Chart {
 
   private onLeave(): void {
     this.pointer = undefined;
+    this.shape = undefined;
     this.setPicked([]);
     this.tip.style.opacity = '0';
     this.emit('leave', {});
@@ -861,6 +1130,16 @@ export class Chart {
 
   private onDown(e: PointerEvent): void {
     const p = this.local(e);
+    const select = this.selectConfig();
+    // With selection on, a drag draws the selection; Shift-drag keeps panning.
+    if (select && e.button === 0 && !e.shiftKey && this.inPlot(p) && !this.legendAt(p)) {
+      this.lasso = { points: select === 'rect' ? [p, p] : [p], additive: e.metaKey || e.ctrlKey, rect: select === 'rect' };
+      this.root.setPointerCapture(e.pointerId);
+      this.root.focus({ preventScroll: true });
+      this.tip.style.opacity = '0';
+      this.setPicked([]);
+      return;
+    }
     if (this.zoomConfig() && this.inPlot(p) && (this.zoom.kx > 1 || this.zoom.ky > 1)) {
       this.drag = { x: p.x, y: p.y, moved: 0 };
       this.root.setPointerCapture(e.pointerId);
@@ -871,6 +1150,26 @@ export class Chart {
 
   private onUp(e: PointerEvent): void {
     const p = this.local(e);
+    if (this.lasso) {
+      const { points, additive, rect } = this.lasso;
+      this.lasso = undefined;
+      this.root.releasePointerCapture(e.pointerId);
+      const [a, b] = points;
+      const polygon = rect ? [a, { x: b.x, y: a.y }, b, { x: a.x, y: b.y }] : points;
+      let w = 0;
+      let h = 0;
+      for (const q of polygon) {
+        w = Math.max(w, Math.abs(q.x - a.x));
+        h = Math.max(h, Math.abs(q.y - a.y));
+      }
+      if (polygon.length >= 3 && w + h > 6) {
+        this.selectWithin(polygon, additive);
+        return;
+      }
+      // No real drag: a plain click, which clears the selection and is then handled as a click.
+      if (!additive) this.clearSelection();
+      this.requestRender();
+    }
     const moved = this.drag?.moved ?? 0;
     if (this.drag) {
       this.drag = undefined;
@@ -894,7 +1193,7 @@ export class Chart {
     const p = this.local(e);
     if (!cfg || !this.inPlot(p)) return;
     e.preventDefault();
-    const plot = this.layout!.plot;
+    const plot = this.layout!.view;
     const factor = Math.exp(-e.deltaY * 0.0015);
     const z = this.zoom;
     if (cfg.axes !== 'y') {
@@ -916,6 +1215,107 @@ export class Chart {
     this.requestRender();
   }
 
+  // ---------------------------------------------------------------- selection
+
+  private selectConfig(): 'lasso' | 'rect' | null {
+    const s = this.spec.interactions?.select;
+    return s ? (s === 'rect' ? 'rect' : 'lasso') : null;
+  }
+
+  /** Select every selectable datum whose position falls inside a polygon given in pixels. */
+  private selectWithin(polygon: Point[], additive: boolean): void {
+    const T = this.layout!.transform;
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const q of polygon) {
+      x0 = Math.min(x0, q.x);
+      x1 = Math.max(x1, q.x);
+      y0 = Math.min(y0, q.y);
+      y1 = Math.max(y1, q.y);
+    }
+    const n = polygon.length;
+    const px = Float64Array.from(polygon, (q) => q.x);
+    const py = Float64Array.from(polygon, (q) => q.y);
+    for (const b of this.built) {
+      const h = b.mark.hit;
+      if (h.n === 0 || !b.mark.draws.some((d) => d.perDatum)) continue;
+      const mask = additive && b.sel ? b.sel.mask : new Uint8Array(h.n);
+      for (let i = 0; i < h.n; i++) {
+        const x = T.ox + h.tx[i] * T.sx;
+        const y = T.oy + h.ty[i] * T.sy;
+        // Bounding box first: it rejects most points before the exact test.
+        if (x < x0 || x > x1 || y < y0 || y > y1) continue;
+        let inside = false;
+        for (let a = 0, c = n - 1; a < n; c = a++) {
+          if (py[a] > y !== py[c] > y && x < ((px[c] - px[a]) * (y - py[a])) / (py[c] - py[a]) + px[a]) inside = !inside;
+        }
+        if (inside) mask[i] = 1;
+      }
+      this.setLayerSelection(b, mask);
+    }
+    this.emit('select', this.getSelection());
+    this.requestRender();
+  }
+
+  private setLayerSelection(b: Built, mask: Uint8Array | null): void {
+    for (const d of b.sel?.draws ?? []) d.batch.destroy();
+    b.sel = undefined;
+    if (!mask) return;
+    let count = 0;
+    for (let i = 0; i < mask.length; i++) count += mask[i];
+    if (count === 0) return;
+    // Copy the selected instances into their own batch, drawn over the dimmed original.
+    const draws: MarkDraw[] = [];
+    for (const d of b.mark.draws) {
+      if (!d.perDatum || !d.data) continue;
+      const stride = LAYOUTS[d.batch.kind].stride;
+      const out = new Float32Array(count * stride);
+      let k = 0;
+      for (let i = 0; i < mask.length; i++) {
+        if (mask[i]) out.set(d.data.subarray(i * stride, (i + 1) * stride), k++ * stride);
+      }
+      const batch = this.renderer.createBatch(d.batch.kind);
+      batch.update(out, count);
+      draws.push({ batch, pixelSnap: d.pixelSnap });
+    }
+    b.sel = { mask, count, draws };
+  }
+
+  private drawLasso(): void {
+    const l = this.lasso;
+    if (!l || l.points.length < 2) return;
+    const { ctx, theme } = this;
+    const [a, b] = l.points;
+    ctx.save();
+    ctx.beginPath();
+    if (l.rect) ctx.rect(a.x, a.y, b.x - a.x, b.y - a.y);
+    else {
+      ctx.moveTo(a.x, a.y);
+      for (let i = 1; i < l.points.length; i++) ctx.lineTo(l.points[i].x, l.points[i].y);
+      ctx.closePath();
+    }
+    ctx.fillStyle = theme.selection.fill;
+    ctx.fill();
+    ctx.lineWidth = theme.selection.width;
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = theme.selection.stroke;
+    ctx.setLineDash([5, 4]);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** Shape marks (countries…) under the pointer, topmost layer first. */
+  private pickShape(p: Point): ShapeHit | undefined {
+    const L = this.layout;
+    if (!L || !this.inPlot(p)) return undefined;
+    const tx = (p.x - L.transform.ox) / L.transform.sx;
+    const ty = (p.y - L.transform.oy) / L.transform.sy;
+    for (let i = this.built.length - 1; i >= 0; i--) {
+      const hit = this.built[i].mark.pick?.(tx, ty);
+      if (hit) return hit;
+    }
+    return undefined;
+  }
+
   private clampZoom(): void {
     const z = this.zoom;
     z.tx = Math.min(0, Math.max(1 - z.kx, z.tx));
@@ -931,13 +1331,15 @@ export class Chart {
 
   private showTooltip(p: { x: number; y: number }): void {
     const { tip, theme } = this;
-    if (this.picked.length === 0) {
+    if (this.picked.length === 0 && !this.shape) {
       tip.style.opacity = '0';
       return;
     }
     const items = this.describe(this.picked);
     const mode = this.tooltipMode();
-    const context: TooltipContext = { mode, title: mode === 'x' ? items[0].xLabel : items[0].series, items, theme };
+    const context: TooltipContext = items.length
+      ? { mode, title: mode === 'x' ? items[0].xLabel : items[0].series, items, theme }
+      : { mode: 'nearest', title: this.shape!.title, items, shape: this.shape, theme };
     const t = theme.tooltip;
     Object.assign(tip.style, {
       background: t.background,
@@ -997,6 +1399,11 @@ export class Chart {
       r.append(l, v);
       box.appendChild(r);
     };
+    if (c.shape) {
+      for (const r of c.shape.rows) row(r.label, r.value);
+      if (c.shape.rows.length === 0) head.style.marginBottom = '0';
+      return box;
+    }
     if (c.mode === 'nearest') {
       // One mark: list its encoded fields, with the catalog labels.
       const it = c.items[0];
@@ -1008,8 +1415,8 @@ export class Chart {
       const sw = document.createElement('span');
       sw.style.cssText = `width:8px;height:8px;border-radius:50%;background:${it.color};`;
       head.prepend(sw);
-      row(label(enc.x), it.xLabel);
-      row(label(enc.y), it.valueLabel);
+      row(label(enc.x ?? ''), it.xLabel);
+      row(label(enc.y ?? ''), it.valueLabel);
       for (const f of [enc.size, enc.color]) {
         if (!f || f === enc.x || f === enc.y) continue;
         const v = it.row[f];

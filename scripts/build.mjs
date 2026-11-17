@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { build } from 'vite';
 
-const packages = ['core', 'adapters', 'element', 'react', 'vue', 'ember'];
+const packages = ['core', 'adapters', 'geo', 'element', 'react', 'vue', 'ember'];
 
 for (const name of packages) {
   const root = resolve('packages', name);

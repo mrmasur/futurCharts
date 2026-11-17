@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>futurCharts — cartes</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #f9f9f7; color: #0b0b0b; font: 14px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+      header { padding: 24px 24px 8px; max-width: 1400px; margin: 0 auto; display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap; }
+      h1 { font-size: 20px; margin: 0; }
+      header p { margin: 0; color: #52514e; flex: 1; min-width: 240px; }
+      a { color: #1c5cab; }
+      main { display: grid; gap: 16px; padding: 16px 24px 32px; max-width: 1400px; margin: 0 auto; }
+      section { background: #fcfcfb; border: 1px solid rgba(11, 11, 11, 0.1); border-radius: 12px; overflow: hidden; }
+      .map { height: 560px; }
+      .panel { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center; padding: 12px 16px; border-top: 1px solid rgba(11, 11, 11, 0.1); min-height: 52px; }
+      .panel strong { font-variant-numeric: tabular-nums; }
+      .panel .muted { color: #52514e; }
+      .chip { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+      .chip i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+      .tools { margin-left: auto; display: flex; gap: 8px; }
+      button { font: inherit; background: #fff; border: 1px solid rgba(11, 11, 11, 0.15); border-radius: 8px; padding: 4px 10px; cursor: pointer; }
+      button[aria-pressed='true'] { background: #0b0b0b; color: #fff; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>futurCharts — cartes</h1>
+      <p>Glisser pour entourer des points au lasso · Maj + glisser pour déplacer · molette pour zoomer · Cmd/Ctrl pour ajouter à la sélection · Échap ou clic dans le vide pour effacer.</p>
+      <a href="/">Graphiques</a>
+      <a href="/gallery.html">Galerie</a>
+      <a href="/wrappers.html">Wrappers</a>
+    </header>
+    <main>
+      <section>
+        <div class="map" id="points"></div>
+        <div class="panel">
+          <span id="summary" class="muted">Aucune sélection. Dessinez une forme autour des points.</span>
+          <span id="breakdown"></span>
+          <span class="tools">
+            <button id="tool-lasso" type="button" aria-pressed="true">Lasso</button>
+            <button id="tool-rect" type="button" aria-pressed="false">Rectangle</button>
+            <button id="clear" type="button">Effacer</button>
+          </span>
+        </div>
+      </section>
+      <section>
+        <div class="map" id="choropleth"></div>
+      </section>
+    </main>
+    <script type="module" src="/src/maps.ts"></script>
+  </body>
+</html>

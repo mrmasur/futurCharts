@@ -13,7 +13,7 @@ import { defineComponent, h, onBeforeUnmount, onMounted, ref, toRaw, watch, type
  *
  * The chart updates when `spec` is replaced. Hold it in a `shallowRef` (or a
  * `computed`): a deep `ref` would wrap the data arrays in reactive proxies.
- * Events: `ready`, `hover`, `leave`, `click`, `zoom`, `legend`, `error`.
+ * Events: `ready`, `hover`, `leave`, `click`, `zoom`, `legend`, `select`, `error`.
  * The component exposes `getChart()` through a template ref.
  */
 export const FuturChart = defineComponent({
@@ -31,6 +31,7 @@ export const FuturChart = defineComponent({
     click: (_payload: ChartEvents['click']) => true,
     zoom: (_payload: ChartEvents['zoom']) => true,
     legend: (_payload: ChartEvents['legend']) => true,
+    select: (_payload: ChartEvents['select']) => true,
   },
   setup(props, { emit, expose }) {
     const container = ref<HTMLDivElement>();
@@ -45,6 +46,7 @@ export const FuturChart = defineComponent({
         onClick: (p) => emit('click', p),
         onZoom: (p) => emit('zoom', p),
         onLegend: (p) => emit('legend', p),
+        onSelect: (p) => emit('select', p),
       });
     });
     watch(

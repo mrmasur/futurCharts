@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "npm run dev -w @futurcharts/demo",
     "build": "node scripts/build.mjs",
-    "typecheck": "tsc -p packages/core && tsc -p packages/adapters && tsc -p packages/element && tsc -p packages/react && tsc -p packages/vue && tsc -p packages/ember && tsc -p apps/demo --noEmit",
+    "typecheck": "tsc -p packages/core && tsc -p packages/adapters && tsc -p packages/geo && tsc -p packages/element && tsc -p packages/react && tsc -p packages/vue && tsc -p packages/ember && tsc -p apps/demo --noEmit",
     "test": "vitest run"
   },
   "devDependencies": {

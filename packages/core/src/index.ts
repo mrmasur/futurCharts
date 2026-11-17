@@ -1,5 +1,5 @@
 export { Chart } from './chart/chart';
-export type { ChartOptions, ChartEvents, HoverItem, TooltipContext } from './chart/chart';
+export type { ChartOptions, ChartEvents, HoverItem, TooltipContext, SelectionPayload } from './chart/chart';
 export { mountChart } from './chart/mount';
 export type { ChartHandle, ChartHandlers } from './chart/mount';
 
@@ -7,17 +7,22 @@ export { chart, ChartBuilder } from './spec/builder';
 export type * from './spec/types';
 
 export { Table } from './data/table';
+export { applyTransform, applyTransforms } from './data/transforms';
+export type { TransformSpec, AggregateOp } from './data/transforms';
 export type { DataInput, Column, ColumnType, Row } from './data/table';
 
 export { lightTheme, darkTheme, registerTheme, resolveTheme } from './theme/theme';
 export type { Theme, ThemeSpec } from './theme/theme';
 
-export { registerMark, getMark, buildHit } from './marks/registry';
-export type { MarkDefinition, BuildContext, BuiltMark, HitData } from './marks/registry';
+export { registerMark, getMark, hasMark, buildHit, emptyHit } from './marks/registry';
+export type { MarkDefinition, BuildContext, BuiltMark, HitData, MarkDraw, ShapeHit, MarkLabel, MarkScales } from './marks/registry';
+export { pushRect, pushSegment, pushVertex, luminance } from './marks/primitives';
+export type { RectInstance } from './marks/primitives';
+export { squarify } from './marks/charts';
 export type { LayerData, SeriesData } from './marks/prepare';
 export { curvePoints } from './marks/curve';
 
-export { createRenderer, WebGL2Renderer, LAYOUTS, SHAPES } from './render';
+export { createRenderer, WebGL2Renderer, SharedWebGL2Renderer, LAYOUTS, SHAPES } from './render';
 export type {
   Renderer,
   RendererFactory,
@@ -30,9 +35,9 @@ export type {
   RGBA,
 } from './render';
 
-export { LinearScale, LogScale, TimeScale, BandScale, niceDomain, niceStep } from './scale/scales';
+export { LinearScale, LogScale, TimeScale, BandScale, MercatorScale, niceDomain, niceStep } from './scale/scales';
 export type { Scale, Tick } from './scale/scales';
 
-export { parseColor } from './util/color';
+export { parseColor, withAlpha, sampleRamp, toCss } from './util/color';
 export { numberFormatter } from './util/format';
 export type { FormatSpec } from './util/format';

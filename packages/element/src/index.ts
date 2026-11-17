@@ -9,7 +9,7 @@ import { mountChart, type Chart, type ChartHandle, type ChartOptions, type Chart
  *
  * A JSON spec can also be given as the `spec` attribute. Events: `chart-ready`,
  * `chart-hover`, `chart-leave`, `chart-click`, `chart-zoom`, `chart-legend`,
- * `chart-error`. The element needs a height (it is `display: block`).
+ * `chart-select`, `chart-error`. The element needs a height (it is `display: block`).
  */
 export class FuturChartElement extends HTMLElement {
   static observedAttributes = ['spec'];
@@ -66,6 +66,7 @@ export class FuturChartElement extends HTMLElement {
       onClick: (p) => this.emit('click', p),
       onZoom: (p) => this.emit('zoom', p),
       onLegend: (p) => this.emit('legend', p),
+      onSelect: (p) => this.emit('select', p),
     });
   }
 }

@@ -213,17 +213,20 @@ export class BandScale implements Scale {
   readonly band: number;
   private step: number;
   private outer: number;
-  constructor(readonly categories: string[], paddingInner = 0.3, paddingOuter = 0.15) {
+  /** `reverse` puts the first category at the far end: at the top of a y axis. */
+  constructor(readonly categories: string[], paddingInner = 0.3, paddingOuter = 0.15, private reverse = false) {
     const n = Math.max(1, categories.length);
     this.step = 1 / (n - paddingInner + 2 * paddingOuter);
     this.band = this.step * (1 - paddingInner);
     this.outer = paddingOuter * this.step;
   }
   norm(index: number): number {
-    return this.outer + index * this.step + this.band / 2;
+    const t = this.outer + index * this.step + this.band / 2;
+    return this.reverse ? 1 - t : t;
   }
   invert(t: number): number {
-    const i = Math.round((t - this.outer - this.band / 2) / this.step);
+    const u = this.reverse ? 1 - t : t;
+    const i = Math.round((u - this.outer - this.band / 2) / this.step);
     return Math.min(this.categories.length - 1, Math.max(0, i));
   }
   ticks(t0: number, t1: number): Tick[] {
@@ -236,5 +239,37 @@ export class BandScale implements Scale {
   }
   format(index: number): string {
     return this.categories[index] ?? '';
+  }
+}
+
+const MAX_LAT = 85.0511;
+const mercator = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (Math.max(-MAX_LAT, Math.min(MAX_LAT, lat)) * Math.PI) / 360));
+
+/**
+ * Latitude under the Mercator projection. Mercator is separable (x depends
+ * only on longitude, y only on latitude), so a map is just two scales and the
+ * whole zoom / GPU transform machinery applies unchanged.
+ */
+export class MercatorScale implements Scale {
+  readonly type = 'linear';
+  readonly band = 0;
+  private m0: number;
+  /** Projected height of the domain, in the same unit as longitude in radians. */
+  readonly span: number;
+  constructor(lat0: number, lat1: number) {
+    this.m0 = mercator(lat0);
+    this.span = mercator(lat1) - this.m0 || 1;
+  }
+  norm(lat: number): number {
+    return (mercator(lat) - this.m0) / this.span;
+  }
+  invert(t: number): number {
+    return ((2 * Math.atan(Math.exp(this.m0 + t * this.span)) - Math.PI / 2) * 180) / Math.PI;
+  }
+  ticks(): Tick[] {
+    return [];
+  }
+  format(lat: number): string {
+    return `${Math.abs(lat).toFixed(2)}° ${lat >= 0 ? 'N' : 'S'}`;
   }
 }

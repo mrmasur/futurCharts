@@ -9,10 +9,13 @@ import type {
   InteractionSpec,
   LayerSpec,
   MarkStyle,
+  ProjectionSpec,
   ScaleSpec,
 } from './types';
 
 type LayerOptions = Omit<LayerSpec, 'mark' | 'encode'>;
+/** Cartesian marks need both positions. */
+type XY = Encoding & { x: string; y: string };
 
 /**
  * Typed fluent builder. It only ever produces a `ChartSpec`: there is nothing
@@ -47,16 +50,16 @@ export class ChartBuilder {
     this.spec.layers.push(layer);
     return this;
   }
-  line(encode: Encoding, options: LayerOptions = {}): this {
+  line(encode: XY, options: LayerOptions = {}): this {
     return this.layer({ mark: 'line', encode, ...options });
   }
-  bar(encode: Encoding, options: LayerOptions = {}): this {
+  bar(encode: XY, options: LayerOptions = {}): this {
     return this.layer({ mark: 'bar', encode, ...options });
   }
-  area(encode: Encoding, options: LayerOptions = {}): this {
+  area(encode: XY, options: LayerOptions = {}): this {
     return this.layer({ mark: 'area', encode, ...options });
   }
-  point(encode: Encoding, options: LayerOptions = {}): this {
+  point(encode: XY, options: LayerOptions = {}): this {
     return this.layer({ mark: 'point', encode, ...options });
   }
   /** Style the most recently added layer. */
@@ -64,6 +67,12 @@ export class ChartBuilder {
     const last = this.spec.layers[this.spec.layers.length - 1];
     if (!last) throw new Error('futurCharts: style() needs a layer first.');
     last.style = { ...last.style, ...style } as MarkStyle;
+    return this;
+  }
+
+  /** Draw on a map: `x` and `y` become longitude and latitude. */
+  projection(projection: ProjectionSpec = {}): this {
+    this.spec.projection = projection;
     return this;
   }
 

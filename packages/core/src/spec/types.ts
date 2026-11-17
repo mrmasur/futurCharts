@@ -1,4 +1,5 @@
 import type { ColumnType, DataInput } from '../data/table';
+import type { TransformSpec } from '../data/transforms';
 import type { Theme, ThemeSpec } from '../theme/theme';
 import type { FormatSpec } from '../util/format';
 import type { DeepPartial } from '../util/merge';
@@ -21,6 +22,11 @@ export interface ChartSpec {
   theme?: ThemeSpec;
   layers: LayerSpec[];
   scales?: { x?: ScaleSpec; y?: ScaleSpec; color?: ColorScaleSpec };
+  /**
+   * Draw on a map instead of cartesian axes: `x` is then a longitude field and
+   * `y` a latitude field, and the chart keeps the projection's aspect ratio.
+   */
+  projection?: ProjectionSpec;
   axes?: { x?: AxisSpec | false; y?: AxisSpec | false };
   legend?: boolean;
   interactions?: InteractionSpec;
@@ -36,9 +42,26 @@ export interface FieldSpec {
 
 export type MarkType = 'line' | 'bar' | 'point' | 'area' | (string & {});
 
+export interface ProjectionSpec {
+  /** Default `mercator`. */
+  type?: 'mercator' | 'equirectangular';
+  /** Visible extent as [[west, south], [east, north]] in degrees. Default: the inhabited world. */
+  bounds?: [[number, number], [number, number]];
+}
+
 export interface Encoding {
-  x: string;
-  y: string;
+  /** Required by every cartesian mark; a longitude field under a projection. */
+  x?: string;
+  /** Required by every cartesian mark; a latitude field under a projection. */
+  y?: string;
+  /** End of a range along x; `x` is then its start (Gantt bars, horizontal intervals). */
+  x2?: string;
+  /** End of a range along y; `y` is then its start (waterfall, box plot, error bars). */
+  y2?: string;
+  /** Item identity: shape join key (maps), slice (pie), tile (treemap), stage (funnel), axis (radar). */
+  key?: string;
+  /** Measure of marks that are not positioned on x / y: pie, treemap, funnel, gauge, radar. */
+  value?: string;
   /** Field name: a string field splits into series, a numeric field maps to the sequential ramp. */
   color?: string;
   /** Field name (point marks): numeric field mapped to the size range. */
@@ -51,15 +74,33 @@ export interface LayerSpec {
   name?: string;
   /** Layer-specific data; defaults to the chart data. */
   data?: DataInput;
+  /** GeoJSON to draw (shape marks): a FeatureCollection, Feature or Geometry. */
+  geo?: unknown;
+  /** Where a shape's join key and name live, e.g. `properties.iso_a3`. Default: `properties.name`, then `id`. */
+  geoKey?: string;
   encode: Encoding;
   /** Stack series on top of each other (bar, area). */
   stack?: boolean;
+  /** Reshape the layer's data before drawing (bin, aggregate, boxplot, waterfall, sort, regression). */
+  transform?: TransformSpec[];
   /** Overrides `theme.marks[mark]` for this layer, plus `color` for a fixed color. */
   style?: MarkStyle;
 }
 
 export type MarkStyle = { color?: string } & DeepPartial<
-  Theme['marks']['line'] & Theme['marks']['bar'] & Theme['marks']['point'] & Theme['marks']['area']
+  Theme['marks']['line'] &
+    Theme['marks']['bar'] &
+    Theme['marks']['point'] &
+    Theme['marks']['area'] &
+    Theme['marks']['geoshape'] &
+    Theme['marks']['rule'] &
+    Theme['marks']['tick'] &
+    Theme['marks']['heatmap'] &
+    Theme['marks']['arc'] &
+    Theme['marks']['treemap'] &
+    Theme['marks']['funnel'] &
+    Theme['marks']['gauge'] &
+    Theme['marks']['radar']
 >;
 
 export interface ScaleSpec {
@@ -95,6 +136,11 @@ export interface InteractionSpec {
   crosshair?: boolean;
   /** Wheel to zoom, drag to pan, double-click to reset. */
   zoom?: boolean | { axes?: 'x' | 'y' | 'xy'; max?: number };
+  /**
+   * Drag to select marks: freehand `lasso` (default) or `rect`. Hold Shift to
+   * pan instead, Cmd/Ctrl to add to the selection; click empty space to clear.
+   */
+  select?: boolean | 'lasso' | 'rect';
   /** Click a legend entry to toggle its series. */
   legendToggle?: boolean;
 }

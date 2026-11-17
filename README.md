@@ -44,6 +44,30 @@ Les agrégations lourdes restent dans la base (ClickHouse, Elasticsearch). La li
 `spec.fields` porte le catalogue de champs (type, libellé, format) : c'est le point d'entrée d'une couche
 sémantique dbt.
 
+## Types de graphiques
+
+Démo complète : `apps/demo/gallery.html` (`http://localhost:5273/gallery.html`).
+
+| Famille | Marques et options |
+|---|---|
+| Comparaison | `bar` vertical ou horizontal (catégories sur y : détecté automatiquement), groupé, empilé, étiquettes de valeur (`style.labels`) |
+| Évolution | `line` (droite, lissée, en escalier), `area` empilée ou en bande (`y` → `y2`) |
+| Intervalles | `bar` avec `x2` / `y2` : Gantt, cascade ; `rule` : moustaches, barres d'erreur, sucettes ; `tick` : médianes, distributions en traits |
+| Distribution | histogramme (transform `bin` + `bar`), boîte à moustaches (transform `boxplot` + `rule` + `bar` + `tick` + `point`) |
+| Corrélation | `point` (nuage, bulles avec `size`), droite de régression (transform `regression`) |
+| Parts | `pie`, `donut`, `treemap` (squarifié, groupes) |
+| Indicateurs | `gauge` (min, max, objectif), `funnel` (taux de conversion) |
+| Matrices | `heatmap` (deux axes de catégories) |
+| Profils | `radar` |
+| Cartes | `geoshape` (fond de carte, choroplèthe), `point` sur `projection`, sélection au lasso |
+
+Les transformations (`layer.transform`) restent dans la spec JSON : `bin`, `aggregate`, `boxplot`, `waterfall`,
+`sort`, `regression`. Un intervalle suit la convention `y` = début, `y2` = fin.
+
+Tous les graphiques d'une page partagent un seul contexte WebGL2 (`renderer: 'auto'`) : les navigateurs en
+limitent le nombre (environ 16) et retirent les plus anciens au-delà. `renderer: 'webgl2'` redonne un contexte
+dédié à un graphique.
+
 ## Adaptateurs de données
 
 `@futurcharts/adapters` transforme une réponse de serveur en colonnes et en catalogue de champs. Ce sont des

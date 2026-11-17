@@ -25,6 +25,8 @@ export interface LayerData {
   table: Table;
   series: SeriesData[];
   stacked: boolean;
+  /** Values come with an explicit start (`y2` / `x2`): ranges, not bars from zero. */
+  ranged: boolean;
   /** `series`: one color per series. `continuous`: color from a numeric field. */
   colorMode: 'series' | 'continuous';
   colorExtent: [number, number];
@@ -33,6 +35,8 @@ export interface LayerData {
 
 export interface PrepareContext {
   band: boolean;
+  /** Categories on y, values on x. */
+  horizontal: boolean;
   /** Shared category -> index map of the x band scale (filled as layers are prepared). */
   categories: Map<string, number>;
   fields: Record<string, FieldSpec>;
@@ -52,14 +56,29 @@ function extent(values: Float64Array | undefined, rows: number[]): [number, numb
   return lo <= hi ? [lo, hi] : [0, 1];
 }
 
+/** Layer data of a standalone mark: no series, just the layer and its table. */
+export function standaloneLayer(layer: LayerSpec, index: number, table: Table): LayerData {
+  return { layer, index, table, series: [], stacked: false, ranged: false, colorMode: 'series', colorExtent: [0, 1], sizeExtent: [0, 1] };
+}
+
 export function prepareLayer(layer: LayerSpec, index: number, table: Table, ctx: PrepareContext): LayerData {
   const { encode } = layer;
-  const xCol = table.column(encode.x);
-  const yCol = table.column(encode.y);
+  if (!encode.x || !encode.y) {
+    throw new Error(`futurCharts: mark "${layer.mark}" (layer ${index}) needs both an x and a y encoding.`);
+  }
+  // Categories run along x, values along y — or the reverse for a horizontal chart.
+  const catField = ctx.horizontal ? encode.y : encode.x;
+  const valField = ctx.horizontal ? encode.x : encode.y;
+  const val2Field = ctx.horizontal ? encode.x2 : encode.y2;
+  const xCol = table.column(catField);
+  const yCol = table.column(valField);
   if (yCol.type === 'string') {
-    throw new Error(`futurCharts: y field "${encode.y}" must be numeric (layer ${index}, mark "${layer.mark}").`);
+    throw new Error(`futurCharts: field "${valField}" must be numeric (layer ${index}, mark "${layer.mark}").`);
   }
   const yVals = yCol.values as Float64Array;
+  const y2Col = val2Field ? table.column(val2Field) : undefined;
+  if (y2Col?.type === 'string') throw new Error(`futurCharts: field "${val2Field}" must be numeric (layer ${index}).`);
+  const y2Vals = y2Col?.values as Float64Array | undefined;
   const colorCol = encode.color ? table.column(encode.color) : undefined;
   const sizeCol = encode.size ? table.column(encode.size) : undefined;
   const continuous = !!colorCol && colorCol.type !== 'string';
@@ -76,14 +95,14 @@ export function prepareLayer(layer: LayerSpec, index: number, table: Table, ctx:
   };
 
   // Group rows into series, keeping first-appearance order.
-  const defaultKey = layer.name ?? ctx.fields[encode.y]?.label ?? encode.y;
+  const defaultKey = layer.name ?? ctx.fields[valField]?.label ?? valField;
   const groups = new Map<string, number[]>();
   const xRaw = new Float64Array(table.length);
   const valid: number[] = [];
   for (let i = 0; i < table.length; i++) {
     const x = xOf(i);
     xRaw[i] = x;
-    if (Number.isNaN(x) || Number.isNaN(yVals[i])) continue;
+    if (Number.isNaN(x) || Number.isNaN(yVals[i]) || (y2Vals && Number.isNaN(y2Vals[i]))) continue;
     valid.push(i);
     const key = colorCol && !continuous ? String(colorCol.values[i]) : defaultKey;
     let rows = groups.get(key);
@@ -91,7 +110,8 @@ export function prepareLayer(layer: LayerSpec, index: number, table: Table, ctx:
     rows.push(i);
   }
 
-  const stacked = !!layer.stack;
+  const ranged = !!y2Vals;
+  const stacked = !!layer.stack && !ranged;
   const acc = new Map<number, { pos: number; neg: number }>();
   const series: SeriesData[] = [];
   for (const [key, rows] of groups) {
@@ -127,7 +147,7 @@ export function prepareLayer(layer: LayerSpec, index: number, table: Table, ctx:
           s.y1[j] = a.neg += v;
         }
       } else {
-        s.y0[j] = 0;
+        s.y0[j] = y2Vals ? y2Vals[r] : 0;
         s.y1[j] = v;
       }
     }
@@ -140,6 +160,7 @@ export function prepareLayer(layer: LayerSpec, index: number, table: Table, ctx:
     table,
     series,
     stacked,
+    ranged,
     colorMode: continuous ? 'continuous' : 'series',
     colorExtent: extent(continuous ? (colorCol!.values as Float64Array) : undefined, valid),
     sizeExtent: extent(sizeCol && sizeCol.type !== 'string' ? (sizeCol.values as Float64Array) : undefined, valid),

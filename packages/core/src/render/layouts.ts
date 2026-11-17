@@ -24,19 +24,22 @@ export const LAYOUTS: Record<PrimitiveKind, PrimitiveLayout> = {
    * fill:   r, g, b, a
    * stroke: r, g, b, a
    * radii:  top-left, top-right, bottom-right, bottom-left (px, screen space)
-   * params: strokeWidth (px), gapX (px, total, split on both sides),
-   *         gapY (px; >0 trims the top edge, <0 trims the bottom edge),
-   *         maxWidth (px, 0 = unlimited)
+   * params: strokeWidth (px),
+   *         gap (px, total, across the bar's thickness, split on both sides),
+   *         stackGap (px; >0 trims the data-direction end, <0 the other end),
+   *         maxWidth (px, cap on the thickness, 0 = unlimited)
+   * axis:   0 = thickness along x (vertical bar), 1 = thickness along y (horizontal bar)
    */
   rect: {
     topology: 'instanced-quad',
-    stride: 20,
+    stride: 21,
     attributes: [
       { name: 'rect', size: 4 },
       { name: 'fill', size: 4 },
       { name: 'stroke', size: 4 },
       { name: 'radii', size: 4 },
       { name: 'params', size: 4 },
+      { name: 'axis', size: 1 },
     ],
   },
   /**

@@ -8,7 +8,7 @@ export default defineConfig({
   },
   build: {
     target: 'es2022',
-    rollupOptions: { input: { main: 'index.html', wrappers: 'wrappers.html' } },
+    rollupOptions: { input: { main: 'index.html', wrappers: 'wrappers.html', maps: 'maps.html', gallery: 'gallery.html' } },
   },
   esbuild: { target: 'es2022' },
 });

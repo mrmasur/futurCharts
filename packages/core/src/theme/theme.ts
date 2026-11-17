@@ -63,6 +63,8 @@ export interface Theme {
       opacity: number;
       strokeWidth: number;
       stroke: string;
+      /** Value label at the end of each bar (inside each segment when stacked). */
+      labels: boolean;
     };
     point: {
       size: number;
@@ -74,6 +76,25 @@ export interface Theme {
       stroke: string;
       /** Size range in px when `size` is bound to a field. */
       sizeRange: [number, number];
+    };
+    rule: { width: number; opacity: number };
+    /** `length`: share of the category slot; `maxWidth`: cap in px (0 = none), to match a capped bar. */
+    tick: { width: number; length: number; maxWidth: number; opacity: number };
+    heatmap: { radius: number; labels: boolean; gap: number };
+    /** Pie and donut. `gap`: px separator between slices; `innerRadius`: share of the radius (donut). */
+    arc: { innerRadius: number; gap: number; labels: boolean; center: boolean };
+    treemap: { gap: number; radius: number; labels: boolean; header: number };
+    funnel: { gap: number; radius: number; labels: boolean; connector: number };
+    /** `thickness`: share of the radius. `track`: empty part of the arc (`auto` follows the grid color). */
+    gauge: { min: number; max: number; thickness: number; track: string; target: number };
+    radar: { levels: number; fillOpacity: number; width: number; points: boolean };
+    /** Map shapes (basemap, choropleth). */
+    geoshape: {
+      fill: string;
+      /** Fill of a shape with no matching data in a choropleth. */
+      missing: string;
+      stroke: string;
+      strokeWidth: number;
     };
     area: {
       opacity: number;
@@ -97,6 +118,14 @@ export interface Theme {
   };
   crosshair: LineStyle;
   hover: { markerSize: number; bandFill: string };
+  selection: {
+    /** Outline and fill of the lasso while it is drawn. */
+    stroke: string;
+    fill: string;
+    width: number;
+    /** Opacity of the marks left out of the selection. */
+    dimOpacity: number;
+  };
 }
 
 const SANS = 'system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -132,9 +161,18 @@ export const lightTheme: Theme = {
   },
   marks: {
     line: { width: 2, curve: 'linear', opacity: 1 },
-    bar: { radius: 4, gap: 2, maxWidth: 28, bandPadding: 0.3, opacity: 1, strokeWidth: 0, stroke: 'transparent' },
+    bar: { radius: 4, gap: 2, maxWidth: 28, bandPadding: 0.3, opacity: 1, strokeWidth: 0, stroke: 'transparent', labels: false },
     point: { size: 8, shape: 'circle', opacity: 1, strokeWidth: 2, stroke: 'surface', sizeRange: [4, 28] },
     area: { opacity: 0.12, stackedOpacity: 0.8, gradient: false, line: true, lineWidth: 2, curve: 'linear' },
+    geoshape: { fill: '#e9e8e2', missing: '#e9e8e2', stroke: '#fcfcfb', strokeWidth: 0.75 },
+    rule: { width: 1.5, opacity: 1 },
+    tick: { width: 2, length: 0.6, maxWidth: 0, opacity: 1 },
+    heatmap: { radius: 3, labels: true, gap: 2 },
+    arc: { innerRadius: 0, gap: 2, labels: true, center: true },
+    treemap: { gap: 2, radius: 4, labels: true, header: 22 },
+    funnel: { gap: 6, radius: 4, labels: true, connector: 0.14 },
+    gauge: { min: 0, max: 100, thickness: 0.24, track: 'auto', target: NaN },
+    radar: { levels: 4, fillOpacity: 0.14, width: 2, points: true },
   },
   tooltip: {
     background: '#ffffff',
@@ -148,6 +186,7 @@ export const lightTheme: Theme = {
   },
   crosshair: { visible: true, color: '#898781', width: 1 },
   hover: { markerSize: 9, bandFill: 'rgba(11,11,11,0.05)' },
+  selection: { stroke: '#0b0b0b', fill: 'rgba(11,11,11,0.06)', width: 1.5, dimOpacity: 0.18 },
 };
 
 export const darkTheme: Theme = deepMerge(lightTheme, {
@@ -175,6 +214,8 @@ export const darkTheme: Theme = deepMerge(lightTheme, {
     shadow: '0 4px 16px rgba(0,0,0,0.45)',
   },
   hover: { bandFill: 'rgba(255,255,255,0.06)' },
+  marks: { geoshape: { fill: '#2c2c2a', missing: '#2c2c2a', stroke: '#1a1a19' } },
+  selection: { stroke: '#f0efec', fill: 'rgba(255,255,255,0.08)' },
 });
 
 const registry = new Map<string, Theme>([
