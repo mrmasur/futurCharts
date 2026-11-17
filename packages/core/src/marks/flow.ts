@@ -127,6 +127,37 @@ function model(layer: LayerSpec, style: { direction?: string; rankGap?: number; 
   return m;
 }
 
+/** Samples of one cubic Bézier. */
+function bezier(p0: [number, number], c1: [number, number], c2: [number, number], p1: [number, number], steps = 28): [number, number][] {
+  const out: [number, number][] = [];
+  for (let k = 0; k <= steps; k++) {
+    const t = k / steps;
+    const u = 1 - t;
+    out.push([
+      u * u * u * p0[0] + 3 * u * u * t * c1[0] + 3 * u * t * t * c2[0] + t * t * t * p1[0],
+      u * u * u * p0[1] + 3 * u * u * t * c1[1] + 3 * u * t * t * c2[1] + t * t * t * p1[1],
+    ]);
+  }
+  return out;
+}
+
+/** A rounded path through `points`: each corner is a short curve, straight runs stay straight. */
+function smooth(points: [number, number][], TB: boolean): [number, number][] {
+  const out: [number, number][] = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    const seg = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const t = Math.min(30, seg / 2);
+    // First and last legs follow the flow; the middle ones follow their own direction.
+    const dirA: [number, number] = i === 0 ? (TB ? [0, 1] : [1, 0]) : [(b[0] - a[0]) / seg, (b[1] - a[1]) / seg];
+    const dirB: [number, number] = i === points.length - 2 ? (TB ? [0, 1] : [1, 0]) : [(b[0] - a[0]) / seg, (b[1] - a[1]) / seg];
+    const part = bezier(a, [a[0] + dirA[0] * t, a[1] + dirA[1] * t], [b[0] - dirB[0] * t, b[1] - dirB[1] * t], b, 16);
+    out.push(...(i === 0 ? part : part.slice(1)));
+  }
+  return out;
+}
+
 /** Sample a path through `points` with tangents along the flow, so arrows leave and enter boxes straight. */
 function sampleEdge(points: [number, number][], TB: boolean): [number, number][] {
   const out: [number, number][] = [points[0]];
@@ -388,7 +419,6 @@ function buildPipeline(ctx: BuildContext, layer: LayerSpec, m: Model): ReturnTyp
     const o = moved[id];
     return o ? { ...p, x: o.x, y: o.y } : p;
   };
-  const manual = () => m.manual || Object.keys(moved).length > 0;
 
   // Colors flow downstream: each source takes the next palette color, steps inherit
   // from what feeds them, joins and unions start a new color. Groups win when given.
@@ -460,12 +490,34 @@ function buildPipeline(ctx: BuildContext, layer: LayerSpec, m: Model): ReturnTyp
       }
       return pts;
     }
-    if (manual()) {
-      if (TB) return sampleEdge([[a.x, a.y + 16], [b.x, b.y - 16]], true);
-      if (b.x - b.half > a.x + a.half) return sampleEdge([[a.x + a.half + 5, a.y], [b.x - b.half - 5, b.y]], false);
-      // Going back: out on the right, under both, in on the left.
-      const below = Math.max(at(e.from).y + at(e.from).h / 2, at(e.to).y + at(e.to).h / 2) + 10;
-      return sampleEdge([[a.x + a.half + 5, a.y], [a.x + a.half + 26, below], [b.x - b.half - 26, below], [b.x - b.half - 5, b.y]], false);
+    // Links touching a hand-placed step are redrawn; the others keep their automatic route.
+    if (m.manual || moved[e.from] || moved[e.to]) {
+      const [x0, y0] = TB ? [a.x, a.y + 16] : [a.x + a.half + 5, a.y];
+      const [x1, y1] = TB ? [b.x, b.y - 16] : [b.x - b.half - 5, b.y];
+      const along = TB ? y1 - y0 : x1 - x0;
+      const across = TB ? x1 - x0 : y1 - y0;
+      if (along < 44) {
+        const pa = at(e.from);
+        const pb = at(e.to);
+        if (Math.abs(across) > 44) {
+          // Not enough room ahead but rows apart: a rounded Z between the two rows.
+          const mid = TB ? (x0 + x1) / 2 : (y0 + y1) / 2;
+          return TB
+            ? smooth([[x0, y0], [mid, y0 + 22], [mid, y1 - 22], [x1, y1]], TB)
+            : smooth([[x0, y0], [x0 + 22, mid], [x1 - 22, mid], [x1, y1]], TB);
+        }
+        // Same row, going back: around under (or beside) both steps.
+        if (TB) {
+          const side = Math.max(pa.x + pa.w / 2, pb.x + pb.w / 2) + 14;
+          return smooth([[x0, y0], [side, y0 + 24], [side, y1 - 24], [x1, y1]], TB);
+        }
+        const below = Math.max(pa.y + pa.h / 2, pb.y + pb.h / 2) + 10;
+        return smooth([[x0, y0], [x0 + 26, below], [x1 - 26, below], [x1, y1]], TB);
+      }
+      // Leave and enter along the flow, with handles never shorter than 36 px:
+      // a step placed right under another still gets a soft curve, not a straight drop.
+      const t = Math.max(36, Math.abs(along) / 2, Math.abs(across) * 0.35);
+      return bezier([x0, y0], TB ? [x0, y0 + t] : [x0 + t, y0], TB ? [x1, y1 - t] : [x1 - t, y1], [x1, y1]);
     }
     let p = placed.points.map(([x, y]) => (TB ? [x, y] : [x, y + shift]) as [number, number]);
     if (placed.back && !TB) p = p.map(([x, y], k) => (k === 0 || k === p.length - 1 ? [x, y] : [x, y + PIPE_H * 0.55]) as [number, number]);
@@ -502,7 +554,8 @@ function buildPipeline(ctx: BuildContext, layer: LayerSpec, m: Model): ReturnTyp
         run += seg;
       }
       // Only links that run backwards need an arrowhead: everything else reads left to right.
-      const backwards = placed.self || (manual() ? glyph(e.to).x <= glyph(e.from).x : placed.back);
+      const handPlaced = m.manual || !!moved[e.from] || !!moved[e.to];
+      const backwards = placed.self || (handPlaced ? (TB ? glyph(e.to).y <= glyph(e.from).y : glyph(e.to).x <= glyph(e.from).x) : placed.back);
       if (backwards) {
         const end = pts[pts.length - 1];
         const prev = pts[Math.max(0, pts.length - 3)];

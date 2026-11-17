@@ -47,7 +47,8 @@ export const kpi: MarkDefinition = {
 
     const draws = [];
     const n = series.length;
-    const top = 0.42;
+    // The sparkline keeps to the bottom third; the figures sit above it.
+    const top = 0.3;
     const bottom = 0.02;
     let pts: [number, number][] = [];
     if (style.sparkline && n > 1) {

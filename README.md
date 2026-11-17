@@ -46,7 +46,14 @@ sémantique dbt.
 
 ## Types de graphiques
 
-Démo complète : `apps/demo/gallery.html` (`http://localhost:5273/gallery.html`).
+Démo : `http://localhost:5273/gallery.html`, une application de tableau de bord.
+
+- **Tableaux de bord** : Ventes (indicateurs, tendance, canaux, carte, catégories, tunnel, saisonnalité, avec
+  filtres de période et filtres croisés : un clic sur une part, une bulle ou une barre filtre tout le reste),
+  Opérations (parcours des tickets, délais, calendrier), Données (pipeline déplaçable, Sankey).
+- **Bibliothèque** : tous les types de graphiques, rangés par famille.
+- Menu ⋯ de chaque carte : voir la spec JSON, exporter en PNG, réinitialiser la vue. Palette et thème dans
+  l'en-tête, retenus d'une visite à l'autre.
 
 | Famille | Marques et options |
 |---|---|
