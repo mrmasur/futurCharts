@@ -68,6 +68,8 @@ export interface MarkLabel {
   box?: [number, number, number, number];
   /** Drawn instead when this label does not fit its box (e.g. outside a bar that is too short). */
   fallback?: MarkLabel;
+  /** Spread apart from other `avoid` labels at the same x, with a leader line when moved (line ends). */
+  avoid?: boolean;
 }
 
 /** What a standalone mark tells the chart about its own coordinate system. */
@@ -138,8 +140,8 @@ export interface MarkDefinition {
   themeKey?: string;
   /** Standalone marks: the scales (and axes) the chart should use. */
   scales?(input: { layer: LayerSpec; table: Table; fields: Record<string, FieldSpec> }): MarkScales;
-  /** The layout depends on the chart size (treemap): rebuild on resize. */
-  sizeDependent?: boolean;
+  /** The layout depends on the chart size (treemap): rebuild on resize. A function decides per layer. */
+  sizeDependent?: boolean | ((layer: LayerSpec) => boolean);
   /** Legend and hover symbol. */
   symbol?: 'line' | 'circle' | 'square';
   build(ctx: BuildContext): BuiltMark;

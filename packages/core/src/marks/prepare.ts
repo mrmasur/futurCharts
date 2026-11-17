@@ -27,6 +27,8 @@ export interface LayerData {
   stacked: boolean;
   /** Values come with an explicit start (`y2` / `x2`): ranges, not bars from zero. */
   ranged: boolean;
+  /** How stacks are offset. */
+  stackMode: 'zero' | 'normalize' | 'center';
   /** `series`: one color per series. `continuous`: color from a numeric field. */
   colorMode: 'series' | 'continuous';
   colorExtent: [number, number];
@@ -58,7 +60,7 @@ function extent(values: Float64Array | undefined, rows: number[]): [number, numb
 
 /** Layer data of a standalone mark: no series, just the layer and its table. */
 export function standaloneLayer(layer: LayerSpec, index: number, table: Table): LayerData {
-  return { layer, index, table, series: [], stacked: false, ranged: false, colorMode: 'series', colorExtent: [0, 1], sizeExtent: [0, 1] };
+  return { layer, index, table, series: [], stacked: false, ranged: false, stackMode: 'zero', colorMode: 'series', colorExtent: [0, 1], sizeExtent: [0, 1] };
 }
 
 export function prepareLayer(layer: LayerSpec, index: number, table: Table, ctx: PrepareContext): LayerData {
@@ -154,6 +156,27 @@ export function prepareLayer(layer: LayerSpec, index: number, table: Table, ctx:
     series.push(s);
   }
 
+  // Normalized and centered stacks: rescale or shift each stack once all series are in.
+  const stackMode = layer.stack === 'normalize' || layer.stack === 'center' ? layer.stack : 'zero';
+  if (stacked && stackMode !== 'zero') {
+    for (const s of series) {
+      if (s.hidden) continue;
+      for (let j = 0; j < s.x.length; j++) {
+        const a = acc.get(s.x[j])!;
+        const total = a.pos - a.neg;
+        if (stackMode === 'normalize') {
+          const k = total > 0 ? 1 / total : 0;
+          // Negative parts are stacked under the positive ones, all within [0, 1].
+          s.y0[j] = (s.y0[j] - a.neg) * k;
+          s.y1[j] = (s.y1[j] - a.neg) * k;
+        } else {
+          s.y0[j] -= (a.pos + a.neg) / 2;
+          s.y1[j] -= (a.pos + a.neg) / 2;
+        }
+      }
+    }
+  }
+
   return {
     layer,
     index,
@@ -161,6 +184,7 @@ export function prepareLayer(layer: LayerSpec, index: number, table: Table, ctx:
     series,
     stacked,
     ranged,
+    stackMode,
     colorMode: continuous ? 'continuous' : 'series',
     colorExtent: extent(continuous ? (colorCol!.values as Float64Array) : undefined, valid),
     sizeExtent: extent(sizeCol && sizeCol.type !== 'string' ? (sizeCol.values as Float64Array) : undefined, valid),

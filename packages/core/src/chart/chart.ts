@@ -8,8 +8,8 @@ import { createRenderer, type RendererChoice } from '../render';
 import { LAYOUTS } from '../render/layouts';
 import type { Batch, ClipRect, DrawCall, Renderer, RGBA, ViewTransform } from '../render/types';
 import { BandScale, LinearScale, LogScale, MercatorScale, TimeScale, niceDomain, type Scale, type Tick } from '../scale/scales';
-import type { AxisSpec, ChartSpec, ProjectionSpec, ScaleSpec } from '../spec/types';
-import { resolveTheme, type Theme } from '../theme/theme';
+import type { AxisSpec, ChartSpec, LayerSpec, ProjectionSpec, ScaleSpec, StyleOverride } from '../spec/types';
+import { resolveTheme, resolveThemeColors, type Theme } from '../theme/theme';
 import { parseColor, sampleRamp, toCss } from '../util/color';
 import { numberFormatter } from '../util/format';
 import { deepMerge } from '../util/merge';
@@ -105,6 +105,33 @@ interface Layout {
 }
 
 const font = (weight: number | string, size: number, family: string) => `${weight} ${size}px ${family}`;
+
+const sizeDependent = (b: Built) =>
+  typeof b.def.sizeDependent === 'function' ? b.def.sizeDependent(b.data.layer) : !!b.def.sizeDependent;
+
+/** Compile `layer.overrides` into a per-row style lookup. */
+function compileOverrides(layer: LayerSpec, table: Table): ((row: number) => StyleOverride['style'] | undefined) | undefined {
+  if (!layer.overrides?.length) return undefined;
+  const rules = layer.overrides.map((o) => {
+    const conds = (Array.isArray(o.when) ? o.when : [o.when]).map((p) => {
+      const values = table.column(p.field).values;
+      const set = p.in ? new Set(p.in.map(String)) : undefined;
+      return (row: number) => {
+        const v = values[row];
+        if (p.equals !== undefined && String(v) !== String(p.equals)) return false;
+        if (set && !set.has(String(v))) return false;
+        const n = typeof v === 'number' ? v : Number(v);
+        if (p.gt !== undefined && !(n > p.gt)) return false;
+        if (p.gte !== undefined && !(n >= p.gte)) return false;
+        if (p.lt !== undefined && !(n < p.lt)) return false;
+        if (p.lte !== undefined && !(n <= p.lte)) return false;
+        return true;
+      };
+    });
+    return { test: (row: number) => conds.every((c) => c(row)), style: o.style };
+  });
+  return (row) => rules.find((r) => r.test(row))?.style;
+}
 
 export class Chart {
   private root!: HTMLDivElement;
@@ -264,7 +291,7 @@ export class Chart {
   resize(): void {
     if (this.destroyed) return;
     this.measure();
-    if (this.built.some((b) => b.def.sizeDependent)) {
+    if (this.built.some((b) => sizeDependent(b))) {
       this.layout = undefined;
       this.compile();
     }
@@ -309,7 +336,13 @@ export class Chart {
     this.disposeMarks();
     this.picked = [];
     this.shape = undefined;
-    const { spec, theme } = this;
+    const { theme } = this;
+    // Theme color tokens ($ink, $grid, $1…) resolve against the current theme.
+    const spec: ChartSpec = {
+      ...this.spec,
+      layers: this.spec.layers.map((l) => ({ ...l, style: resolveThemeColors(theme, l.style), overrides: resolveThemeColors(theme, l.overrides) })),
+      scales: this.spec.scales && { ...this.spec.scales, color: resolveThemeColors(theme, this.spec.scales.color) },
+    };
     const fields = spec.fields ?? {};
     const types = Object.fromEntries(Object.entries(fields).map(([k, f]) => [k, f.type]));
     const base = spec.data ? Table.from(spec.data, types) : undefined;
@@ -410,14 +443,16 @@ export class Chart {
         // A range (y2) has its own start: it does not pull zero into the domain.
         baseline ||= !!def.baseline && !data.ranged;
         banded ||= !!def.banded;
+        // Only marks drawn from a start (bars, areas, stacks, ranges) span y0: a line or a point is just y1.
+        const spans = data.stacked || data.ranged || !!def.baseline;
         for (const s of data.series) {
           if (s.hidden) continue;
           for (let i = 0; i < s.x.length; i++) {
             const x = s.x[i];
             if (x < c0) c0 = x;
             if (x > c1) c1 = x;
-            const lo = Math.min(s.y0[i], s.y1[i]);
-            const hi = Math.max(s.y0[i], s.y1[i]);
+            const lo = spans ? Math.min(s.y0[i], s.y1[i]) : s.y1[i];
+            const hi = spans ? Math.max(s.y0[i], s.y1[i]) : s.y1[i];
             if (lo < v0) v0 = lo;
             if (hi > v1) v1 = hi;
             if (def.banded && i > 0 && x - s.x[i - 1] > 0) step = Math.min(step, x - s.x[i - 1]);
@@ -431,7 +466,8 @@ export class Chart {
       let cat: Scale;
       if (catType === 'band') {
         const pad = theme.marks.bar.bandPadding;
-        cat = new BandScale([...categories.keys()], pad, pad / 2, horizontal);
+        // Horizontal charts list categories top-down; `reverse` flips either way.
+        cat = new BandScale([...categories.keys()], pad, pad / 2, horizontal !== !!catSpec.reverse);
       } else {
         if (banded) {
           c0 -= step / 2;
@@ -443,13 +479,16 @@ export class Chart {
         c0 = catSpec.domain?.[0] ?? c0;
         c1 = catSpec.domain?.[1] ?? c1;
         const fmt = fields[catField ?? '']?.format;
+        if (catSpec.reverse) [c0, c1] = [c1, c0];
         cat = catType === 'time' ? new TimeScale(c0, c1) : catType === 'log' ? new LogScale(c0, c1, fmt) : new LinearScale(c0, c1, fmt);
         xStep = Math.abs(cat.norm(c0 + step) - cat.norm(c0));
       }
 
       const valCol = valField ? tableOf(refIndex).column(valField) : undefined;
       const valType = valSpec.type ?? (valCol?.type === 'time' ? 'time' : 'linear');
-      const valFormat = valAxis?.format ?? fields[valField ?? '']?.format;
+      const normalized = layers.some(({ data }) => data.stacked && data.stackMode === 'normalize');
+      // A 100 % stack reads in percent, whatever the unit of the values.
+      const valFormat = valAxis?.format ?? (normalized ? { style: 'percent' as const } : fields[valField ?? '']?.format);
       let val: Scale;
       if (valType === 'time') {
         val = new TimeScale(valSpec.domain?.[0] ?? v0, valSpec.domain?.[1] ?? v1);
@@ -464,8 +503,11 @@ export class Chart {
           if (v1 > 0) v1 += pad;
           if (v0 < 0) v0 -= pad;
         }
-        if (valSpec.nice ?? true) [v0, v1] = niceDomain(v0, v1, 5);
-        val = new LinearScale(valSpec.domain?.[0] ?? v0, valSpec.domain?.[1] ?? v1, valFormat);
+        if ((valSpec.nice ?? true) && !normalized) [v0, v1] = niceDomain(v0, v1, 5);
+        if (normalized && !valSpec.domain) [v0, v1] = [0, 1];
+        const d0 = valSpec.domain?.[0] ?? v0;
+        const d1 = valSpec.domain?.[1] ?? v1;
+        val = valSpec.reverse ? new LinearScale(d1, d0, valFormat) : new LinearScale(d0, d1, valFormat);
       }
       this.cat = cat;
       this.val = val;
@@ -488,6 +530,11 @@ export class Chart {
         const enc = data.layer.encode;
         const layerValue = def.standalone ? (enc.value ?? enc.color ?? enc.y) : horizontal ? enc.x : enc.y;
         const axisFormat = def.standalone ? undefined : valAxis?.format;
+        const override = compileOverrides(data.layer, data.table);
+        const baseColor = (s: SeriesData, i: number): RGBA =>
+          s.colorValue && !data.layer.style?.color
+            ? sampleRamp(ramp, k1 > k0 ? (s.colorValue[i] - k0) / (k1 - k0) : 0.5)
+            : seriesColor(data, s);
         const ctx: BuildContext = {
           renderer: this.renderer,
           data,
@@ -505,10 +552,12 @@ export class Chart {
           categorical,
           format: (v, field = layerValue) => numberFormatter(fields[field ?? '']?.format ?? axisFormat)(v),
           ramp: (t) => sampleRamp(ramp, t),
-          color: (s, i) =>
-            s.colorValue && !data.layer.style?.color
-              ? sampleRamp(ramp, k1 > k0 ? (s.colorValue[i] - k0) / (k1 - k0) : 0.5)
-              : seriesColor(data, s),
+          color: (s, i) => {
+            const o = override?.(s.rows[i]);
+            if (!o) return baseColor(s, i);
+            const c = o.color ? parseColor(o.color) : baseColor(s, i);
+            return o.opacity !== undefined ? [c[0], c[1], c[2], c[3] * o.opacity] : c;
+          },
           // Area-proportional sizing: the eye reads surface, not diameter.
           size: (s, i) =>
             s.sizeValue ? r0 + (r1 - r0) * Math.sqrt(s1 > s0 ? Math.max(0, (s.sizeValue[i] - s0) / (s1 - s0)) : 0.5) : (style.size ?? 8),
@@ -531,7 +580,7 @@ export class Chart {
     }
     this.legend = [...slots.keys()].map((k) => entries.get(k)!).filter(Boolean);
 
-    if (this.built.some((b) => b.def.sizeDependent)) {
+    if (this.built.some((b) => sizeDependent(b))) {
       const view = (this.layout = this.computeLayout()).view;
       if (Math.abs(view.width - guess.width) > 0.5 || Math.abs(view.height - guess.height) > 0.5) {
         this.disposeMarks();
@@ -627,7 +676,14 @@ export class Chart {
       left += Math.ceil(w) + lab.padding;
     }
     if (yAxis?.title) left += ttl.size + ttl.padding;
-    const plotW = Math.max(10, this.width - left - pad - 4);
+    // Room on the right for direct labels at the end of lines.
+    let endRoom = 0;
+    for (const b of this.built) {
+      if (!b.data.layer.style?.endLabels) continue;
+      ctx.font = font(500, 11, ff);
+      for (const s of b.data.series) if (!s.hidden) endRoom = Math.max(endRoom, ctx.measureText(s.key).width + 14);
+    }
+    const plotW = Math.max(10, this.width - left - pad - 4 - endRoom);
     const plot = { x: left, y: top, width: plotW, height: plotH };
 
     const vx0 = -zoom.tx / zoom.kx;
@@ -642,13 +698,16 @@ export class Chart {
       const h = w / this.aspect;
       view = { x: left + (plotW - w) / 2, y: top + (plotH - h) / 2, width: w, height: h };
     }
+    // Axes must hug a letterboxed view (calendar), not the empty plot around it.
+    const shown = this.aspect && (this.axis('x') || this.axis('y'));
+    const plotOut = shown ? view : plot;
     const transform: ViewTransform = {
       sx: zoom.kx * view.width,
       ox: view.x + zoom.tx * view.width,
       sy: -zoom.ky * view.height,
       oy: view.y + view.height - zoom.ty * view.height,
     };
-    return { plot, view, titleY, legendY, xTicks, yTicks, transform };
+    return { plot: plotOut, view, titleY, legendY, xTicks, yTicks, transform };
   }
 
   // ------------------------------------------------------------------- render
@@ -796,6 +855,8 @@ export class Chart {
         ctx.textBaseline = 'top';
         let lastRight = -Infinity;
         for (const t of L.xTicks) {
+          // Empty labels (calendar weeks between months) take no room.
+          if (!t.label) continue;
           const x = T.ox + t.t * T.sx;
           if (x < plot.x - 1 || x > plot.x + plot.width + 1) continue;
           const w = ctx.measureText(t.label).width;
@@ -861,9 +922,56 @@ export class Chart {
 
   /** Labels the marks asked for. A label with a box is drawn only if it fits inside it. */
   private drawLabels(L: Layout): void {
-    const { ctx } = this;
+    const { ctx, theme } = this;
+    const T = L.transform;
     ctx.save();
-    for (const b of this.built) for (const l of b.mark.labels ?? []) this.drawLabel(l, L);
+    const avoid: { l: MarkLabel; ax: number; ay: number; y: number }[] = [];
+    for (const b of this.built) {
+      for (const l of b.mark.labels ?? []) {
+        if (!l.avoid) {
+          this.drawLabel(l, L);
+          continue;
+        }
+        const ax = T.ox + l.tx * T.sx;
+        const ay = T.oy + l.ty * T.sy;
+        avoid.push({ l, ax, ay, y: ay + (l.dy ?? 0) });
+      }
+    }
+    // Labels that must not overlap (line ends): spread them apart vertically,
+    // and tie a moved label to its anchor with a leader line.
+    if (avoid.length) {
+      const columns = new Map<number, typeof avoid>();
+      for (const a of avoid) {
+        const key = Math.round(a.ax / 4);
+        let c = columns.get(key);
+        if (!c) columns.set(key, (c = []));
+        c.push(a);
+      }
+      for (const c of columns.values()) {
+        c.sort((p, q) => p.y - q.y);
+        for (let i = 1; i < c.length; i++) {
+          const min = c[i - 1].y + (c[i - 1].l.size ?? 11) + 3;
+          if (c[i].y < min) c[i].y = min;
+        }
+        const bottom = L.plot.y + L.plot.height + 6;
+        for (let i = c.length - 1; i >= 0; i--) {
+          const over = c[i].y - (i === c.length - 1 ? bottom : c[i + 1].y - (c[i].l.size ?? 11) - 3);
+          if (over > 0) c[i].y -= over;
+        }
+        for (const a of c) {
+          const dx = a.l.dx ?? 0;
+          if (Math.abs(a.y - a.ay) > 2) {
+            ctx.strokeStyle = theme.text.muted;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(a.ax + 4, a.ay);
+            ctx.lineTo(a.ax + dx - 3, a.y);
+            ctx.stroke();
+          }
+          this.drawLabel({ ...a.l, avoid: false, dy: a.y - a.ay }, L);
+        }
+      }
+    }
     ctx.restore();
   }
 

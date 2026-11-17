@@ -60,8 +60,13 @@ export interface Encoding {
   y2?: string;
   /** Item identity: shape join key (maps), slice (pie), tile (treemap), stage (funnel), axis (radar). */
   key?: string;
-  /** Measure of marks that are not positioned on x / y: pie, treemap, funnel, gauge, radar. */
+  /** Measure of marks that are not positioned on x / y: pie, treemap, funnel, gauge, radar, sankey, sunburst. */
   value?: string;
+  /** Flow start and end (sankey). */
+  source?: string;
+  target?: string;
+  /** Hierarchy, from the outermost level to the innermost (sunburst). */
+  path?: string[];
   /** Field name: a string field splits into series, a numeric field maps to the sequential ramp. */
   color?: string;
   /** Field name (point marks): numeric field mapped to the size range. */
@@ -79,12 +84,20 @@ export interface LayerSpec {
   /** Where a shape's join key and name live, e.g. `properties.iso_a3`. Default: `properties.name`, then `id`. */
   geoKey?: string;
   encode: Encoding;
-  /** Stack series on top of each other (bar, area). */
-  stack?: boolean;
+  /**
+   * Stack series on top of each other (bar, area). `normalize`: each stack
+   * fills 100 %. `center`: stacks centered on zero (streamgraph).
+   */
+  stack?: boolean | 'normalize' | 'center';
   /** Reshape the layer's data before drawing (bin, aggregate, boxplot, waterfall, sort, regression). */
   transform?: TransformSpec[];
   /** Overrides `theme.marks[mark]` for this layer, plus `color` for a fixed color. */
   style?: MarkStyle;
+  /**
+   * Restyle some marks only: the first matching rule wins.
+   * `{ when: { field: 'country', in: ['France', 'Italie'] }, style: { color: '#e34948' } }`
+   */
+  overrides?: StyleOverride[];
 }
 
 export type MarkStyle = { color?: string } & DeepPartial<
@@ -100,8 +113,30 @@ export type MarkStyle = { color?: string } & DeepPartial<
     Theme['marks']['treemap'] &
     Theme['marks']['funnel'] &
     Theme['marks']['gauge'] &
-    Theme['marks']['radar']
+    Theme['marks']['radar'] &
+    Theme['marks']['sankey'] &
+    Theme['marks']['sunburst'] &
+    Theme['marks']['calendar'] &
+    Theme['marks']['kpi'] &
+    Theme['marks']['waffle'] &
+    Theme['marks']['rose']
 >;
+
+/** A condition on one field of a row. Several conditions in an array must all hold. */
+export interface Predicate {
+  field: string;
+  equals?: string | number;
+  in?: (string | number)[];
+  gt?: number;
+  gte?: number;
+  lt?: number;
+  lte?: number;
+}
+
+export interface StyleOverride {
+  when: Predicate | Predicate[];
+  style: { color?: string; opacity?: number };
+}
 
 export interface ScaleSpec {
   type?: 'linear' | 'log' | 'time' | 'band';
@@ -111,6 +146,8 @@ export interface ScaleSpec {
   nice?: boolean;
   /** Force the domain to include zero. */
   zero?: boolean;
+  /** Run the axis the other way: rank 1 at the top, first category at the bottom… */
+  reverse?: boolean;
 }
 
 export interface ColorScaleSpec {

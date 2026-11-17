@@ -11,7 +11,7 @@ export { applyTransform, applyTransforms } from './data/transforms';
 export type { TransformSpec, AggregateOp } from './data/transforms';
 export type { DataInput, Column, ColumnType, Row } from './data/table';
 
-export { lightTheme, darkTheme, registerTheme, resolveTheme } from './theme/theme';
+export { lightTheme, darkTheme, registerTheme, resolveTheme, themeColor, resolveThemeColors } from './theme/theme';
 export type { Theme, ThemeSpec } from './theme/theme';
 
 export { registerMark, getMark, hasMark, buildHit, emptyHit } from './marks/registry';
@@ -19,6 +19,8 @@ export type { MarkDefinition, BuildContext, BuiltMark, HitData, MarkDraw, ShapeH
 export { pushRect, pushSegment, pushVertex, luminance } from './marks/primitives';
 export type { RectInstance } from './marks/primitives';
 export { squarify } from './marks/charts';
+export { sankeyLayout } from './marks/flows';
+export { apportion } from './marks/extra';
 export type { LayerData, SeriesData } from './marks/prepare';
 export { curvePoints } from './marks/curve';
 

@@ -60,6 +60,35 @@ Démo complète : `apps/demo/gallery.html` (`http://localhost:5273/gallery.html`
 | Matrices | `heatmap` (deux axes de catégories) |
 | Profils | `radar` |
 | Cartes | `geoshape` (fond de carte, choroplèthe), `point` sur `projection`, sélection au lasso |
+| Flux | `sankey` (`source`, `target`, `value`) |
+| Hiérarchies | `sunburst` (`path`: liste de champs, du niveau extérieur au plus fin), `treemap` |
+| Calendrier | `calendar` (une case par jour, `x`: date) |
+| Indicateurs (suite) | `kpi` (dernière valeur, évolution, sparkline ; `upIsGood`), `waffle` (100 cases) |
+| Polaires | `rose` (rose polaire, aire proportionnelle, séries empilées) |
+| Empilements | `stack: true`, `stack: "normalize"` (100 %), `stack: "center"` (streamgraph) |
+| Compositions | classement (`scales.y.reverse`), pente et étiquettes de fin de ligne (`style.endLabels`), puces (bullet), haltères, chandeliers |
+
+### Épaisseur et couleur des barres
+
+```json
+{
+  "mark": "bar",
+  "encode": { "x": "country", "y": "sales" },
+  "style": { "thickness": 10, "color": "#c3c2b7" },
+  "overrides": [
+    { "when": { "field": "country", "in": ["France", "Italie"] }, "style": { "color": "#2a78d6" } },
+    { "when": { "field": "sales", "lt": 120 }, "style": { "opacity": 0.45 } }
+  ]
+}
+```
+
+Les couleurs d'une spec peuvent suivre le thème : `$ink`, `$ink-2`, `$muted`, `$grid`, `$axis`, `$surface`
+et `$1` à `$8` pour les couleurs catégorielles. Une spec écrite ainsi reste lisible en clair comme en sombre.
+
+`thickness` fixe l'épaisseur en px (jamais plus large que la bande) ; `bandPadding` règle l'espace entre
+catégories. `overrides` s'applique à toute marque cartésienne (barres, points, traits) : la première règle qui
+correspond l'emporte. Conditions : `equals`, `in`, `gt`, `gte`, `lt`, `lte` ; une liste de conditions doit être
+entièrement vraie. Pour colorer une série entière, `scales.color.colors` suffit.
 
 Les transformations (`layer.transform`) restent dans la spec JSON : `bin`, `aggregate`, `boxplot`, `waterfall`,
 `sort`, `regression`. Un intervalle suit la convention `y` = début, `y2` = fin.

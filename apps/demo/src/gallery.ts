@@ -90,7 +90,76 @@ const orders = regions.flatMap((region, k) => Array.from({ length: 40 }, () => (
 
 const euro = { style: 'currency', currency: 'EUR', decimals: 0 } as const;
 
-type Entry = { title: string; caption: string; wide?: boolean; spec: ChartSpec };
+const journeys = [
+  ['Organique', 'Inscription', 5200], ['Organique', 'Abandon', 9100], ['Payant', 'Inscription', 3900], ['Payant', 'Abandon', 6200],
+  ['Email', 'Inscription', 2400], ['Email', 'Abandon', 1300], ['Partenaires', 'Inscription', 1100], ['Partenaires', 'Abandon', 900],
+  ['Inscription', 'Essai', 8300], ['Inscription', 'Inactif', 4300], ['Essai', 'Abonné', 3600], ['Essai', 'Essai expiré', 4700],
+].map(([source, target, users]) => ({ source, target, users }));
+
+const geoSales = [
+  ['Europe', 'France', ['Paris', 'Lyon', 'Lille']], ['Europe', 'Allemagne', ['Berlin', 'Munich']], ['Europe', 'Espagne', ['Madrid', 'Barcelone']],
+  ['Amériques', 'États-Unis', ['New York', 'Chicago', 'Austin']], ['Amériques', 'Brésil', ['São Paulo', 'Rio']], ['Amériques', 'Canada', ['Toronto']],
+  ['Asie', 'Japon', ['Tokyo', 'Osaka']], ['Asie', 'Inde', ['Mumbai', 'Delhi']],
+].flatMap(([region, country, cities]) => (cities as string[]).map((city) => ({ region, country, city, sales: Math.round(40 + r() * 260) })));
+
+const daily: { date: Date; orders: number }[] = [];
+for (let d = new Date(2026, 0, 1); d.getFullYear() === 2026; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) {
+  const weekend = d.getDay() === 0 || d.getDay() === 6;
+  const season = 1 + 0.5 * Math.exp(-((d.getMonth() - 10.6) ** 2) / 1.2);
+  if (r() < 0.02) continue; // a few days without data
+  daily.push({ date: d, orders: Math.round((weekend ? 60 : 140) * season * (0.75 + r() * 0.5)) });
+}
+const kpiDays = Array.from({ length: 30 }, (_, i) => new Date(t0 + i * DAY));
+const kpiRevenue = kpiDays.map((day, i) => ({ day, revenue: Math.round(41000 + i * 380 + Math.sin(i / 2.5) * 2600 + r() * 1500) }));
+const kpiChurn = kpiDays.map((day, i) => ({ day, churn: 2.9 - i * 0.012 + Math.sin(i / 3) * 0.12 + r() * 0.1 + (i === 29 ? 0.35 : 0) }));
+const kpiNps = kpiDays.map((day, i) => ({ day, nps: Math.round(38 + i * 0.25 + Math.sin(i / 4) * 2) }));
+
+const shareBySegment = countries.slice(0, 7).flatMap((country) =>
+  ['Mobile', 'Ordinateur', 'Tablette'].map((device, k) => ({ country, device, sessions: Math.round((k === 0 ? 50 : k === 1 ? 35 : 8) * (0.6 + r() * 0.8)) })),
+);
+const genres = ['Pop', 'Rock', 'Hip-hop', 'Électro', 'Jazz', 'Classique'];
+const streams = Array.from({ length: 36 }, (_, m) => new Date(2023, m, 1)).flatMap((month, m) =>
+  genres.map((genre, g) => ({ month, genre, plays: Math.max(1, 20 + 14 * Math.sin(m / 5 + g * 1.3) + g * 3 + r() * 6) })),
+);
+const teams = ['Lyon', 'Paris', 'Marseille', 'Lille', 'Nantes', 'Rennes'];
+const rankings = Array.from({ length: 8 }, (_, w) => w).flatMap((week) => {
+  const scores = teams.map((team, k) => ({ team, s: Math.sin(week / 2 + k * 1.7) * 3 + k * 0.4 + r() * 1.5 }));
+  return scores.sort((a, b) => b.s - a.s).map((e, rank) => ({ week: `S${week + 1}`, team: e.team, rank: rank + 1 }));
+});
+const slope = ['Recherche', 'Réseaux sociaux', 'Email', 'Affiliation', 'Display'].flatMap((channel, k) => [
+  { year: '2025', channel, roi: [4.2, 2.1, 5.8, 3.1, 1.4][k] },
+  { year: '2026', channel, roi: [3.6, 3.4, 6.1, 2.2, 1.9][k] },
+]);
+const bullets = [
+  { metric: 'Chiffre d’affaires', poor: 60, ok: 85, good: 110, value: 92, target: 100 },
+  { metric: 'Marge', poor: 50, ok: 80, good: 110, value: 74, target: 90 },
+  { metric: 'Nouveaux clients', poor: 40, ok: 75, good: 110, value: 103, target: 95 },
+  { metric: 'Satisfaction', poor: 55, ok: 80, good: 110, value: 86, target: 85 },
+];
+const dumbbell = countries.slice(0, 8).map((country) => {
+  const before = Math.round(30 + r() * 40);
+  return { country, before, after: Math.max(10, Math.round(before + (r() - 0.35) * 30)) };
+});
+const ohlc: { date: Date; open: number; close: number; low: number; high: number; change: number }[] = [];
+{
+  let price = 120;
+  for (let i = 0; i < 45; i++) {
+    const open = price;
+    const close = Math.max(60, open + gauss(r) * 3.2 + 0.25);
+    const high = Math.max(open, close) + r() * 2.5;
+    const low = Math.min(open, close) - r() * 2.5;
+    ohlc.push({ date: new Date(t0 + i * DAY), open, close, low, high, change: close - open });
+    price = close;
+  }
+}
+const budgetShare = [{ poste: 'Salaires', amount: 47 }, { poste: 'Locaux', amount: 14 }, { poste: 'Marketing', amount: 19 }, { poste: 'Logiciels', amount: 11 }, { poste: 'Divers', amount: 9 }];
+const windRose = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'].flatMap((dir, k) =>
+  ['Faible', 'Modéré', 'Fort'].map((speed, j) => ({ dir, speed, hours: Math.round((j === 0 ? 30 : j === 1 ? 18 : 7) * (0.4 + Math.abs(Math.sin(k * 0.9 + 1)) * 1.2) + r() * 6) })),
+);
+
+const quarterly = ['T1', 'T2', 'T3', 'T4'].flatMap((quarter) => ['France', 'Allemagne', 'Espagne'].map((country) => ({ quarter, country, sales: Math.round(80 + r() * 120) })));
+
+type Entry = { title: string; caption: string; wide?: boolean; spec?: ChartSpec; tiles?: ChartSpec[] };
 const entries: Entry[] = [
   {
     title: 'Barres horizontales triées',
@@ -164,7 +233,7 @@ const entries: Entry[] = [
       subtitle: 'En jours · boîte : quartiles · trait : médiane · ◆ : moyenne',
       data: delays,
       fields: { days: { format: { decimals: 1 } } },
-      scales: { color: { colors: { Moustaches: '#a8a7a0', Quartiles: '#2a78d6', Médiane: '#2a78d6', Moyenne: '#2a78d6' } } },
+      scales: { color: { colors: { Moustaches: '$muted', Quartiles: '$1', Médiane: '$1', Moyenne: '$1' } } },
       legend: false,
       layers: [
         { mark: 'rule', name: 'Moustaches', encode: { x: 'team', y: 'lower', y2: 'q1' }, transform: [{ type: 'boxplot', field: 'days', groupby: ['team'] }], style: { width: 1.25 } },
@@ -173,7 +242,7 @@ const entries: Entry[] = [
         { mark: 'tick', name: 'Moustaches', encode: { x: 'team', y: 'upper' }, transform: [{ type: 'boxplot', field: 'days', groupby: ['team'] }], style: { width: 1.25, maxWidth: 8 } },
         {
           mark: 'bar', name: 'Quartiles', encode: { x: 'team', y: 'q1', y2: 'q3' }, transform: [{ type: 'boxplot', field: 'days', groupby: ['team'] }],
-          style: { radius: 3, maxWidth: 20, opacity: 0.16, stroke: '#2a78d6', strokeWidth: 1.5 },
+          style: { radius: 3, maxWidth: 20, opacity: 0.16, stroke: '$1', strokeWidth: 1.5 },
         },
         { mark: 'tick', name: 'Médiane', encode: { x: 'team', y: 'median' }, transform: [{ type: 'boxplot', field: 'days', groupby: ['team'] }], style: { width: 2.5, maxWidth: 20 } },
         { mark: 'point', name: 'Moyenne', encode: { x: 'team', y: 'mean' }, transform: [{ type: 'boxplot', field: 'days', groupby: ['team'] }], style: { size: 6, shape: 'diamond', strokeWidth: 1.5 } },
@@ -330,6 +399,220 @@ const entries: Entry[] = [
       interactions: { tooltip: false },
     },
   },
+  {
+    title: 'Épaisseur et couleur par barre',
+    caption: 'style.thickness: 10 · overrides : France en rouge, ventes < 120 atténuées',
+    spec: {
+      title: 'Ventes trimestrielles',
+      subtitle: 'Barres de 10 px · règles de couleur dans la spec',
+      data: quarterly,
+      fields: { sales: { label: 'Ventes', format: { suffix: ' k€' } } },
+      scales: { color: { colors: { France: '#e34948', Allemagne: '#898781', Espagne: '#b5b4ac' } } },
+      layers: [
+        {
+          mark: 'bar',
+          encode: { x: 'quarter', y: 'sales', color: 'country' },
+          style: { thickness: 10, radius: 3 },
+          overrides: [{ when: { field: 'sales', lt: 120 }, style: { opacity: 0.45 } }],
+        },
+      ],
+    },
+  },
+  {
+    title: 'Barres fines et mise en avant',
+    caption: 'horizontal · thickness: 8 · overrides sur deux pays',
+    spec: {
+      title: 'Chiffre d’affaires par pays',
+      subtitle: 'France et Italie mises en avant',
+      data: revenueByCountry,
+      fields: { revenue: { label: 'CA', format: { suffix: ' k€' } } },
+      layers: [
+        {
+          mark: 'bar',
+          encode: { x: 'revenue', y: 'country' },
+          transform: [{ type: 'sort', field: 'revenue', order: 'desc' }],
+          style: { thickness: 8, radius: 4, labels: true, color: '$axis' },
+          overrides: [{ when: { field: 'country', in: ['France', 'Italie'] }, style: { color: '$1' } }],
+        },
+      ],
+    },
+  },
+  {
+    title: 'Sankey',
+    caption: 'sankey · source → cible · flux en dégradé de couleur',
+    wide: true,
+    spec: {
+      title: 'Parcours des visiteurs',
+      subtitle: 'De la source d’acquisition à l’abonnement',
+      data: journeys,
+      fields: { users: { label: 'Visiteurs' } },
+      layers: [{ mark: 'sankey', encode: { source: 'source', target: 'target', value: 'users' } }],
+    },
+  },
+  {
+    title: 'Sunburst',
+    caption: 'sunburst · path: [région, pays, ville]',
+    spec: {
+      title: 'Ventes par région, pays et ville',
+      data: geoSales,
+      fields: { sales: { label: 'Ventes', format: { suffix: ' k€' } } },
+      layers: [{ mark: 'sunburst', encode: { path: ['region', 'country', 'city'], value: 'sales' } }],
+    },
+  },
+  {
+    title: 'Calendrier',
+    caption: 'calendar · une case par jour, semaines en colonnes',
+    wide: true,
+    spec: {
+      title: 'Commandes par jour en 2026',
+      data: daily,
+      fields: { orders: { label: 'Commandes' } },
+      layers: [{ mark: 'calendar', encode: { x: 'date', value: 'orders' } }],
+    },
+  },
+  {
+    title: 'Tuiles KPI',
+    caption: 'kpi · dernière valeur, évolution vs la précédente, sparkline · upIsGood: false pour l’attrition',
+    wide: true,
+    tiles: [
+      { title: 'Chiffre d’affaires', data: kpiRevenue, fields: { revenue: { label: 'CA', format: euro } }, layers: [{ mark: 'kpi', encode: { x: 'day', value: 'revenue' } }] },
+      { title: 'Taux d’attrition', data: kpiChurn, fields: { churn: { label: 'Attrition', format: { decimals: 2, suffix: ' %' } } }, layers: [{ mark: 'kpi', encode: { x: 'day', value: 'churn' }, style: { upIsGood: false } }] },
+      { title: 'NPS', data: kpiNps, fields: { nps: { label: 'NPS' } }, layers: [{ mark: 'kpi', encode: { x: 'day', value: 'nps' } }] },
+    ],
+  },
+  {
+    title: 'Barres empilées à 100 %',
+    caption: 'stack: "normalize" · axe en pourcentage · parts dans les segments',
+    spec: {
+      title: 'Sessions par appareil et pays',
+      data: shareBySegment,
+      fields: { sessions: { label: 'Sessions' } },
+      layers: [{ mark: 'bar', encode: { x: 'sessions', y: 'country', color: 'device' }, stack: 'normalize', style: { labels: true } }],
+    },
+  },
+  {
+    title: 'Streamgraph',
+    caption: 'area · stack: "center" · courbe lissée · sans axe des valeurs',
+    wide: true,
+    spec: {
+      title: 'Écoutes par genre',
+      subtitle: '36 mois, en millions d’écoutes',
+      data: streams,
+      fields: { plays: { label: 'Écoutes (M)', format: { decimals: 1 } } },
+      axes: { y: false },
+      layers: [{ mark: 'area', encode: { x: 'month', y: 'plays', color: 'genre' }, stack: 'center', style: { curve: 'smooth', line: false, stackedOpacity: 0.9 } }],
+    },
+  },
+  {
+    title: 'Classement (bump chart)',
+    caption: 'line + point · scales.y.reverse · étiquettes en bout de ligne',
+    spec: {
+      title: 'Classement des équipes',
+      subtitle: 'Par semaine',
+      data: rankings,
+      fields: { rank: { label: 'Rang' } },
+      scales: { y: { reverse: true, zero: false } },
+      legend: false,
+      layers: [
+        { mark: 'line', encode: { x: 'week', y: 'rank', color: 'team' }, style: { width: 2.5, endLabels: true, curve: 'smooth' } },
+        { mark: 'point', encode: { x: 'week', y: 'rank', color: 'team' }, style: { size: 9 } },
+      ],
+    },
+  },
+  {
+    title: 'Graphique de pente',
+    caption: 'line sur deux catégories · étiquettes en bout de ligne',
+    spec: {
+      title: 'Retour sur investissement par canal',
+      subtitle: '2025 → 2026',
+      data: slope,
+      fields: { roi: { label: 'ROI', format: { decimals: 1, suffix: ' ×' } } },
+      legend: false,
+      layers: [
+        { mark: 'line', encode: { x: 'year', y: 'roi', color: 'channel' }, style: { endLabels: true } },
+        { mark: 'point', encode: { x: 'year', y: 'roi', color: 'channel' }, style: { size: 9 } },
+      ],
+    },
+  },
+  {
+    title: 'Graphique à puces (bullet)',
+    caption: 'composition : trois bar de fond, une bar fine (thickness), un tick pour l’objectif',
+    spec: {
+      title: 'Objectifs du trimestre',
+      subtitle: 'En % de l’objectif annuel',
+      data: bullets,
+      fields: { value: { label: 'Réalisé', format: { suffix: ' %' } } },
+      legend: false,
+      layers: [
+        { mark: 'bar', name: 'Bon', encode: { x: 'good', y: 'metric' }, style: { thickness: 22, radius: 2, color: '$grid' } },
+        { mark: 'bar', name: 'Correct', encode: { x: 'ok', y: 'metric' }, style: { thickness: 22, radius: 0, color: '$axis' } },
+        { mark: 'bar', name: 'Faible', encode: { x: 'poor', y: 'metric' }, style: { thickness: 22, radius: 0, color: '$muted' } },
+        { mark: 'bar', name: 'Réalisé', encode: { x: 'value', y: 'metric' }, style: { thickness: 8, radius: 2, color: '$1' } },
+        { mark: 'tick', name: 'Objectif', encode: { x: 'target', y: 'metric' }, style: { width: 2.5, maxWidth: 24, color: '$ink' } },
+      ],
+      interactions: { tooltip: { mode: 'x' } },
+    },
+  },
+  {
+    title: 'Haltères (dumbbell)',
+    caption: 'rule de x à x2 + deux couches de points',
+    spec: {
+      title: 'Délai de livraison avant / après',
+      subtitle: 'En heures',
+      data: dumbbell,
+      fields: { before: { label: 'Avant' }, after: { label: 'Après' } },
+      scales: { color: { colors: { Avant: '$muted', Après: '$1' } }, x: { zero: false } },
+      layers: [
+        { mark: 'rule', name: 'Écart', encode: { x: 'before', x2: 'after', y: 'country' }, style: { width: 3, color: '$grid' } },
+        { mark: 'point', name: 'Avant', encode: { x: 'before', y: 'country' }, style: { size: 11 } },
+        { mark: 'point', name: 'Après', encode: { x: 'after', y: 'country' }, style: { size: 11 } },
+      ],
+    },
+  },
+  {
+    title: 'Chandeliers',
+    caption: 'rule (bas → haut) + bar fine (ouverture → clôture) · couleur par overrides',
+    wide: true,
+    spec: {
+      title: 'Cours de l’action',
+      subtitle: '45 séances',
+      data: ohlc,
+      fields: { open: { label: 'Ouverture → clôture', format: euro }, low: { label: 'Bas → haut', format: euro } },
+      legend: false,
+      layers: [
+        {
+          mark: 'rule', name: 'Bas → haut', encode: { x: 'date', y: 'low', y2: 'high' }, style: { width: 1.25, color: '#e34948' },
+          overrides: [{ when: { field: 'change', gte: 0 }, style: { color: '#1baf7a' } }],
+        },
+        {
+          mark: 'bar', name: 'Ouverture → clôture', encode: { x: 'date', y: 'open', y2: 'close' }, style: { thickness: 7, radius: 1, color: '#e34948' },
+          overrides: [{ when: { field: 'change', gte: 0 }, style: { color: '#1baf7a' } }],
+        },
+      ],
+      interactions: { zoom: { axes: 'x' } },
+    },
+  },
+  {
+    title: 'Gaufre',
+    caption: 'waffle · 100 cases, une par pour-cent',
+    spec: {
+      title: 'Répartition du budget',
+      data: budgetShare,
+      fields: { amount: { label: 'Budget', format: { suffix: ' %' } } },
+      layers: [{ mark: 'waffle', encode: { key: 'poste', value: 'amount' } }],
+    },
+  },
+  {
+    title: 'Rose polaire',
+    caption: 'rose · aire proportionnelle à la valeur · séries empilées vers l’extérieur',
+    spec: {
+      title: 'Rose des vents',
+      subtitle: 'Heures par direction et force',
+      data: windRose,
+      fields: { hours: { label: 'Heures' } },
+      layers: [{ mark: 'rose', encode: { key: 'dir', value: 'hours', color: 'speed' } }],
+    },
+  },
 ];
 
 const grid = document.getElementById('grid')!;
@@ -338,17 +621,22 @@ const charts: { chart: Chart; spec: ChartSpec }[] = [];
 for (const e of entries) {
   const fig = document.createElement('figure');
   if (e.wide) fig.className = 'wide';
-  const box = document.createElement('div');
-  box.className = 'chart';
+  const row = document.createElement('div');
+  row.className = e.tiles ? 'tiles' : '';
   const cap = document.createElement('figcaption');
   cap.textContent = `${e.title} — ${e.caption}`;
-  fig.append(box, cap);
+  fig.append(row, cap);
   grid.appendChild(fig);
-  try {
-    charts.push({ chart: await Chart.create(box, { ...e.spec, theme }), spec: e.spec });
-  } catch (error) {
-    box.textContent = String(error);
-    console.error(e.title, error);
+  for (const spec of e.tiles ?? [e.spec!]) {
+    const box = document.createElement('div');
+    box.className = e.tiles ? 'chart tile' : 'chart';
+    row.appendChild(box);
+    try {
+      charts.push({ chart: await Chart.create(box, { ...spec, theme }), spec });
+    } catch (error) {
+      box.textContent = String(error);
+      console.error(e.title, error);
+    }
   }
 }
 

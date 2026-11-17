@@ -19,6 +19,9 @@
       figure.wide { grid-column: span 2; }
       @media (max-width: 960px) { figure.wide { grid-column: auto; } }
       .chart { height: 340px; }
+      .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+      .tiles .chart { height: 190px; }
+      .tiles .chart + .chart { border-left: 1px solid var(--border); }
       figcaption { padding: 8px 16px 12px; color: var(--ink-2); font-size: 12px; border-top: 1px solid var(--border); }
       figcaption code { font-size: 11px; }
     </style>

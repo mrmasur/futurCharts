@@ -16,7 +16,7 @@ import { emptyHit, type BuildContext, type BuiltMark, type MarkDefinition, type 
 const TAU = Math.PI * 2;
 
 /** Distinct values of a field, in first-seen order (sorted when numeric). */
-function categoriesOf(table: Table, field: string): string[] {
+export function categoriesOf(table: Table, field: string): string[] {
   const c = table.column(field);
   const seen = new Map<string, number>();
   for (let i = 0; i < table.length; i++) {
@@ -27,14 +27,14 @@ function categoriesOf(table: Table, field: string): string[] {
   return c.type === 'string' ? keys : keys.sort((a, b) => seen.get(a)! - seen.get(b)!);
 }
 
-function need(layer: LayerSpec, channel: keyof LayerSpec['encode'], mark: string): string {
+export function need(layer: LayerSpec, channel: Exclude<keyof LayerSpec['encode'], 'path'>, mark: string): string {
   const f = layer.encode[channel];
   if (!f) throw new Error(`futurCharts: mark "${mark}" needs an encode.${String(channel)} field.`);
   return f;
 }
 
 /** Sum `value` per `key` (and per `group`), in first-seen order. */
-function totals(table: Table, key: string, value: string, group?: string): { key: string; group: string; value: number }[] {
+export function totals(table: Table, key: string, value: string, group?: string): { key: string; group: string; value: number }[] {
   const k = table.column(key).values;
   const v = table.column(value).values as Float64Array;
   const g = group ? table.column(group).values : undefined;
@@ -51,7 +51,7 @@ function totals(table: Table, key: string, value: string, group?: string): { key
   return [...out.values()];
 }
 
-function batches(ctx: BuildContext, rects: number[], mesh: number[], lines: number[], pixelSnap = true): BuiltMark['draws'] {
+export function batches(ctx: BuildContext, rects: number[], mesh: number[], lines: number[], pixelSnap = true): BuiltMark['draws'] {
   const draws: BuiltMark['draws'] = [];
   if (mesh.length) {
     const b = ctx.renderer.createBatch('mesh');
@@ -71,7 +71,7 @@ function batches(ctx: BuildContext, rects: number[], mesh: number[], lines: numb
   return draws;
 }
 
-const share = (v: number, total: number) =>
+export const share = (v: number, total: number) =>
   total > 0 ? new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: v / total < 0.1 ? 1 : 0 }).format(v / total) : '–';
 
 // ------------------------------------------------------------------ heatmap

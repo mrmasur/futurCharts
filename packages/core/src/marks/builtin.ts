@@ -3,6 +3,8 @@ import type { RGBA } from '../render/types';
 import { parseColor, withAlpha } from '../util/color';
 import { STANDALONE_MARKS } from './charts';
 import { curvePoints, type Polyline } from './curve';
+import { EXTRA_MARKS } from './extra';
+import { FLOW_MARKS } from './flows';
 import type { SeriesData } from './prepare';
 import { pushRect, pushSegment, pushVertex } from './primitives';
 import { buildHit, hasMark, registerMark, type BuildContext, type MarkDefinition, type MarkLabel } from './registry';
@@ -37,6 +39,7 @@ const line: MarkDefinition = {
   build(ctx) {
     const { style } = ctx;
     const data: number[] = [];
+    const labels: MarkLabel[] = [];
     for (const s of ctx.data.series) {
       if (s.hidden || s.x.length === 0) continue;
       const p = normalized(ctx, s, s.y1);
@@ -48,10 +51,15 @@ const line: MarkDefinition = {
         continue;
       }
       pushPolyline(ctx, data, curvePoints(p.x, p.y, style.curve), color, style.width);
+      if (style.endLabels) {
+        const last = s.x.length - 1;
+        const [lx, ly] = ctx.pos(p.x[last], p.y[last]);
+        labels.push({ tx: lx, ty: ly, text: s.key, align: 'left', baseline: 'middle', dx: 12, color: ctx.theme.text.secondary, avoid: true });
+      }
     }
     const batch = ctx.renderer.createBatch('line');
     batch.update(new Float32Array(data), data.length / LAYOUTS.line.stride);
-    return { draws: [{ batch }], hit: buildHit(ctx) };
+    return { draws: [{ batch }], hit: buildHit(ctx), labels };
   },
 };
 
@@ -102,6 +110,8 @@ const bar: MarkDefinition = {
   baseline: true,
   banded: true,
   symbol: 'square',
+  // An exact thickness on side-by-side bars is converted from px at the current size.
+  sizeDependent: (layer) => !!layer.style?.thickness && !layer.stack,
   build(ctx) {
     const { style, data } = ctx;
     const H = ctx.horizontal;
@@ -109,13 +119,15 @@ const bar: MarkDefinition = {
     // Stacks and ranges (Gantt, waterfall) share the full slot; plain series sit side by side.
     const groups = data.stacked || data.ranged ? 1 : Math.max(1, visible.length);
     const slot = slotWidth(ctx);
-    const sub = slot / groups;
+    let sub = slot / groups;
+    // Side by side, an exact thickness keeps the group packed around the category.
+    if (style.thickness > 0 && groups > 1) sub = Math.min(sub, (style.thickness + style.gap) * ctx.pixel[H ? 1 : 0]);
     const stroke = parseColor(style.stroke);
     const out: number[] = [];
     const labels: MarkLabel[] = [];
     const center = new Map<SeriesData, number>();
     visible.forEach((s, vi) => {
-      const offset = groups === 1 ? 0 : -slot / 2 + sub * (vi + 0.5);
+      const offset = groups === 1 ? 0 : (vi - (groups - 1) / 2) * sub;
       center.set(s, offset);
       const lastInStack = vi === visible.length - 1;
       for (let i = 0; i < s.x.length; i++) {
@@ -140,12 +152,15 @@ const bar: MarkDefinition = {
           // The width cap is dropped for grouped bars: it would pull them apart inside the band.
           gap: groups > 1 || ctx.x.band === 0 ? style.gap : 0,
           stackGap: data.stacked && !lastInStack ? (up ? style.gap : -style.gap) : 0,
-          maxWidth: groups > 1 ? 0 : style.maxWidth,
+          maxWidth: groups > 1 ? 0 : style.thickness > 0 ? style.thickness : style.maxWidth,
           axis: H ? 1 : 0,
         });
         if (!style.labels) continue;
         // A range (start = y, end = y2) is labelled with its signed length: the step of a waterfall.
-        const text = ctx.format(data.ranged ? s.y0[i] - s.y1[i] : s.value[i]);
+        const text =
+          data.stacked && data.stackMode === 'normalize'
+            ? new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 0 }).format(s.y1[i] - s.y0[i])
+            : ctx.format(data.ranged ? s.y0[i] - s.y1[i] : s.value[i]);
         if (data.stacked) {
           // Inside the segment, only when it fits: an interior segment has no free end.
           const [mx, my] = ctx.pos(c, (v0 + v1) / 2);
@@ -257,7 +272,7 @@ const tick: MarkDefinition = {
   },
 };
 
-const builtins: Record<string, MarkDefinition> = { line, area, bar, point, rule, tick, ...STANDALONE_MARKS };
+const builtins: Record<string, MarkDefinition> = { line, area, bar, point, rule, tick, ...STANDALONE_MARKS, ...FLOW_MARKS, ...EXTRA_MARKS };
 
 /**
  * Register the built-in marks. Called when a chart is created rather than at

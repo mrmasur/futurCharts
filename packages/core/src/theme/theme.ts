@@ -50,7 +50,8 @@ export interface Theme {
     hiddenOpacity: number;
   };
   marks: {
-    line: { width: number; curve: 'linear' | 'step' | 'smooth'; opacity: number };
+    /** `endLabels`: the series name at the end of each line (direct labeling). */
+    line: { width: number; curve: 'linear' | 'step' | 'smooth'; opacity: number; endLabels: boolean };
     bar: {
       /** Radius of the data end, px. The baseline end stays square. */
       radius: number;
@@ -65,6 +66,8 @@ export interface Theme {
       stroke: string;
       /** Value label at the end of each bar (inside each segment when stacked). */
       labels: boolean;
+      /** Exact bar thickness in px (0 = from the band). Wins over `maxWidth`; never wider than the band. */
+      thickness: number;
     };
     point: {
       size: number;
@@ -88,6 +91,18 @@ export interface Theme {
     /** `thickness`: share of the radius. `track`: empty part of the arc (`auto` follows the grid color). */
     gauge: { min: number; max: number; thickness: number; track: string; target: number };
     radar: { levels: number; fillOpacity: number; width: number; points: boolean };
+    /** px sizes; `linkOpacity` applies to the flows. */
+    sankey: { nodeWidth: number; nodePadding: number; linkOpacity: number; radius: number; labels: boolean };
+    /** `innerRadius`: share of the radius left empty in the middle; `gap`: px between segments. */
+    sunburst: { innerRadius: number; gap: number; labels: boolean };
+    /** `empty`: color of days without data (`auto` follows the grid). */
+    calendar: { radius: number; gap: number; empty: string };
+    /** Stat tile: last value, change against the previous one, sparkline. */
+    kpi: { upIsGood: boolean; sparkline: boolean; good: string; bad: string; size: number };
+    /** 10 × 10 grid of squares: one per percent. */
+    waffle: { rows: number; columns: number; gap: number; radius: number };
+    /** Polar bars (Nightingale rose): `levels` grid circles, `gap` px between wedges. */
+    rose: { levels: number; gap: number; innerRadius: number; labels: boolean };
     /** Map shapes (basemap, choropleth). */
     geoshape: {
       fill: string;
@@ -160,8 +175,8 @@ export const lightTheme: Theme = {
     hiddenOpacity: 0.35,
   },
   marks: {
-    line: { width: 2, curve: 'linear', opacity: 1 },
-    bar: { radius: 4, gap: 2, maxWidth: 28, bandPadding: 0.3, opacity: 1, strokeWidth: 0, stroke: 'transparent', labels: false },
+    line: { width: 2, curve: 'linear', opacity: 1, endLabels: false },
+    bar: { radius: 4, gap: 2, maxWidth: 28, bandPadding: 0.3, opacity: 1, strokeWidth: 0, stroke: 'transparent', labels: false, thickness: 0 },
     point: { size: 8, shape: 'circle', opacity: 1, strokeWidth: 2, stroke: 'surface', sizeRange: [4, 28] },
     area: { opacity: 0.12, stackedOpacity: 0.8, gradient: false, line: true, lineWidth: 2, curve: 'linear' },
     geoshape: { fill: '#e9e8e2', missing: '#e9e8e2', stroke: '#fcfcfb', strokeWidth: 0.75 },
@@ -173,6 +188,12 @@ export const lightTheme: Theme = {
     funnel: { gap: 6, radius: 4, labels: true, connector: 0.14 },
     gauge: { min: 0, max: 100, thickness: 0.24, track: 'auto', target: NaN },
     radar: { levels: 4, fillOpacity: 0.14, width: 2, points: true },
+    sankey: { nodeWidth: 12, nodePadding: 14, linkOpacity: 0.32, radius: 2, labels: true },
+    sunburst: { innerRadius: 0.32, gap: 1.5, labels: true },
+    calendar: { radius: 2, gap: 2, empty: 'auto' },
+    kpi: { upIsGood: true, sparkline: true, good: '#006300', bad: '#d03b3b', size: 34 },
+    waffle: { rows: 10, columns: 10, gap: 2, radius: 2 },
+    rose: { levels: 3, gap: 2, innerRadius: 0.08, labels: true },
   },
   tooltip: {
     background: '#ffffff',
@@ -214,7 +235,7 @@ export const darkTheme: Theme = deepMerge(lightTheme, {
     shadow: '0 4px 16px rgba(0,0,0,0.45)',
   },
   hover: { bandFill: 'rgba(255,255,255,0.06)' },
-  marks: { geoshape: { fill: '#2c2c2a', missing: '#2c2c2a', stroke: '#1a1a19' } },
+  marks: { geoshape: { fill: '#2c2c2a', missing: '#2c2c2a', stroke: '#1a1a19' }, kpi: { good: '#0ca30c' } },
   selection: { stroke: '#f0efec', fill: 'rgba(255,255,255,0.08)' },
 });
 
@@ -231,6 +252,36 @@ export function registerTheme(name: string, theme: DeepPartial<Theme>, base: str
 }
 
 export type ThemeSpec = string | (DeepPartial<Theme> & { extends?: string });
+
+/**
+ * Colors that follow the theme, usable anywhere a spec takes a color:
+ * `$ink`, `$ink-2`, `$muted`, `$grid`, `$axis`, `$surface`, and `$1`…`$8`
+ * for the categorical slots. A spec written with them reads in light and dark.
+ */
+export function themeColor(theme: Theme, value: string): string {
+  if (!value.startsWith('$')) return value;
+  const slot = /^\$(\d)$/.exec(value);
+  if (slot) return theme.palette.categorical[(Number(slot[1]) - 1) % theme.palette.categorical.length];
+  const tokens: Record<string, string> = {
+    $ink: theme.text.primary,
+    '$ink-2': theme.text.secondary,
+    $muted: theme.text.muted,
+    $grid: theme.grid.y.color,
+    $axis: theme.axis.line.color,
+    $surface: theme.background,
+  };
+  return tokens[value] ?? value;
+}
+
+/** Replace theme tokens in every string of a style-like object. */
+export function resolveThemeColors<T>(theme: Theme, value: T): T {
+  if (typeof value === 'string') return themeColor(theme, value) as T;
+  if (Array.isArray(value)) return value.map((v) => resolveThemeColors(theme, v)) as T;
+  if (value && typeof value === 'object' && !ArrayBuffer.isView(value)) {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, resolveThemeColors(theme, v)])) as T;
+  }
+  return value;
+}
 
 export function resolveTheme(spec: ThemeSpec | undefined): Theme {
   if (spec === undefined) return lightTheme;
