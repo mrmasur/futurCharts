@@ -83,9 +83,10 @@ function cardsForFamily(f: (typeof families)[number]): Card[] {
       subtitle: spec.subtitle,
       span: e.wide ? 12 : 6,
       height: e.tiles ? 'xs' : isFlow ? 'l' : 'm',
-      bare: !!e.tiles,
+      bare: !!e.tiles && !e.stack,
       spec,
       tiles: e.tiles,
+      stack: e.stack,
       note: e.caption,
       showLayout: e.showLayout,
     } satisfies Card;
@@ -102,14 +103,14 @@ async function mountCard(board: HTMLElement, card: Card): Promise<Mounted> {
   board.appendChild(el);
 
   const body = document.createElement('div');
-  body.className = card.tiles ? 'body tiles' : 'body';
+  body.className = card.stack ? 'body stack' : card.tiles ? 'body tiles' : 'body';
   el.appendChild(body);
   if (card.spec.facet) body.style.height = 'auto';
   const m: Mounted = { card, charts: [], root: el };
   const specs = card.tiles ?? [card.spec];
-  for (const spec of specs) {
+  for (const [i, spec] of specs.entries()) {
     const box = document.createElement('div');
-    box.style.height = '100%';
+    box.style.height = card.stack ? `${card.stack[i] ?? 160}px` : '100%';
     box.style.minWidth = '0';
     body.appendChild(box);
     try {

@@ -79,6 +79,7 @@
       .card .menu { border: 0; background: transparent; border-radius: 6px; width: 28px; height: 28px; cursor: pointer; color: var(--muted); display: grid; place-items: center; }
       .card .menu:hover { background: var(--hover); color: var(--ink); }
       .card .body { position: relative; min-height: 0; }
+      .card .stack { height: auto !important; display: flex; flex-direction: column; gap: 4px; padding-bottom: 8px; }
       .card .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); height: auto !important; }
       .card .tiles > div { height: 176px !important; border-left: 1px solid var(--border); margin-left: -1px; }
       @media (max-width: 860px) { .card .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .card .tiles > div { height: 156px !important; } }

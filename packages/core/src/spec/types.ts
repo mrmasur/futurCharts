@@ -91,6 +91,11 @@ export interface Encoding {
   color?: string;
   /** Field name (point marks): numeric field mapped to the size range. */
   size?: string;
+  /** Direction in degrees, clockwise from up (`vector`). */
+  angle?: string;
+  /** Opening and closing prices (`candlestick`; `y` is the high, `y2` the low). */
+  open?: string;
+  close?: string;
 }
 
 /** A number, a date (ISO string or epoch ms) or a category name. */
@@ -180,7 +185,13 @@ export type MarkStyle = { color?: string } & DeepPartial<
     Theme['marks']['venn'] &
     Theme['marks']['wordcloud'] &
     Theme['marks']['timeline'] &
-    Theme['marks']['tree']
+    Theme['marks']['tree'] &
+    Theme['marks']['vector'] &
+    Theme['marks']['bubbles'] &
+    Theme['marks']['arcDiagram'] &
+    Theme['marks']['pyramid'] &
+    Theme['marks']['candlestick'] &
+    Theme['marks']['route']
 >;
 
 /** A condition on one field of a row. Several conditions in an array must all hold. */
@@ -289,6 +300,16 @@ export interface InteractionSpec {
   select?: boolean | 'lasso' | 'rect';
   /** Click a legend entry to toggle its series. */
   legendToggle?: boolean;
+  /**
+   * Charts with the same group name hover at the same x and show the same x
+   * range: zoom one, the others follow (synchronized charts, a navigator).
+   */
+  sync?: string;
+  /**
+   * This chart is a range navigator for its `sync` group: drag a window over it
+   * (or its edges) to set what the other charts show. Click to show everything.
+   */
+  navigator?: boolean;
   /** Play button and scrubber for marks that play through time (`race`). Hide it for previews. */
   player?: boolean;
 }

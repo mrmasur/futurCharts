@@ -63,7 +63,7 @@ Démo : `http://localhost:5273/gallery.html`, une application de tableau de bord
 | Comparaison | `bar` vertical ou horizontal (catégories sur y : détecté automatiquement), groupé, empilé, étiquettes de valeur (`style.labels`) |
 | Évolution | `line` (droite, lissée, en escalier ; `dash` en px, `markers`, `labels` sur chaque point, trous aux valeurs manquantes sauf `connectNulls`), `area` empilée ou en bande (`y` → `y2`) |
 | Intervalles | `bar` avec `x2` / `y2` : Gantt, cascade ; `rule` : moustaches, barres d'erreur, sucettes ; `tick` : médianes, distributions en traits |
-| Distribution | histogramme (transform `bin` + `bar`), boîte à moustaches (transform `boxplot` + `rule` + `bar` + `tick` + `point`), `violin` (densité, quartiles, médiane) |
+| Distribution | courbe en cloche ou densité (transform `density`, `method: "normal"` ou `kde` ; `step` = largeur des classes pour la superposer à un histogramme), nuage dispersé (`point` avec `style.jitter`), histogramme (transform `bin` + `bar`), boîte à moustaches (transform `boxplot` + `rule` + `bar` + `tick` + `point`), `violin` (densité, quartiles, médiane) |
 | Corrélation | `point` (nuage, bulles avec `size`), droite de régression (transform `regression`) |
 | Parts | `pie`, `donut` (`startAngle` / `endAngle` en degrés : `-90` et `90` pour un demi-anneau ; `encode.size` : rayon variable), `treemap` (squarifié, groupes), `parliament` (un point par siège) |
 | Indicateurs | `gauge` (min, max, objectif), `funnel` (taux de conversion) |
@@ -74,7 +74,12 @@ Démo : `http://localhost:5273/gallery.html`, une application de tableau de bord
 | Hiérarchies | `sunburst` (`path`: liste de champs, du niveau extérieur au plus fin), `treemap` |
 | Calendrier | `calendar` (une case par jour, `x`: date) |
 | Indicateurs (suite) | `kpi` (dernière valeur, évolution, sparkline ; `upIsGood`), `waffle` (100 cases) |
-| Polaires | `rose` (rose polaire, aire proportionnelle, séries empilées), `radialBar` (un anneau par catégorie) |
+| Polaires | `rose` (rose polaire, aire proportionnelle, séries empilées), `radialBar` (un anneau par catégorie ; valeurs à l'encre sur la piste, `labelColor` pour en changer) |
+| Relations (suite) | `arcDiagram` (`source`, `target`, `value` : nœuds alignés, liens en demi-cercles), `bubbles` (bulles groupées, une grappe par `color`) |
+| Champs | `vector` (flèches : `x`, `y`, `angle` en degrés depuis le haut, `size` pour la longueur) |
+| Parts (pyramide) | `pyramid` (étages empilés depuis la pointe, hauteur selon la valeur) |
+| Bourse | `candlestick` (`y` haut, `y2` bas, `open`, `close` ; `style.ohlc` pour des barres OHLC) |
+| Cartes (suite) | `route` (de `x`, `y` à `x2`, `y2`, courbée ; épaisseur avec `size`) |
 | Arbres | `tree` (`path` ; dendrogramme, ou organigramme avec `boxes` et `direction: "TB"`), `icicle` (partition en lignes, zoom au clic ; `orientation: "BT"` pour un flame chart) |
 | Ensembles | `venn` (2 ou 3 ensembles ; `key` vaut `A`, `A&B` ou `A&B&C`, aires proportionnelles) |
 | Texte et temps | `wordcloud` (taille selon `value`), `timeline` (frise : `x` date, `key` titre, `value` détail) |
@@ -229,6 +234,13 @@ En coordonnées de données, sur tout graphique cartésien : une valeur donne un
 `dash: []` pour un trait plein), une paire donne une bande, `x` et `y` ensemble une note sur un point. `x` et `y`
 sont les axes de l'écran (sur des barres horizontales, les valeurs sont en `x`). Une ligne d'objectif hors des
 données élargit l'axe pour rester visible. Les annotations suivent le zoom.
+
+## Graphiques synchronisés et navigateur
+
+`"interactions": { "sync": "ventes" }` sur plusieurs graphiques : survol à la même date et même plage visible
+(zoomer l'un zoome les autres). Un graphique avec `"navigator": true` dans le même groupe devient un sélecteur de
+plage : on y glisse une fenêtre (bords redimensionnables), un clic remet tout. L'axe des valeurs du graphique
+principal ne se réajuste pas encore à la plage visible.
 
 ## Course de barres
 

@@ -70,9 +70,18 @@ export const radialBar: MarkDefinition = {
       const mid = (g.inner + g.outer) / 2;
       // Name just before 12 o'clock, value at the end of the bar.
       labels.push({ tx: ctx.x.norm(0), ty: ctx.y.norm(mid), text: g.key, align: 'right', baseline: 'middle', dx: -8, size: 11, weight: 600, color: theme.text.secondary });
-      const ex = Math.sin(g.a1) * mid;
-      const ey = Math.cos(g.a1) * mid;
-      if (g.a1 > 0.35) labels.push({ tx: ctx.x.norm(ex), ty: ctx.y.norm(ey), text: ctx.format(g.value, vf), on: fill, align: 'center', baseline: 'middle', size: 10, weight: 600 });
+      // The value just past the end of the bar, on the track, in ink (never white on the light track).
+      const text = ctx.format(g.value, vf);
+      const ink = style.labelColor === 'auto' ? theme.text.primary : style.labelColor;
+      const room = textWidth(text, `600 10px ${theme.font.family}`) * ctx.pixel[0] / (unit || 1) + 0.03;
+      const a = Math.min(sweep, g.a1 + room / (2 * mid) + 0.03);
+      const fits = g.a1 + room / mid < sweep;
+      // No room left on the track (the longest bar): inside the start of the bar, where the ring runs
+      // level with the text, in a contrasting ink.
+      const at = fits ? a : room / (2 * mid) + 0.03;
+      const [ex, ey] = [Math.sin(at) * mid, Math.cos(at) * mid];
+      const pos = { tx: ctx.x.norm(ex), ty: ctx.y.norm(ey), text, align: 'center' as const, baseline: 'middle' as const, size: 10, weight: 600 };
+      labels.push(fits || style.labelColor !== 'auto' ? { ...pos, color: ink } : { ...pos, on: fill });
     }
     return {
       draws: [{ batch: batch(ctx, 'arc', arcs) }],

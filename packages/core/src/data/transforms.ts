@@ -48,6 +48,23 @@ export type TransformSpec =
     }
   | { type: 'sort'; field: string; order?: 'asc' | 'desc' }
   | {
+      /**
+       * Density curve of `field`: kernel estimate (`kde`, default) or the fitted
+       * normal law (`normal`, a bell curve). Outputs `field` and `density`, on
+       * `steps` points spanning the data (± 3 standard deviations for `normal`).
+       * With `step` (the histogram's bin width), the curve is scaled to counts,
+       * so it can be drawn over a histogram.
+       */
+      type: 'density';
+      field: string;
+      method?: 'kde' | 'normal';
+      /** Kernel width; default: Silverman's rule. */
+      bandwidth?: number;
+      steps?: number;
+      step?: number;
+      groupby?: string[];
+    }
+  | {
       /** Least-squares line through (x, y): two rows at the ends of the x range. */
       type: 'regression';
       x: string;
@@ -214,6 +231,37 @@ export function applyTransform(table: Table, t: TransformSpec): Table {
       });
       const cols: Record<string, Cell[]> = {};
       for (const f of table.fields) cols[f] = order.map((i) => table.column(f).values[i] as Cell);
+      return output(table, cols);
+    }
+    case 'density': {
+      const xs = numeric(table, t.field);
+      const cols: Record<string, Cell[]> = Object.fromEntries([...(t.groupby ?? []), t.field, 'density'].map((f) => [f, []]));
+      const steps = Math.max(8, t.steps ?? 100);
+      for (const g of groups(table, t.groupby)) {
+        const v = g.rows.map((r) => xs[r]).filter((x) => !Number.isNaN(x));
+        const n = v.length;
+        if (n < 2) continue;
+        const mean = v.reduce((a, x) => a + x, 0) / n;
+        const sd = Math.sqrt(v.reduce((a, x) => a + (x - mean) ** 2, 0) / (n - 1)) || 1;
+        const normal = t.method === 'normal';
+        const h = t.bandwidth ?? 1.06 * sd * Math.pow(n, -0.2);
+        const lo = normal ? mean - 3 * sd : Math.min(...v) - 2 * h;
+        const hi = normal ? mean + 3 * sd : Math.max(...v) + 2 * h;
+        const k = 1 / Math.sqrt(2 * Math.PI);
+        const scale = t.step ? n * t.step : 1;
+        for (let s = 0; s < steps; s++) {
+          const x = lo + ((hi - lo) * s) / (steps - 1);
+          let d = 0;
+          if (normal) d = (k / sd) * Math.exp(-0.5 * ((x - mean) / sd) ** 2);
+          else {
+            for (const xi of v) d += Math.exp(-0.5 * ((x - xi) / h) ** 2);
+            d *= k / (n * h);
+          }
+          (t.groupby ?? []).forEach((f, j) => cols[f].push(g.keys[j]));
+          cols[t.field].push(x);
+          cols.density.push(d * scale);
+        }
+      }
       return output(table, cols);
     }
     case 'regression': {

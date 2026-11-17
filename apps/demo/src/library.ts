@@ -413,8 +413,210 @@ const org = [
   ['Direction', 'Ingénierie', 'Visualisation', 5], ['Direction', 'Ingénierie', 'Données', 6], ['Direction', 'Commercial', 'Ventes', 8], ['Direction', 'Commercial', 'Succès client', 4],
 ].map(([ceo, dept, team, people]) => ({ ceo, dept, team, people }));
 
-export type Entry = { title: string; caption: string; wide?: boolean; spec?: ChartSpec; tiles?: ChartSpec[]; showLayout?: boolean };
+const exchanges = [
+  ['Direction', 'Finance', 42], ['Direction', 'Ventes', 65], ['Ventes', 'Marketing', 88], ['Ventes', 'Support', 51], ['Marketing', 'Produit', 47],
+  ['Produit', 'Ingénierie', 96], ['Ingénierie', 'Support', 58], ['Ingénierie', 'Données', 71], ['Données', 'Finance', 24], ['Données', 'Marketing', 39],
+  ['Finance', 'RH', 18], ['RH', 'Direction', 22], ['Support', 'Produit', 33], ['Direction', 'Ingénierie', 29],
+].map(([from, to, messages]) => ({ from, to, messages }));
+const loyalty = [
+  { tier: 'Ambassadeurs', customers: 1800 }, { tier: 'Fidèles', customers: 5200 },
+  { tier: 'Réguliers', customers: 11400 }, { tier: 'Occasionnels', customers: 26900 },
+];
+const wind: { lon: number; lat: number; direction: number; speed: number }[] = [];
+for (let i = 0; i < 18; i++) {
+  for (let j = 0; j < 11; j++) {
+    const lon = -6 + i * 0.75;
+    const lat = 42 + j * 0.6;
+    // A low-pressure swirl over the Channel, plus a westerly flow.
+    const dx = lon - 1.5, dy = lat - 48.5;
+    const d = Math.hypot(dx, dy) + 0.6;
+    const u = 6 - (dy / d) * 14 * Math.exp(-d / 3);
+    const v = (dx / d) * 14 * Math.exp(-d / 3);
+    wind.push({ lon, lat, direction: Math.round(((Math.atan2(u, v) * 180) / Math.PI + 360) % 360), speed: Math.round(Math.hypot(u, v) * 10) / 10 });
+  }
+}
+
+// Daily sales over a year, for synchronized charts and the navigator.
+const year = Array.from({ length: 365 }, (_, d) => {
+  const day = new Date(2025, 0, 1 + d);
+  const season = 1 + 0.25 * Math.sin(((d - 80) / 365) * 2 * Math.PI) + (d > 325 ? 0.5 * ((d - 325) / 40) : 0);
+  const weekend = day.getDay() === 0 || day.getDay() === 6 ? 0.82 : 1;
+  const orders = Math.round(420 * season * weekend * (0.9 + r() * 0.2));
+  const basket = Math.round((58 + 8 * Math.sin(d / 29) + r() * 6) * 10) / 10;
+  return { day, orders, basket, revenue: Math.round((orders * basket) / 100) / 10 };
+});
+// Long price history for the navigator.
+const prices: { date: Date; price: number }[] = [];
+{
+  let p = 100;
+  for (let d = 0; d < 1200; d++) {
+    p = Math.max(20, p * (1 + gauss(r) * 0.012 + 0.0004));
+    prices.push({ date: new Date(2022, 0, 1 + d), price: Math.round(p * 100) / 100 });
+  }
+}
+const hubs: [string, number, number][] = [['Paris', 2.55, 49.01], ['Dubaï', 55.36, 25.25]];
+const routes = worldCities
+  .filter(([name]) => name !== 'Paris' && name !== 'Dubaï')
+  .flatMap(([city, lon, lat]) =>
+    hubs.filter(() => true).map(([hub, hx, hy], k) => ({ hub, city, lon: hx, lat: hy, lon2: lon, lat2: lat, flights: Math.round(8 + r() * (k ? 30 : 60)) })),
+  )
+  .filter((_, i) => i % 3 !== 2);
+
+export type Entry = { title: string; caption: string; wide?: boolean; spec?: ChartSpec; tiles?: ChartSpec[]; stack?: number[]; showLayout?: boolean };
 export const entries: Entry[] = [
+  {
+    title: 'Graphiques synchronisés',
+    caption: 'interactions.sync · même survol et même zoom (molette, glisser) sur les trois graphiques',
+    wide: true,
+    stack: [190, 170, 170],
+    tiles: [
+      {
+        title: 'Chiffre d’affaires (k€)', data: year, fields: { revenue: { label: 'CA', format: { suffix: ' k€' } } }, legend: false,
+        layers: [{ mark: 'area', encode: { x: 'day', y: 'revenue' }, style: { gradient: true } }],
+        interactions: { sync: 'annee', zoom: { axes: 'x' } },
+      },
+      {
+        title: 'Commandes', data: year, fields: { orders: { label: 'Commandes' } }, legend: false,
+        layers: [{ mark: 'bar', encode: { x: 'day', y: 'orders' }, style: { color: '$2', radius: 1 } }],
+        interactions: { sync: 'annee', zoom: { axes: 'x' } },
+      },
+      {
+        title: 'Panier moyen (€)', data: year, fields: { basket: { label: 'Panier', format: { suffix: ' €', decimals: 1 } } }, legend: false,
+        layers: [{ mark: 'line', encode: { x: 'day', y: 'basket' }, style: { color: '$3', curve: 'smooth' } }],
+        interactions: { sync: 'annee', zoom: { axes: 'x' } },
+      },
+    ],
+  },
+  {
+    title: 'Navigateur de plage',
+    caption: 'interactions.navigator · glissez une fenêtre sur le bas (ou ses bords) pour choisir la période du haut ; un clic remet tout',
+    wide: true,
+    stack: [300, 90],
+    tiles: [
+      {
+        title: 'Cours de l’action', data: prices, fields: { price: { label: 'Cours', format: { suffix: ' €', decimals: 2 } } }, legend: false,
+        layers: [{ mark: 'line', encode: { x: 'date', y: 'price' } }],
+        scales: { y: { zero: false } },
+        interactions: { sync: 'cours', zoom: { axes: 'x' } },
+      },
+      {
+        data: prices, legend: false, axes: { y: false },
+        layers: [{ mark: 'area', encode: { x: 'date', y: 'price' }, style: { opacity: 0.18, lineWidth: 1 } }],
+        scales: { y: { zero: false } },
+        interactions: { sync: 'cours', navigator: true, tooltip: false },
+      },
+    ],
+  },
+  {
+    title: 'Chandeliers (candlestick)',
+    caption: 'candlestick · y = haut, y2 = bas, encode.open et encode.close · hausse et baisse aux couleurs d’état',
+    wide: true,
+    spec: {
+      title: 'Cours de l’action',
+      subtitle: '45 séances',
+      data: ohlc,
+      fields: { high: { label: 'Haut → bas', format: euro } },
+      legend: false,
+      layers: [{ mark: 'candlestick', encode: { x: 'date', y: 'high', y2: 'low', open: 'open', close: 'close' } }],
+      scales: { y: { zero: false } },
+      interactions: { zoom: { axes: 'x' } },
+    },
+  },
+  {
+    title: 'Barres OHLC',
+    caption: 'candlestick · style.ohlc : ouverture à gauche, clôture à droite',
+    spec: {
+      title: 'Cours de l’action',
+      data: ohlc,
+      fields: { high: { label: 'Haut → bas', format: euro } },
+      legend: false,
+      layers: [{ mark: 'candlestick', encode: { x: 'date', y: 'high', y2: 'low', open: 'open', close: 'close' }, style: { ohlc: true, wick: 1.5 } }],
+      scales: { y: { zero: false } },
+    },
+  },
+  {
+    title: 'Routes aériennes',
+    caption: 'route sous projection · de (x, y) à (x2, y2), courbées, épaisseur selon les vols',
+    wide: true,
+    spec: {
+      title: 'Vols hebdomadaires depuis Paris et Dubaï',
+      projection: { type: 'mercator' },
+      data: routes,
+      fields: { flights: { label: 'Vols par semaine' }, hub: { label: 'Départ' } },
+      layers: [
+        { mark: 'geoshape', geo: countriesGeo, encode: {} },
+        { mark: 'route', encode: { x: 'lon', y: 'lat', x2: 'lon2', y2: 'lat2', color: 'hub', size: 'flights' }, style: { sizeRange: [4, 16] } },
+      ],
+      interactions: { zoom: { axes: 'xy', max: 20 } },
+    },
+  },
+  {
+    title: 'Courbe en cloche',
+    caption: 'transform density (method normal) sur un histogramme · step aligne la courbe sur les comptes',
+    spec: {
+      title: 'Durée des sessions et loi normale ajustée',
+      subtitle: '4 000 sessions, en secondes',
+      data: durations,
+      fields: { count: { label: 'Sessions' }, bin_mid: { label: 'Durée (s)' }, density: { label: 'Loi normale', format: { decimals: 0 } }, duration: { label: 'Durée (s)' } },
+      layers: [
+        { mark: 'bar', name: 'Sessions', encode: { x: 'bin_mid', y: 'count' }, transform: [{ type: 'bin', field: 'duration', step: 10 }], style: { bandPadding: 0.08, radius: 2, opacity: 0.55 } },
+        { mark: 'line', name: 'Loi normale', encode: { x: 'duration', y: 'density' }, transform: [{ type: 'density', field: 'duration', method: 'normal', step: 10 }], style: { width: 2.5 } },
+      ],
+    },
+  },
+  {
+    title: 'Nuage avec dispersion (jitter)',
+    caption: 'point · style.jitter étale les points sur la largeur de la catégorie, pour voir les valeurs égales',
+    spec: {
+      title: 'Délais de traitement par équipe',
+      subtitle: 'Un point par dossier, en jours',
+      data: delays,
+      fields: { days: { label: 'Délai (jours)' } },
+      layers: [{ mark: 'point', encode: { x: 'team', y: 'days', color: 'team' }, style: { jitter: 0.7, size: 6, opacity: 0.7, strokeWidth: 0 } }],
+    },
+  },
+  {
+    title: 'Bulles groupées',
+    caption: 'bubbles · aire selon la valeur, une grappe par famille (encode.color)',
+    spec: {
+      title: 'Ventes par produit et famille',
+      data: catalog,
+      fields: { sales: { label: 'Ventes', format: { suffix: ' k€' } }, category: { label: 'Famille' } },
+      layers: [{ mark: 'bubbles', encode: { key: 'item', value: 'sales', color: 'category' } }],
+    },
+  },
+  {
+    title: 'Diagramme en arcs',
+    caption: 'arcDiagram · nœuds alignés, chaque lien en demi-cercle aussi épais que sa valeur',
+    spec: {
+      title: 'Échanges entre services',
+      subtitle: 'Messages par semaine',
+      data: exchanges,
+      fields: { messages: { label: 'Messages' } },
+      layers: [{ mark: 'arcDiagram', encode: { source: 'from', target: 'to', value: 'messages' } }],
+    },
+  },
+  {
+    title: 'Pyramide',
+    caption: 'pyramid · étages empilés depuis la pointe, hauteur selon la valeur',
+    spec: {
+      title: 'Clients par niveau de fidélité',
+      data: loyalty,
+      fields: { customers: { label: 'Clients' } },
+      layers: [{ mark: 'pyramid', encode: { key: 'tier', value: 'customers' } }],
+    },
+  },
+  {
+    title: 'Champ de vecteurs',
+    caption: 'vector · encode.angle (degrés) et encode.size (longueur), couleur selon la vitesse',
+    spec: {
+      title: 'Vent à 10 m',
+      subtitle: 'Direction et vitesse (m/s)',
+      data: wind,
+      fields: { speed: { label: 'Vitesse (m/s)' }, lon: { label: 'Longitude' }, lat: { label: 'Latitude' } },
+      layers: [{ mark: 'vector', encode: { x: 'lon', y: 'lat', angle: 'direction', size: 'speed', color: 'speed' }, style: { sizeRange: [6, 26] } }],
+    },
+  },
   {
     title: 'Barres radiales',
     caption: 'radialBar · un anneau par catégorie, la plus grande fait trois quarts de tour',
@@ -1340,18 +1542,20 @@ export const entries: Entry[] = [
 export const GROUPS: [string, string[]][] = [
   ['Lignes et annotations', ['Lignes de référence et zones', 'Réel et prévision en pointillés', 'Valeurs manquantes', 'Étiquettes sur les points', 'Barres et objectif']],
   ['Comparaison', ['Pyramide des âges', 'Barres horizontales triées', 'Barres horizontales empilées', 'Barres empilées à 100 %', 'Épaisseur et couleur par barre', 'Barres fines et mise en avant', 'Sucettes', 'Haltères (dumbbell)', 'Graphique à puces (bullet)']],
+  ['Combinaisons', ['Graphiques synchronisés', 'Navigateur de plage']],
+  ['Bourse', ['Chandeliers (candlestick)', 'Barres OHLC']],
   ['Évolution', ['Course de barres', 'Course par famille', 'Prévision avec intervalle', 'Courbe en escalier', 'Streamgraph', 'Classement (bump chart)', 'Graphique de pente', 'Chandeliers']],
   ['Temps et planning', ['Diagramme de Gantt', 'Calendrier']],
-  ['Distribution', ['Histogramme', 'Boîte à moustaches', 'Violon', 'Distribution en traits']],
+  ['Distribution', ['Courbe en cloche', 'Nuage avec dispersion (jitter)', 'Histogramme', 'Boîte à moustaches', 'Violon', 'Distribution en traits']],
   ['Petits multiples', ['Petits multiples de courbes', 'Petits multiples de barres']],
-  ['Corrélation', ['Nuage de points et régression', 'Bulles', 'Densité hexagonale', 'Coordonnées parallèles']],
+  ['Corrélation', ['Champ de vecteurs', 'Nuage de points et régression', 'Bulles', 'Densité hexagonale', 'Coordonnées parallèles']],
   ['Parts et hiérarchies', ['Camembert', 'Anneau', 'Demi-anneau', 'Hémicycle', 'Camembert à rayon variable', 'Treemap', 'Sunburst', 'Cercles imbriqués', 'Marimekko', 'Gaufre']],
   ['Flux', ['Pipeline de données', 'Diagramme de flux', 'Processus avec volumes', 'Chemin mis en avant', 'Sankey', 'Diagramme en cordes', 'Réseau', 'Entonnoir', 'Cascade']],
   ['Matrices et polaires', ['Carte de chaleur', 'Radar', 'Rose polaire', 'Barres radiales']],
-  ['Arbres et ensembles', ['Dendrogramme', 'Organigramme', 'Icicle', 'Flame chart', 'Diagramme de Venn']],
+  ['Arbres et ensembles', ['Bulles groupées', 'Diagramme en arcs', 'Dendrogramme', 'Organigramme', 'Icicle', 'Flame chart', 'Diagramme de Venn']],
   ['Texte et chronologie', ['Nuage de mots', 'Frise chronologique']],
-  ['Indicateurs', ['Tuiles KPI', 'Jauge']],
-  ['Cartes', ['Points sur une carte du monde', 'Choroplèthe mondiale', 'Bulles sur une carte', 'Zoom sur l’Europe et mise en avant']],
+  ['Indicateurs', ['Tuiles KPI', 'Jauge', 'Pyramide']],
+  ['Cartes', ['Routes aériennes', 'Points sur une carte du monde', 'Choroplèthe mondiale', 'Bulles sur une carte', 'Zoom sur l’Europe et mise en avant']],
   ['Mise en avant', ['Mise en avant dans un camembert', 'Mise en avant dans un treemap', 'Mise en avant d’une série', 'Mise en avant sur une carte de chaleur']],
 ];
 

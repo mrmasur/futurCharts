@@ -4,6 +4,7 @@ import { applyTransforms } from '../data/transforms';
 import { prefersReducedMotion } from '../marks/animate';
 import { luminance } from '../marks/primitives';
 import { annotationRaw, buildAnnotations } from './annotations';
+import { broadcast, joinGroup, leaveGroup, type SyncMember } from './sync';
 import { prepareLayer, standaloneLayer, type LayerData, type SeriesData } from '../marks/prepare';
 import { emptyHit, getMark, type BuildContext, type BuiltMark, type MarkDefinition, type MarkDraw, type MarkLabel, type ShapeHit, type Timeline } from '../marks/registry';
 import { createRenderer, type RendererChoice } from '../render';
@@ -114,6 +115,8 @@ interface Layout {
 
 const font = (weight: number | string, size: number, family: string) => `${weight} ${size}px ${family}`;
 
+const withAlphaRGBA = (c: RGBA, a: number): RGBA => [c[0], c[1], c[2], a];
+
 const sizeDependent = (b: Built) =>
   typeof b.def.sizeDependent === 'function' ? b.def.sizeDependent(b.data.layer) : !!b.def.sizeDependent;
 
@@ -156,7 +159,7 @@ function compileOverrides(layer: LayerSpec, table: Table, horizontal: boolean): 
   return (row) => rules.find((r) => r.test(row))?.style;
 }
 
-export class Chart {
+export class Chart implements SyncMember {
   private root!: HTMLDivElement;
   private overlay!: HTMLCanvasElement;
   private ctx!: CanvasRenderingContext2D;
@@ -198,6 +201,11 @@ export class Chart {
   private minViewWidth?: number;
   /** The user moved or zoomed the view: leave it alone. */
   private userZoomed = false;
+  /** Sync group joined (`interactions.sync`). */
+  private syncGroup?: string;
+  /** Navigator: the window shown by the other charts of the group, in normalized x. */
+  private navWindow: [number, number] = [0, 1];
+  private navDrag?: { mode: 'move' | 'w' | 'e'; x: number; start: [number, number] };
   /** Width / height the view must keep (maps). */
   private aspect?: number;
   private lasso?: { points: Point[]; additive: boolean; rect: boolean };
@@ -352,7 +360,9 @@ export class Chart {
     if (!this.zoomConfig()) return;
     this.userZoomed = false;
     this.zoom = { kx: 1, ky: 1, tx: 0, ty: 0 };
+    this.navWindow = [0, 1];
     this.emit('zoom', { ...this.zoom });
+    this.shareRange();
     this.requestRender();
   }
 
@@ -415,6 +425,7 @@ export class Chart {
   }
 
   destroy(): void {
+    if (this.syncGroup) leaveGroup(this.syncGroup, this);
     this.destroyed = true;
     cancelAnimationFrame(this.frame);
     this.abort.abort();
@@ -747,7 +758,149 @@ export class Chart {
         this.syncTimeline();
       }
     }
+    this.joinSync();
     this.requestRender();
+  }
+
+  // --------------------------------------------------------------------- sync
+
+  private joinSync(): void {
+    const name = this.spec.interactions?.sync || (this.spec.interactions?.navigator ? 'default' : undefined);
+    if (name === this.syncGroup) return;
+    if (this.syncGroup) leaveGroup(this.syncGroup, this);
+    this.syncGroup = name;
+    if (name) joinGroup(name, this);
+  }
+
+  private navigator(): boolean {
+    return !!this.spec.interactions?.navigator && !this.horizontal && !this.markScales;
+  }
+
+  /** Visible x range in data units, or null when everything shows. */
+  private visibleRange(): [number, number] | null {
+    if (this.navigator()) {
+      const [a, b] = this.navWindow;
+      return a <= 0 && b >= 1 ? null : [this.cat.invert(a), this.cat.invert(b)];
+    }
+    const z = this.zoom;
+    if (z.kx <= 1 + 1e-6) return null;
+    return [this.cat.invert(-z.tx / z.kx), this.cat.invert((1 - z.tx) / z.kx)];
+  }
+
+  private shareRange(): void {
+    if (!this.syncGroup || this.horizontal) return;
+    const r = this.visibleRange();
+    broadcast(this.syncGroup, this, (m) => m.syncRange(r));
+  }
+
+  private shareHover(): void {
+    if (!this.syncGroup) return;
+    const p = this.picked[0];
+    const x = p && this.tooltipMode() === 'x' ? this.built[p.layer].mark.hit.x[p.index] : null;
+    broadcast(this.syncGroup, this, (m) => m.syncHover(x));
+  }
+
+  /** @internal Another chart of the group hovers at `x`. */
+  syncHover(x: number | null): void {
+    const L = this.layout;
+    if (x === null || !L || this.navigator()) {
+      this.setPicked([]);
+      this.tip.style.opacity = '0';
+      return;
+    }
+    // The closest x of this chart's own data.
+    let best = NaN;
+    let bestD = Infinity;
+    for (const b of this.built) {
+      const h = b.mark.hit;
+      for (let i = 0; i < h.n; i++) {
+        const d = Math.abs(h.x[i] - x);
+        if (d < bestD) [best, bestD] = [h.x[i], d];
+      }
+    }
+    if (Number.isNaN(best)) return;
+    const picked: Picked[] = [];
+    this.built.forEach((b, layer) => {
+      const h = b.mark.hit;
+      for (let i = 0; i < h.n; i++) if (h.x[i] === best) picked.push({ layer, index: i });
+    });
+    this.setPicked(picked);
+    const T = L.transform;
+    const first = picked[0] && this.built[picked[0].layer].mark.hit;
+    const px = T.ox + this.cat.norm(best) * T.sx;
+    if (px < L.plot.x - 1 || px > L.plot.x + L.plot.width + 1) {
+      this.setPicked([]);
+      this.tip.style.opacity = '0';
+      return;
+    }
+    const py = first ? T.oy + first.ty[picked[0].index] * T.sy : L.plot.y + L.plot.height / 2;
+    this.showTooltip({ x: px, y: py });
+  }
+
+  /** @internal Another chart of the group shows the x range `r` (data units). */
+  syncRange(r: [number, number] | null): void {
+    if (this.horizontal || !this.layout) return;
+    const a = r ? this.cat.norm(r[0]) : 0;
+    const b = r ? this.cat.norm(r[1]) : 1;
+    if (this.navigator()) {
+      this.navWindow = [Math.max(0, Math.min(a, b)), Math.min(1, Math.max(a, b))];
+    } else {
+      const z = this.zoom;
+      z.kx = r && b - a > 1e-9 ? 1 / (b - a) : 1;
+      z.tx = -a * z.kx;
+      this.clampZoom();
+      this.userZoomed = z.kx > 1;
+      this.setPicked([]);
+      this.tip.style.opacity = '0';
+      this.emit('zoom', { ...z });
+    }
+    this.requestRender();
+  }
+
+  /** Shade what the other charts do not show, outline the window and its handles. */
+  private drawNavigator(L: Layout): void {
+    if (!this.navigator()) return;
+    const { ctx, theme } = this;
+    const { plot, transform: T } = L;
+    const x0 = T.ox + this.navWindow[0] * T.sx;
+    const x1 = T.ox + this.navWindow[1] * T.sx;
+    ctx.save();
+    ctx.fillStyle = theme.background === 'transparent' ? 'rgba(255,255,255,0.6)' : toCss(withAlphaRGBA(parseColor(theme.background), 0.62));
+    ctx.fillRect(plot.x, plot.y, Math.max(0, x0 - plot.x), plot.height);
+    ctx.fillRect(x1, plot.y, Math.max(0, plot.x + plot.width - x1), plot.height);
+    ctx.strokeStyle = theme.text.muted;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(Math.round(x0) + 0.5, plot.y + 0.5, Math.round(x1 - x0), plot.height - 1);
+    // Handles: small rounded grips on both edges.
+    for (const x of [x0, x1]) {
+      ctx.fillStyle = theme.background === 'transparent' ? '#fff' : theme.background;
+      ctx.strokeStyle = theme.text.muted;
+      ctx.beginPath();
+      ctx.roundRect(x - 4, plot.y + plot.height / 2 - 11, 8, 22, 3);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x - 1, plot.y + plot.height / 2 - 5);
+      ctx.lineTo(x - 1, plot.y + plot.height / 2 + 5);
+      ctx.moveTo(x + 1, plot.y + plot.height / 2 - 5);
+      ctx.lineTo(x + 1, plot.y + plot.height / 2 + 5);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  private navAt(p: { x: number; y: number }): 'move' | 'w' | 'e' | 'new' | null {
+    const L = this.layout;
+    if (!L || !this.navigator() || !this.inPlot(p)) return null;
+    const T = L.transform;
+    const x0 = T.ox + this.navWindow[0] * T.sx;
+    const x1 = T.ox + this.navWindow[1] * T.sx;
+    if (Math.abs(p.x - x0) <= 7) return 'w';
+    if (Math.abs(p.x - x1) <= 7) return 'e';
+    // While everything shows, a drag draws a new window instead of moving the whole one.
+    const full = this.navWindow[0] <= 0 && this.navWindow[1] >= 1;
+    if (p.x > x0 && p.x < x1 && !full) return 'move';
+    return 'new';
   }
 
   // ------------------------------------------------------------------- layout
@@ -1042,6 +1195,7 @@ export class Chart {
     }
     this.renderer.render({ clearColor: parseColor(theme.background), calls });
     this.drawOverlay(L);
+    this.drawNavigator(L);
     this.updateControls();
     if (animating) this.requestRender();
   }
@@ -1483,6 +1637,28 @@ export class Chart {
   private onMove(e: PointerEvent): void {
     const p = this.local(e);
     this.pointer = p;
+    if (this.navigator()) {
+      const L = this.layout;
+      if (this.navDrag && L) {
+        const n = Math.max(0, Math.min(1, (p.x - L.transform.ox) / L.transform.sx));
+        const d = this.navDrag;
+        const [a, b] = d.start;
+        if (d.mode === 'move') {
+          const shift = Math.max(-a, Math.min(1 - b, n - d.x));
+          this.navWindow = [a + shift, b + shift];
+        } else if (d.mode === 'w') {
+          this.navWindow = n < b ? [n, b] : [b, n];
+        } else {
+          this.navWindow = n > a ? [a, n] : [n, a];
+        }
+        this.shareRange();
+        this.requestRender();
+        return;
+      }
+      const at = this.navAt(p);
+      this.root.style.cursor = at === 'w' || at === 'e' ? 'ew-resize' : at === 'move' ? 'grab' : at === 'new' ? 'crosshair' : 'default';
+      return;
+    }
     if (this.markDrag) {
       const L = this.layout!;
       this.markDrag.moved += Math.abs(p.x - this.markDrag.x) + Math.abs(p.y - this.markDrag.y);
@@ -1513,6 +1689,7 @@ export class Chart {
       this.clampZoom();
       this.setPicked([]);
       this.emit('zoom', { ...this.zoom });
+      this.shareRange();
       this.requestRender();
       return;
     }
@@ -1530,6 +1707,7 @@ export class Chart {
     else if (this.shape && this.built.some((b) => b.mark.click)) this.root.style.cursor = 'pointer';
     this.setPicked(picked);
     this.showTooltip(p);
+    this.shareHover();
     if (picked.length) this.emit('hover', { items: this.describe(picked), x: p.x, y: p.y });
   }
 
@@ -1538,11 +1716,23 @@ export class Chart {
     this.shape = undefined;
     this.setPicked([]);
     this.tip.style.opacity = '0';
+    if (this.syncGroup) broadcast(this.syncGroup, this, (m) => m.syncHover(null));
     this.emit('leave', {});
   }
 
   private onDown(e: PointerEvent): void {
     const p = this.local(e);
+    const nav = e.button === 0 ? this.navAt(p) : null;
+    if (nav) {
+      const L = this.layout!;
+      const n = (p.x - L.transform.ox) / L.transform.sx;
+      // A press outside the window starts a new one there.
+      if (nav === 'new') this.navWindow = [n, n];
+      this.navDrag = { mode: nav === 'new' ? 'e' : nav, x: n, start: [...this.navWindow] as [number, number] };
+      this.root.setPointerCapture(e.pointerId);
+      this.tip.style.opacity = '0';
+      return;
+    }
     // Marks that can be moved by hand (diagram boxes) take the press first.
     const L0 = this.layout;
     if (L0 && e.button === 0 && this.inPlot(p)) {
@@ -1578,6 +1768,16 @@ export class Chart {
 
   private onUp(e: PointerEvent): void {
     const p = this.local(e);
+    if (this.navDrag) {
+      this.navDrag = undefined;
+      this.root.releasePointerCapture(e.pointerId);
+      // A click without dragging shows everything again.
+      const [a, b] = this.navWindow;
+      if (b - a < 0.005) this.navWindow = [0, 1];
+      this.shareRange();
+      this.requestRender();
+      return;
+    }
     if (this.markDrag) {
       const { layer, moved } = this.markDrag;
       this.markDrag = undefined;
@@ -1669,6 +1869,7 @@ export class Chart {
     this.setPicked([]);
     this.tip.style.opacity = '0';
     this.emit('zoom', { ...z });
+    this.shareRange();
     this.requestRender();
   }
 

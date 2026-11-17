@@ -64,3 +64,42 @@ describe('venn', () => {
     expect(lens(a.r, b.r, d) / (Math.PI * a.r * a.r)).toBeCloseTo(0.2, 3);
   });
 });
+
+describe('density', () => {
+  const rows = Array.from({ length: 200 }, (_, i) => ({ v: 50 + ((i % 20) - 9.5) * 2 }));
+  it('fits a normal law whose area is 1', async () => {
+    const { applyTransforms } = await import('../src/data/transforms');
+    const t = applyTransforms(Table.from(rows), [{ type: 'density', field: 'v', method: 'normal', steps: 400 }]);
+    const x = t.column('v').values as Float64Array;
+    const d = t.column('density').values as Float64Array;
+    let area = 0;
+    for (let i = 1; i < t.length; i++) area += ((d[i] + d[i - 1]) / 2) * (x[i] - x[i - 1]);
+    expect(area).toBeCloseTo(0.997, 2);
+    // Peak at the mean.
+    expect(x[d.indexOf(Math.max(...d))]).toBeCloseTo(50, 0);
+  });
+  it('scales to counts with the histogram step', async () => {
+    const { applyTransforms } = await import('../src/data/transforms');
+    const a = applyTransforms(Table.from(rows), [{ type: 'density', field: 'v' }]);
+    const b = applyTransforms(Table.from(rows), [{ type: 'density', field: 'v', step: 5 }]);
+    const da = a.column('density').values as Float64Array;
+    const db = b.column('density').values as Float64Array;
+    expect(db[50] / da[50]).toBeCloseTo(200 * 5, 6);
+  });
+});
+
+describe('sync groups', () => {
+  it('reach every other member, not the sender, and forget members that leave', async () => {
+    const { joinGroup, leaveGroup, broadcast } = await import('../src/chart/sync');
+    const got: string[] = [];
+    const member = (name: string) => ({ syncHover: (x: number | null) => got.push(`${name}:${x}`), syncRange: () => {} });
+    const a = member('a'), b = member('b'), c = member('c');
+    for (const m of [a, b, c]) joinGroup('g', m);
+    broadcast('g', a, (m) => m.syncHover(5));
+    expect(got.sort()).toEqual(['b:5', 'c:5']);
+    leaveGroup('g', b);
+    got.length = 0;
+    broadcast('g', a, (m) => m.syncHover(null));
+    expect(got).toEqual(['c:null']);
+  });
+});

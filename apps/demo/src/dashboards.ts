@@ -12,6 +12,8 @@ export interface Card {
   spec: ChartSpec;
   /** Several small charts side by side (KPI tiles). */
   tiles?: ChartSpec[];
+  /** Tiles one above the other, with these heights in px (synchronized charts, a navigator). */
+  stack?: number[];
   /** Clicking a mark sets this filter. */
   filter?: keyof Filters;
   /** Show the hand-placed positions under a diagram. */

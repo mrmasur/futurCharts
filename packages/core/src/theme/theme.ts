@@ -92,6 +92,8 @@ export interface Theme {
       stroke: string;
       /** Size range in px when `size` is bound to a field. */
       sizeRange: [number, number];
+      /** Spread dots across their category slot (share of it, 0–1), so that equal values stay visible. */
+      jitter: number;
     };
     rule: { width: number; opacity: number };
     /** `length`: share of the category slot; `maxWidth`: cap in px (0 = none), to match a capped bar. */
@@ -137,7 +139,8 @@ export interface Theme {
     /** Bar chart race: `top` bars shown, `duration` ms per frame, start on its own, start over at the end. */
     race: { top: number; duration: number; autoplay: boolean; loop: boolean };
     /** Concentric bars around a center: `endAngle` degrees for the longest, `gap` share of a ring left empty. */
-    radialBar: { innerRadius: number; gap: number; endAngle: number; track: string; labels: boolean };
+    /** `labelColor`: ink of the values, `auto` for the primary text color (they sit on the track, past the bar). */
+    radialBar: { innerRadius: number; gap: number; endAngle: number; track: string; labels: boolean; labelColor: string };
     /** Partition in rows: `orientation` TB (icicle), BT (flame chart, root at the bottom) or LR. Click to zoom. */
     icicle: { orientation: 'TB' | 'BT' | 'LR'; gap: number; radius: number; labels: boolean };
     /** One dot per item on a half circle (seats of an assembly). `innerRadius`: share of the radius left empty. */
@@ -149,6 +152,21 @@ export interface Theme {
     /** Events along a line, labels alternating above and below. `proportional`: space them by date. */
     timeline: { proportional: boolean; markerSize: number };
     /** Hierarchy as a tree: dots (dendrogram) or `boxes` (org chart), growing along `direction`. Sizes in px. */
+    /** Arrows at x / y, pointing along `encode.angle`, as long as `encode.size` (within `sizeRange`, px). */
+    vector: { width: number; head: number };
+    /** Packed bubbles: `gap` px between bubbles; with `encode.color`, one cluster per group. */
+    bubbles: { gap: number; labels: boolean; opacity: number };
+    /** Nodes on a line, links as half circles above, as thick as their value (`maxWidth`, px). */
+    arcDiagram: { maxWidth: number; opacity: number; nodeSize: number };
+    /** Stages stacked in a triangle, apex at the top, heights by value. `gap` px between them. */
+    pyramid: { gap: number; labels: boolean };
+    /**
+     * Price bars: `ohlc` draws ticks instead of bodies. `rising` / `falling`: colors (`auto` = the KPI good / bad).
+     * `body`: share of the slot taken by a body; `wick`: px.
+     */
+    candlestick: { ohlc: boolean; rising: string; falling: string; body: number; wick: number };
+    /** Routes on a map from (x, y) to (x2, y2), bent by `curvature`; width from `encode.size` (`sizeRange`, px). */
+    route: { curvature: number; opacity: number; ends: boolean };
     tree: { direction: 'LR' | 'TB'; boxes: boolean; nodeSize: number; linkWidth: number; boxWidth: number; boxHeight: number };
     flow: {
       variant: 'pipeline' | 'boxes';
@@ -237,7 +255,7 @@ export const lightTheme: Theme = {
   marks: {
     line: { width: 2, curve: 'linear', opacity: 1, endLabels: false, dash: [], markers: false, labels: false, connectNulls: false },
     bar: { radius: 4, gap: 2, maxWidth: 28, bandPadding: 0.3, opacity: 1, strokeWidth: 0, stroke: 'transparent', labels: false, thickness: 0 },
-    point: { size: 8, shape: 'circle', opacity: 1, strokeWidth: 2, stroke: 'surface', sizeRange: [4, 28] },
+    point: { size: 8, shape: 'circle', opacity: 1, strokeWidth: 2, stroke: 'surface', sizeRange: [4, 28], jitter: 0 },
     area: { opacity: 0.12, stackedOpacity: 0.8, gradient: false, line: true, lineWidth: 2, curve: 'linear' },
     geoshape: { fill: '#e9e8e2', missing: '#e9e8e2', stroke: '#fcfcfb', strokeWidth: 0.75 },
     rule: { width: 1.5, opacity: 1 },
@@ -256,12 +274,18 @@ export const lightTheme: Theme = {
     rose: { levels: 3, gap: 2, innerRadius: 0.08, labels: true },
     violin: { width: 0.8, fillOpacity: 0.28, strokeWidth: 1.5, box: true, samples: 64, scale: 'width' },
     race: { top: 10, duration: 900, autoplay: true, loop: false },
-    radialBar: { innerRadius: 0.3, gap: 0.28, endAngle: 270, track: 'auto', labels: true },
+    radialBar: { innerRadius: 0.3, gap: 0.28, endAngle: 270, track: 'auto', labels: true, labelColor: 'auto' },
     icicle: { orientation: 'TB', gap: 1.5, radius: 3, labels: true },
     parliament: { innerRadius: 0.38, center: true },
     venn: { opacity: 0.3, labels: true },
     wordcloud: { minSize: 11, maxSize: 46, weight: 650 },
     timeline: { proportional: false, markerSize: 12 },
+    vector: { width: 1.5, head: 5 },
+    bubbles: { gap: 2, labels: true, opacity: 0.9 },
+    arcDiagram: { maxWidth: 14, opacity: 0.45, nodeSize: 10 },
+    pyramid: { gap: 3, labels: true },
+    candlestick: { ohlc: false, rising: 'auto', falling: 'auto', body: 0.7, wick: 1.25 },
+    route: { curvature: 0.25, opacity: 0.6, ends: true },
     tree: { direction: 'LR', boxes: false, nodeSize: 9, linkWidth: 1.5, boxWidth: 132, boxHeight: 46 },
     flow: { variant: 'pipeline', editable: true, direction: 'LR', rankGap: 56, nodeGap: 28, fontSize: 13, edge: 'auto', edgeWidth: 1.5, tint: 0.16, radius: 6 },
   },

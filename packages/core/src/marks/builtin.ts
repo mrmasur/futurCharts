@@ -7,6 +7,7 @@ import { EXTRA_MARKS } from './extra';
 import { MORE_MARKS } from './more';
 import { race } from './race';
 import { SHAPE_MARKS } from './shapes';
+import { CATALOG_MARKS } from './catalog';
 import { flow } from './flow';
 import { FLOW_MARKS } from './flows';
 import type { SeriesData } from './prepare';
@@ -51,7 +52,7 @@ function runs(s: SeriesData): [number, number][] {
 const slice = (p: { x: Float32Array; y: Float32Array }, [a, b]: [number, number]) => ({ x: p.x.subarray(a, b), y: p.y.subarray(a, b) });
 
 /** Width of one category slot in scale space: the band, or the smallest step on a continuous axis. */
-function slotWidth(ctx: BuildContext): number {
+export function slotWidth(ctx: BuildContext): number {
   return ctx.x.band > 0 ? ctx.x.band : ctx.xStep * (1 - (ctx.style.bandPadding ?? ctx.theme.marks.bar.bandPadding));
 }
 
@@ -244,11 +245,18 @@ const point: MarkDefinition = {
     for (const s of ctx.data.series) if (!s.hidden) n += s.x.length;
     const out = new Float32Array(n * LAYOUTS.point.stride);
     let k = 0;
+    // Jitter: a stable offset per row (the same at every rebuild), across the category slot.
+    const spread = style.jitter > 0 ? slotWidth(ctx) * Math.min(1, style.jitter) : 0;
+    const offset = (row: number) => {
+      if (!spread) return 0;
+      const h = Math.sin(row * 12.9898 + 78.233) * 43758.5453;
+      return (h - Math.floor(h) - 0.5) * spread;
+    };
     for (const s of ctx.data.series) {
       if (s.hidden) continue;
       for (let i = 0; i < s.x.length; i++) {
         const c = ctx.color(s, i);
-        const [x, y] = ctx.pos(ctx.x.norm(s.x[i]), ctx.y.norm(s.y1[i]));
+        const [x, y] = ctx.pos(ctx.x.norm(s.x[i]) + offset(s.rows[i]), ctx.y.norm(s.y1[i]));
         out[k++] = x;
         out[k++] = y;
         out[k++] = ctx.size(s, i);
@@ -266,7 +274,7 @@ const point: MarkDefinition = {
     }
     const batch = ctx.renderer.createBatch('point');
     batch.update(out, n);
-    return { draws: [{ batch, perDatum: true, data: out }], hit: buildHit(ctx) };
+    return { draws: [{ batch, perDatum: true, data: out }], hit: spread ? buildHit(ctx, (s, _si, i) => ctx.x.norm(s.x[i]) + offset(s.rows[i])) : buildHit(ctx) };
   },
 };
 
@@ -321,7 +329,7 @@ const tick: MarkDefinition = {
   },
 };
 
-const builtins: Record<string, MarkDefinition> = { line, area, bar, point, rule, tick, ...STANDALONE_MARKS, ...FLOW_MARKS, ...EXTRA_MARKS, ...MORE_MARKS, ...SHAPE_MARKS, flow, race };
+const builtins: Record<string, MarkDefinition> = { line, area, bar, point, rule, tick, ...STANDALONE_MARKS, ...FLOW_MARKS, ...EXTRA_MARKS, ...MORE_MARKS, ...SHAPE_MARKS, ...CATALOG_MARKS, flow, race };
 
 /**
  * Register the built-in marks. Called when a chart is created rather than at
