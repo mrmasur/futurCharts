@@ -14,7 +14,7 @@
 
 export type RGBA = [number, number, number, number];
 
-export type PrimitiveKind = 'rect' | 'point' | 'line' | 'mesh';
+export type PrimitiveKind = 'rect' | 'point' | 'line' | 'mesh' | 'arc';
 
 /**
  * Affine map from normalized scale space to CSS pixels:

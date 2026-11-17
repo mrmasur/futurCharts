@@ -3,7 +3,8 @@ import { LAYOUTS } from '../render/layouts';
 import { LinearScale } from '../scale/scales';
 import { parseColor, withAlpha } from '../util/color';
 import { batches, categoriesOf, need, share, totals } from './charts';
-import { pushRect, pushSegment, pushVertex } from './primitives';
+import { Tween } from './animate';
+import { pushArc, pushRect, pushSegment, pushVertex } from './primitives';
 import { emptyHit, type MarkDefinition, type MarkLabel, type ShapeHit } from './registry';
 
 const TAU = Math.PI * 2;
@@ -181,6 +182,8 @@ export const waffle: MarkDefinition = {
 /**
  * `rose`: one wedge per `key` around the circle, its area proportional to
  * `value`; with `color`, the series are stacked outwards in each wedge.
+ * Click a series to show it alone (animated), click it again or the center
+ * to bring the others back.
  */
 export const rose: MarkDefinition = {
   standalone: true,
@@ -196,93 +199,136 @@ export const rose: MarkDefinition = {
     const data = totals(table, kf, vf, sf);
     const seriesNames = [...new Set(data.map((d) => d.group))];
     const legend = (sf ? seriesNames : cats).map((k) => ({ key: k, color: ctx.categorical(k) }));
-    const visible = (sf ? seriesNames : cats).filter((k) => !ctx.hidden.has(k));
-    const stackTotal = (cat: string) =>
-      data.filter((d) => d.key === cat && (sf ? visible.includes(d.group) : visible.includes(cat))).reduce((a, d) => a + d.value, 0);
-    const max = Math.max(1e-9, ...cats.map(stackTotal));
+    const shown = (k: string) => !ctx.hidden.has(k);
     const R = 1;
     const r0 = style.innerRadius;
-    // Area-proportional: the eye reads the wedge's surface, so radius grows with √value.
-    const rad = (v: number) => r0 + (R - r0) * Math.sqrt(Math.max(0, v) / max);
-    const at = (a: number, r: number): [number, number] => [ctx.x.norm(Math.sin(a) * r), ctx.y.norm(Math.cos(a) * r)];
     const step = TAU / Math.max(1, cats.length);
-    const grid = parseColor(theme.grid.y.color);
-    const gridLines: number[] = [];
-    for (let l = 1; l <= style.levels; l++) {
-      const r = rad((max * l) / style.levels);
-      for (let k = 0; k < 120; k++) {
-        const [ax, ay] = at((TAU * k) / 120, r);
-        const [bx, by] = at((TAU * (k + 1)) / 120, r);
-        pushSegment(gridLines, ax, ay, bx, by, grid, 1);
-      }
-    }
-    const mesh: number[] = [];
-    const lines: number[] = [];
-    const labels: MarkLabel[] = [];
-    const wedges: { cat: string; series: string; r0: number; r1: number; a0: number; a1: number; value: number }[] = [];
-    cats.forEach((cat, k) => {
-      const a0 = k * step;
-      const a1 = a0 + step;
-      let cum = 0;
-      const parts = sf ? seriesNames.filter((s) => visible.includes(s)) : visible.includes(cat) ? [''] : [];
-      for (const s of parts) {
-        const v = data.find((d) => d.key === cat && d.group === s)?.value ?? 0;
-        if (v <= 0) continue;
-        const ri = rad(cum);
-        const ro = rad(cum + v);
-        const color = ctx.categorical(sf ? s : cat);
-        const steps = Math.max(2, Math.ceil(step / (Math.PI / 90)));
-        for (let j = 0; j < steps; j++) {
-          const t0 = a0 + (step * j) / steps;
-          const t1 = a0 + (step * (j + 1)) / steps;
-          const [ox0, oy0] = at(t0, ro);
-          const [ox1, oy1] = at(t1, ro);
-          const [ix0, iy0] = at(t0, ri);
-          const [ix1, iy1] = at(t1, ri);
-          pushVertex(mesh, ox0, oy0, color);
-          pushVertex(mesh, ox1, oy1, color);
-          pushVertex(mesh, ix0, iy0, color);
-          pushVertex(mesh, ix0, iy0, color);
-          pushVertex(mesh, ox1, oy1, color);
-          pushVertex(mesh, ix1, iy1, color);
+    // One segment per (category, series), in a fixed order so the tween can follow them.
+    const segments = cats.flatMap((cat) =>
+      (sf ? seriesNames : ['']).map((series) => ({
+        cat,
+        series,
+        value: data.find((d) => d.key === cat && d.group === series)?.value ?? 0,
+        color: ctx.categorical(sf ? series : cat),
+      })),
+    );
+    let focus = (ctx.state.focus as string | undefined) ?? undefined;
+    if (focus !== undefined && !seriesNames.includes(focus)) focus = undefined;
+
+    const visible = (s: (typeof segments)[number]) => (sf ? shown(s.series) && (focus === undefined || s.series === focus) : shown(s.cat));
+    const maxOf = () => Math.max(1e-9, ...cats.map((c) => segments.filter((s) => s.cat === c && visible(s)).reduce((a, s) => a + s.value, 0)));
+    /** Radii of every segment for the current focus; hidden ones fold into the center. */
+    const target = (): Float64Array => {
+      const max = maxOf();
+      // Area-proportional: the eye reads the wedge's surface, so radius grows with √value.
+      const rad = (v: number) => r0 + (R - r0) * Math.sqrt(Math.max(0, v) / max);
+      const out = new Float64Array(segments.length * 2);
+      const cum = new Map<string, number>();
+      segments.forEach((s, i) => {
+        if (!visible(s) || s.value <= 0) {
+          out.set([r0, r0], i * 2);
+          return;
         }
-        wedges.push({ cat, series: s, r0: ri, r1: ro, a0, a1, value: v });
-        cum += v;
+        const c = cum.get(s.cat) ?? 0;
+        out.set([rad(c), rad(c + s.value)], i * 2);
+        cum.set(s.cat, c + s.value);
+      });
+      return out;
+    };
+    const tween = new Tween(target());
+    const cx = ctx.x.norm(0);
+    const cy = ctx.y.norm(0);
+    const unit = ctx.x.norm(1) - ctx.x.norm(0);
+    const at = (a: number, r: number): [number, number] => [ctx.x.norm(Math.sin(a) * r), ctx.y.norm(Math.cos(a) * r)];
+
+    const arcs = ctx.renderer.createBatch('arc');
+    const grid = ctx.renderer.createBatch('line');
+    const write = () => {
+      const g = tween.current;
+      const out: number[] = [];
+      segments.forEach((s, i) => {
+        const k = cats.indexOf(s.cat);
+        pushArc(out, cx, cy, g[i * 2] * unit, g[i * 2 + 1] * unit, k * step, (k + 1) * step, style.gap, s.color);
+      });
+      arcs.update(new Float32Array(out), segments.length);
+    };
+    const writeGrid = () => {
+      const color = parseColor(theme.grid.y.color);
+      const lines: number[] = [];
+      for (let l = 1; l <= style.levels; l++) {
+        const r = r0 + (R - r0) * Math.sqrt(l / style.levels);
+        for (let k = 0; k < 120; k++) {
+          const [ax, ay] = at((TAU * k) / 120, r);
+          const [bx, by] = at((TAU * (k + 1)) / 120, r);
+          pushSegment(lines, ax, ay, bx, by, color, 1);
+        }
       }
-      if (style.gap > 0) {
-        const [sx0, sy0] = at(a0, r0);
-        const [sx1, sy1] = at(a0, R + 0.02);
-        pushSegment(lines, sx0, sy0, sx1, sy1, ctx.surface, style.gap);
-      }
-      if (style.labels) {
-        const mid = a0 + step / 2;
+      grid.update(new Float32Array(lines), lines.length / LAYOUTS.line.stride);
+    };
+    write();
+    writeGrid();
+
+    const labels: MarkLabel[] = [];
+    if (style.labels) {
+      cats.forEach((cat, k) => {
+        const mid = k * step + step / 2;
         const sx = Math.sin(mid);
-        const cy = Math.cos(mid);
+        const sy = Math.cos(mid);
         const [lx, ly] = at(mid, R + 0.07);
         labels.push({
           tx: lx, ty: ly, text: cat, color: theme.text.secondary, size: 11,
           align: Math.abs(sx) < 0.2 ? 'center' : sx > 0 ? 'left' : 'right',
-          baseline: Math.abs(cy) < 0.2 ? 'middle' : cy > 0 ? 'bottom' : 'top',
+          baseline: Math.abs(sy) < 0.2 ? 'middle' : sy > 0 ? 'bottom' : 'top',
         });
-      }
-    });
-    const gridBatch = ctx.renderer.createBatch('line');
-    gridBatch.update(new Float32Array(gridLines), gridLines.length / LAYOUTS.line.stride);
+      });
+    }
+
+    const polar = (tx: number, ty: number) => {
+      const x = ctx.x.invert(tx);
+      const y = ctx.y.invert(ty);
+      return { r: Math.hypot(x, y), a: (Math.atan2(x, y) + TAU) % TAU };
+    };
+    const hit = (tx: number, ty: number) => {
+      const { r, a } = polar(tx, ty);
+      const k = Math.floor(a / step);
+      const g = tween.current;
+      const i = segments.findIndex((s, j) => cats.indexOf(s.cat) === k && r >= g[j * 2] && r < g[j * 2 + 1]);
+      return i >= 0 ? segments[i] : undefined;
+    };
+    const stackTotal = (cat: string) => segments.filter((s) => s.cat === cat && visible(s)).reduce((a, s) => a + s.value, 0);
     return {
-      draws: [{ batch: gridBatch }, ...batches(ctx, [], mesh, lines)],
+      draws: [{ batch: grid }, { batch: arcs }],
       hit: emptyHit(),
       labels,
       legend,
       pick(tx, ty): ShapeHit | null {
-        const x = ctx.x.invert(tx);
-        const y = ctx.y.invert(ty);
-        const r = Math.hypot(x, y);
-        const a = (Math.atan2(x, y) + TAU) % TAU;
-        const w = wedges.find((m) => a >= m.a0 && a < m.a1 && r >= m.r0 && r <= m.r1);
-        if (!w) return null;
-        const rows = [{ label: ctx.fields[vf]?.label ?? vf, value: ctx.format(w.value, vf) }];
-        if (sf) rows.push({ label: 'Total', value: ctx.format(stackTotal(w.cat), vf) });
-        return { title: sf ? `${w.cat} · ${w.series}` : w.cat, rows };
+        if (polar(tx, ty).r < r0 + 0.04 && focus !== undefined) return { title: '↑ Toutes les séries', rows: [] };
+        const s = hit(tx, ty);
+        if (!s) return null;
+        const rows = [{ label: ctx.fields[vf]?.label ?? vf, value: ctx.format(s.value, vf) }];
+        if (sf && focus === undefined) rows.push({ label: 'Total', value: ctx.format(stackTotal(s.cat), vf) });
+        return { title: sf ? `${s.cat} · ${s.series}` : s.cat, rows };
+      },
+      click(tx, ty) {
+        if (!sf) return undefined;
+        const inCenter = polar(tx, ty).r < r0 + 0.04;
+        const s = inCenter ? undefined : hit(tx, ty);
+        let next: string | undefined;
+        if (inCenter) next = undefined;
+        else if (!s) return undefined;
+        else next = focus === s.series ? undefined : s.series;
+        if (next === focus) return undefined;
+        focus = next;
+        ctx.state.focus = focus;
+        tween.go(target(), performance.now());
+        return focus === undefined ? [] : [focus];
+      },
+      muted: () => (focus === undefined ? [] : seriesNames.filter((n) => n !== focus)),
+      animate(now) {
+        if (!tween.moving) return false;
+        tween.step(now);
+        write();
+        return true;
       },
     };
   },

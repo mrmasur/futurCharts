@@ -202,7 +202,57 @@ const MESH_FS = FS_COMMON + /* glsl */ `
 in vec4 v_color;
 void main() { outColor = premul(v_color) * u_opacity; }`;
 
+const ARC_VS = VS_COMMON + /* glsl */ `
+layout(location=0) in vec4 a_arc;
+layout(location=1) in vec4 a_angles;
+layout(location=2) in vec4 a_fill;
+out vec2 v_p;
+flat out vec4 v_geo;   // r0, r1 (px), a0, a1
+flat out float v_gap;
+flat out vec4 v_fill;
+void main() {
+  vec2 center = toPx(a_arc.xy);
+  float scale = abs(u_t.x);
+  float r1 = a_arc.w * scale;
+  float ext = r1 + 2.0;
+  vec2 off = (corner() * 2.0 - 1.0) * ext;
+  v_p = off;
+  v_geo = vec4(a_arc.z * scale, r1, a_angles.x, a_angles.y);
+  v_gap = a_angles.z;
+  v_fill = a_fill;
+  gl_Position = toClip(center + off);
+}`;
+
+const ARC_FS = FS_COMMON + /* glsl */ `
+in vec2 v_p;
+flat in vec4 v_geo;
+flat in float v_gap;
+flat in vec4 v_fill;
+const float TAU = 6.28318530718;
+void main() {
+  float d = length(v_p);
+  float sweep = v_geo.w - v_geo.z;
+  if (sweep <= 0.0 || v_geo.y <= v_geo.x) discard;
+  float halfGap = v_gap * 0.5;
+  // Radial edges; a ring that starts at the center has no inner edge.
+  float sdRad = v_geo.y - halfGap - d;
+  if (v_geo.x > 0.0) sdRad = min(sdRad, d - v_geo.x - halfGap);
+  float sd = sdRad;
+  if (sweep < TAU - 1e-4) {
+    // Clockwise angle from 12 o'clock (screen y points down).
+    float ang = atan(v_p.x, -v_p.y);
+    float rel = mod(ang - v_geo.z, TAU);
+    // Distances along the arc, in px, to the two angular edges.
+    float sdAng = rel <= sweep ? min(rel, sweep - rel) * d : -min(rel - sweep, TAU - rel) * d;
+    sd = min(sd, sdAng - halfGap);
+  }
+  float a = clamp(0.5 + sd * u_dpr, 0.0, 1.0);
+  if (a <= 0.0) discard;
+  outColor = premul(v_fill) * a * u_opacity;
+}`;
+
 export const SHADERS: Record<PrimitiveKind, { vs: string; fs: string }> = {
+  arc: { vs: ARC_VS, fs: ARC_FS },
   rect: { vs: RECT_VS, fs: RECT_FS },
   point: { vs: POINT_VS, fs: POINT_FS },
   line: { vs: LINE_VS, fs: LINE_FS },

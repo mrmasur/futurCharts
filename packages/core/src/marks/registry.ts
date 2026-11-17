@@ -43,6 +43,8 @@ export interface BuildContext {
   format(value: number, field?: string): string;
   /** Size of one CSS pixel in scale space at the current size, unzoomed. */
   pixel: [number, number];
+  /** State that survives rebuilds of this layer (resize, data refresh): drill-down focus, filters. */
+  state: Record<string, unknown>;
 }
 
 /**
@@ -124,6 +126,15 @@ export interface BuiltMark {
   legend?: { key: string; color: RGBA }[];
   /** Hit-test a position in scale space, for marks that are areas rather than data points. */
   pick?(tx: number, ty: number): ShapeHit | null;
+  /**
+   * A click at a position in scale space. Return the new focus path (`[]` for
+   * everything) when the mark handled it, `undefined` otherwise.
+   */
+  click?(tx: number, ty: number): string[] | undefined;
+  /** Advance the mark's own animation to `now`; true while it is still moving. */
+  animate?(now: number): boolean;
+  /** Legend entries to show dimmed because the mark's own focus leaves them out. */
+  muted?(): string[];
 }
 
 export interface MarkDefinition {

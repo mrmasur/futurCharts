@@ -19,7 +19,7 @@ export interface ChartHandle {
   destroy(): void;
 }
 
-const EVENTS: (keyof ChartEvents)[] = ['hover', 'leave', 'click', 'zoom', 'legend', 'select'];
+const EVENTS: (keyof ChartEvents)[] = ['hover', 'leave', 'click', 'zoom', 'legend', 'select', 'drill'];
 
 /**
  * Lifecycle glue shared by every framework wrapper. Chart creation is async,

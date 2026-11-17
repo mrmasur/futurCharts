@@ -451,7 +451,7 @@ const entries: Entry[] = [
   },
   {
     title: 'Sunburst',
-    caption: 'sunburst · path: [région, pays, ville]',
+    caption: 'sunburst · cliquez une région ou un pays pour zoomer (animé), le centre pour remonter',
     spec: {
       title: 'Ventes par région, pays et ville',
       data: geoSales,
@@ -604,7 +604,7 @@ const entries: Entry[] = [
   },
   {
     title: 'Rose polaire',
-    caption: 'rose · aire proportionnelle à la valeur · séries empilées vers l’extérieur',
+    caption: 'rose · cliquez une force de vent pour l’isoler (animé), à nouveau ou au centre pour tout revoir',
     spec: {
       title: 'Rose des vents',
       subtitle: 'Heures par direction et force',

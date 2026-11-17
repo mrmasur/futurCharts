@@ -42,6 +42,21 @@ export function pushSegment(out: number[], x0: number, y0: number, x1: number, y
   out.push(x0, y0, x1, y1, color[0], color[1], color[2], color[3], width);
 }
 
+/** One annular sector: center and radii in scale space (radii along x), angles clockwise from 12 o'clock. */
+export function pushArc(
+  out: number[],
+  cx: number,
+  cy: number,
+  r0: number,
+  r1: number,
+  a0: number,
+  a1: number,
+  gap: number,
+  fill: RGBA,
+): void {
+  out.push(cx, cy, r0, r1, a0, a1, gap, 0, fill[0], fill[1], fill[2], fill[3]);
+}
+
 export function pushVertex(out: number[], x: number, y: number, c: RGBA): void {
   out.push(x, y, c[0], c[1], c[2], c[3]);
 }

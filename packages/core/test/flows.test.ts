@@ -1,3 +1,4 @@
+import { Tween } from '../src/marks/animate';
 import { Table } from '../src/data/table';
 import { apportion } from '../src/marks/extra';
 import { prepareLayer } from '../src/marks/prepare';
@@ -74,5 +75,26 @@ describe('theme color tokens', () => {
     expect(themeColor(darkTheme, '$ink')).toBe(darkTheme.text.primary);
     expect(themeColor(lightTheme, '$2')).toBe(lightTheme.palette.categorical[1]);
     expect(themeColor(lightTheme, '#123456')).toBe('#123456');
+  });
+});
+
+
+describe('tween', () => {
+  it('moves from the current state to the target and lands on it exactly', () => {
+    const t = new Tween(Float64Array.from([0, 10]));
+    t.go(Float64Array.from([1, 20]), 0, 100);
+    expect(t.moving).toBe(true);
+    expect(t.step(50)).toBe(true);
+    expect(t.current[0]).toBeCloseTo(0.5);
+    expect(t.step(100)).toBe(false);
+    expect([...t.current]).toEqual([1, 20]);
+    expect(t.moving).toBe(false);
+  });
+  it('restarts from where it is when retargeted mid-way', () => {
+    const t = new Tween(Float64Array.from([0]));
+    t.go(Float64Array.from([10]), 0, 100);
+    t.step(50);
+    t.go(Float64Array.from([0]), 50, 100);
+    expect(t.current[0]).toBeCloseTo(5);
   });
 });

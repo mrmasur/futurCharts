@@ -4,7 +4,8 @@ import type { RGBA } from '../render/types';
 import { BandScale, LinearScale } from '../scale/scales';
 import { mix, parseColor, withAlpha } from '../util/color';
 import { batches, need, share } from './charts';
-import { pushRect, pushSegment, pushVertex } from './primitives';
+import { Tween } from './animate';
+import { pushArc, pushRect, pushVertex } from './primitives';
 import { emptyHit, type MarkDefinition, type MarkLabel, type ShapeHit } from './registry';
 
 const TAU = Math.PI * 2;
@@ -273,12 +274,19 @@ interface SunNode {
   depth: number;
   children: Map<string, SunNode>;
   parent?: SunNode;
+  /** Angles in the full, unzoomed tree. */
   a0: number;
   a1: number;
   color: RGBA;
+  /** Index into the tween (4 values: a0, a1, r0, r1). */
+  slot: number;
 }
 
-/** `sunburst`: a hierarchy (`path`, outermost level first) as nested rings, sized by `value`. */
+/**
+ * `sunburst`: a hierarchy (`path`, outermost level first) as nested rings,
+ * sized by `value`. Click a segment to zoom into it (animated), click the
+ * center to go back up. The focus survives resizes and data refreshes.
+ */
 export const sunburst: MarkDefinition = {
   standalone: true,
   symbol: 'square',
@@ -291,7 +299,7 @@ export const sunburst: MarkDefinition = {
     const vf = layer.encode.value ?? need(layer, 'y', 'sunburst');
     const levels = path.map((f) => table.column(f).values);
     const values = table.column(vf).values as Float64Array;
-    const root: SunNode = { name: '', path: [], value: 0, depth: 0, children: new Map(), a0: 0, a1: TAU, color: ctx.surface };
+    const root: SunNode = { name: '', path: [], value: 0, depth: 0, children: new Map(), a0: 0, a1: TAU, color: ctx.surface, slot: -1 };
     const topNames: string[] = [];
     for (let i = 0; i < table.length; i++) {
       const v = values[i];
@@ -304,22 +312,18 @@ export const sunburst: MarkDefinition = {
       for (let d = 0; d < path.length; d++) {
         const name = String(levels[d][i]);
         let c = n.children.get(name);
-        if (!c) n.children.set(name, (c = { name, path: [...n.path, name], value: 0, depth: d + 1, children: new Map(), parent: n, a0: 0, a1: 0, color: ctx.surface }));
+        if (!c) {
+          c = { name, path: [...n.path, name], value: 0, depth: d + 1, children: new Map(), parent: n, a0: 0, a1: 0, color: ctx.surface, slot: -1 };
+          n.children.set(name, c);
+        }
         c.value += v;
         n = c;
       }
     }
     const D = path.length;
-    const R = 0.98;
-    const r0 = R * style.innerRadius;
-    const ring = (d: number): [number, number] => [r0 + ((R - r0) * (d - 1)) / D, r0 + ((R - r0) * d) / D];
-    const at = (a: number, r: number): [number, number] => [ctx.x.norm(Math.sin(a) * r), ctx.y.norm(Math.cos(a) * r)];
+    // Color slots follow the entities in data order, never their rank: register them before sorting.
     const legend = topNames.map((n) => ({ key: n, color: ctx.categorical(n) }));
-    const mesh: number[] = [];
-    const lines: number[] = [];
-    const labels: MarkLabel[] = [];
     const all: SunNode[] = [];
-
     const layout = (n: SunNode) => {
       let a = n.a0;
       // Biggest first, like the slices of a pie.
@@ -329,93 +333,148 @@ export const sunburst: MarkDefinition = {
         a = c.a1;
         // Inner levels take their branch's hue, lighter with depth.
         c.color = c.depth === 1 ? ctx.categorical(c.name) : mix(n.color, ctx.surface, 0.24);
+        c.slot = all.length;
         all.push(c);
         layout(c);
       }
     };
     layout(root);
 
-    for (const n of all) {
-      const [ri, ro] = ring(n.depth);
-      const sweep = n.a1 - n.a0;
-      const steps = Math.max(1, Math.ceil(sweep / (Math.PI / 90)));
-      for (let k = 0; k < steps; k++) {
-        const t0 = n.a0 + (sweep * k) / steps;
-        const t1 = n.a0 + (sweep * (k + 1)) / steps;
-        const [ox0, oy0] = at(t0, ro);
-        const [ox1, oy1] = at(t1, ro);
-        const [ix0, iy0] = at(t0, ri);
-        const [ix1, iy1] = at(t1, ri);
-        pushVertex(mesh, ox0, oy0, n.color);
-        pushVertex(mesh, ox1, oy1, n.color);
-        pushVertex(mesh, ix0, iy0, n.color);
-        pushVertex(mesh, ix0, iy0, n.color);
-        pushVertex(mesh, ox1, oy1, n.color);
-        pushVertex(mesh, ix1, iy1, n.color);
+    const R = 0.98;
+    const hole = R * style.innerRadius;
+    const find = (p: string[]) => {
+      let n: SunNode | undefined = root;
+      for (const k of p) n = n?.children.get(k);
+      return n ?? root;
+    };
+    let focus = find((ctx.state.focus as string[] | undefined) ?? []);
+
+    /** Geometry of every segment when `f` fills the circle: its subtree spread over 360°, ancestors folded into the hole. */
+    const target = (f: SunNode): Float64Array => {
+      const out = new Float64Array(all.length * 4);
+      const rings = Math.max(1, D - f.depth);
+      const span = f.a1 - f.a0 || 1;
+      for (const n of all) {
+        const a0 = Math.min(TAU, Math.max(0, ((n.a0 - f.a0) / span) * TAU));
+        const a1 = Math.min(TAU, Math.max(0, ((n.a1 - f.a0) / span) * TAU));
+        const dd = n.depth - f.depth;
+        const r0 = dd <= 0 ? hole : hole + ((R - hole) * (dd - 1)) / rings;
+        const r1 = dd <= 0 ? hole : hole + ((R - hole) * dd) / rings;
+        out.set([a0, a1, r0, r1], n.slot * 4);
       }
-      // Surface-colored separators: radial at each segment start.
-      if (style.gap > 0 && sweep < TAU - 1e-6) {
-        const [sx0, sy0] = at(n.a0, ri);
-        const [sx1, sy1] = at(n.a0, ro + 0.01);
-        pushSegment(lines, sx0, sy0, sx1, sy1, ctx.surface, style.gap);
+      return out;
+    };
+    const tween = new Tween(target(focus));
+    const cx = ctx.x.norm(0);
+    const cy = ctx.y.norm(0);
+    const unit = ctx.x.norm(1) - ctx.x.norm(0);
+    const batch = ctx.renderer.createBatch('arc');
+    const labels: MarkLabel[] = [];
+
+    const write = () => {
+      const g = tween.current;
+      const out: number[] = [];
+      for (const n of all) {
+        const k = n.slot * 4;
+        pushArc(out, cx, cy, g[k + 2] * unit, g[k + 3] * unit, g[k], g[k + 1], style.gap, n.color);
       }
+      batch.update(new Float32Array(out), all.length);
+    };
+    const placeLabels = () => {
+      labels.length = 0;
+      if (tween.moving) return; // no text while segments move
+      const g = tween.current;
+      const at = (a: number, r: number): [number, number] => [ctx.x.norm(Math.sin(a) * r), ctx.y.norm(Math.cos(a) * r)];
       if (style.labels) {
-        const mid = (n.a0 + n.a1) / 2;
-        const rm = (ri + ro) / 2;
-        // Room along the arc (chord) and across the ring, projected on the screen axes.
-        const along = Math.sin(Math.min(sweep / 2, Math.PI / 2)) * rm * 0.92;
-        const across = ((ro - ri) / 2) * 0.92;
-        const sx = Math.abs(Math.sin(mid));
-        const cy = Math.abs(Math.cos(mid));
-        const hw = Math.max(along * cy, across * sx) + Math.min(along * cy, across * sx) * 0.4;
-        const hh = Math.max(along * sx, across * cy) * 0.6;
-        const [lx, ly] = at(mid, rm);
-        const px = Math.sin(mid) * rm;
-        const py = Math.cos(mid) * rm;
-        labels.push({
-          tx: lx, ty: ly, text: n.name, on: n.color, align: 'center', baseline: 'middle', size: 11, weight: n.depth === 1 ? 600 : 500,
-          box: [ctx.x.norm(px - hw), ctx.y.norm(py - hh), ctx.x.norm(px + hw), ctx.y.norm(py + hh)],
-        });
-      }
-    }
-    // Rings: surface-colored circles between levels.
-    if (style.gap > 0) {
-      for (let d = 1; d < D; d++) {
-        const r = ring(d)[1];
-        for (let k = 0; k < 180; k++) {
-          const [ax, ay] = at((TAU * k) / 180, r);
-          const [bx, by] = at((TAU * (k + 1)) / 180, r);
-          pushSegment(lines, ax, ay, bx, by, ctx.surface, style.gap);
+        for (const n of all) {
+          const k = n.slot * 4;
+          const [a0, a1, ri, ro] = [g[k], g[k + 1], g[k + 2], g[k + 3]];
+          const sweep = a1 - a0;
+          if (sweep <= 0.01 || ro - ri <= 0.001) continue;
+          const mid = (a0 + a1) / 2;
+          const rm = (ri + ro) / 2;
+          // Room along the arc (chord) and across the ring, projected on the screen axes.
+          const along = Math.sin(Math.min(sweep / 2, Math.PI / 2)) * rm * 0.92;
+          const across = ((ro - ri) / 2) * 0.92;
+          const sx = Math.abs(Math.sin(mid));
+          const sy = Math.abs(Math.cos(mid));
+          const hw = Math.max(along * sy, across * sx) + Math.min(along * sy, across * sx) * 0.4;
+          const hh = Math.max(along * sx, across * sy) * 0.6;
+          const [lx, ly] = at(mid, rm);
+          const px = Math.sin(mid) * rm;
+          const py = Math.cos(mid) * rm;
+          labels.push({
+            tx: lx, ty: ly, text: n.name, on: n.color, align: 'center', baseline: 'middle', size: 11, weight: n.depth - focus.depth === 1 ? 600 : 500,
+            box: [ctx.x.norm(px - hw), ctx.y.norm(py - hh), ctx.x.norm(px + hw), ctx.y.norm(py + hh)],
+          });
         }
       }
-    }
-    if (r0 > 0.15) {
-      const [cx, cy] = at(0, 0);
-      // Only inside the hole: a wide, short box fits a one-line total.
-      const box: [number, number, number, number] = [ctx.x.norm(-r0 * 0.9), ctx.y.norm(-r0 * 0.5), ctx.x.norm(r0 * 0.9), ctx.y.norm(r0 * 0.5)];
-      // The total alone: a caption without its number would read as noise when the number does not fit.
-      labels.push({ tx: cx, ty: cy, text: ctx.format(root.value, vf), color: theme.text.primary, size: 14, weight: 650, align: 'center', baseline: 'middle', box });
-    }
+      // Center: the focus and its total, only if they fit in the hole.
+      const box: [number, number, number, number] = [ctx.x.norm(-hole * 0.9), ctx.y.norm(-hole * 0.6), ctx.x.norm(hole * 0.9), ctx.y.norm(hole * 0.6)];
+      if (focus !== root) labels.push({ tx: cx, ty: cy, text: focus.name, color: theme.text.primary, size: 13, weight: 650, align: 'center', baseline: 'bottom', dy: -1, box });
+      labels.push({
+        tx: cx, ty: cy, text: ctx.format(focus.value, vf), color: focus === root ? theme.text.primary : theme.text.secondary,
+        size: focus === root ? 14 : 12, weight: focus === root ? 650 : 500, align: 'center', baseline: focus === root ? 'middle' : 'top', dy: focus === root ? 0 : 3, box,
+      });
+    };
+    write();
+    placeLabels();
+
+    const polar = (tx: number, ty: number) => {
+      const x = ctx.x.invert(tx);
+      const y = ctx.y.invert(ty);
+      return { r: Math.hypot(x, y), a: (Math.atan2(x, y) + TAU) % TAU };
+    };
+    const hit = (tx: number, ty: number) => {
+      const { r, a } = polar(tx, ty);
+      const g = tween.current;
+      return all.find((n) => {
+        const k = n.slot * 4;
+        return a >= g[k] && a < g[k + 1] && r >= g[k + 2] && r < g[k + 3] && g[k + 3] - g[k + 2] > 1e-6;
+      });
+    };
+    const label = ctx.fields[vf]?.label ?? vf;
     return {
-      draws: batches(ctx, [], mesh, lines),
+      draws: [{ batch }],
       hit: emptyHit(),
       labels,
       legend,
-      pick(px, py): ShapeHit | null {
-        const x = ctx.x.invert(px);
-        const y = ctx.y.invert(py);
-        const r = Math.hypot(x, y);
-        if (r < r0 || r > R) return null;
-        const depth = Math.min(D, Math.floor(((r - r0) / (R - r0)) * D) + 1);
-        const a = (Math.atan2(x, y) + TAU) % TAU;
-        const n = all.find((m) => m.depth === depth && a >= m.a0 && a < m.a1);
+      pick(tx, ty): ShapeHit | null {
+        const { r } = polar(tx, ty);
+        if (r < hole) return focus === root ? null : { title: `↑ ${focus.parent && focus.parent !== root ? focus.parent.name : 'Tout afficher'}`, rows: [] };
+        const n = hit(tx, ty);
         if (!n) return null;
         const rows = [
-          { label: ctx.fields[vf]?.label ?? vf, value: ctx.format(n.value, vf) },
+          { label, value: ctx.format(n.value, vf) },
           { label: 'Part du total', value: share(n.value, root.value) },
         ];
         if (n.parent && n.parent !== root) rows.push({ label: `Part de ${n.parent.name}`, value: share(n.value, n.parent.value) });
         return { title: n.path.join(' › '), rows };
+      },
+      click(tx, ty) {
+        const { r } = polar(tx, ty);
+        let next: SunNode | undefined;
+        if (r < hole) next = focus === root ? undefined : (focus.parent ?? root);
+        else {
+          const n = hit(tx, ty);
+          // A leaf zooms on its parent; clicking the focus' own ring again does nothing new.
+          if (n) next = n.children.size ? n : (n.parent ?? root);
+        }
+        if (!next || next === focus) return undefined;
+        focus = next;
+        ctx.state.focus = focus.path;
+        tween.go(target(focus), performance.now());
+        placeLabels();
+        return focus.path;
+      },
+      muted: () => (focus === root ? [] : topNames.filter((n) => n !== focus.path[0])),
+      animate(now) {
+        if (!tween.moving) return false;
+        const more = tween.step(now);
+        write();
+        if (!more) placeLabels();
+        // One more frame after the last step, so the labels get drawn.
+        return true;
       },
     };
   },

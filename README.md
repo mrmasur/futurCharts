@@ -68,6 +68,17 @@ Démo complète : `apps/demo/gallery.html` (`http://localhost:5273/gallery.html`
 | Empilements | `stack: true`, `stack: "normalize"` (100 %), `stack: "center"` (streamgraph) |
 | Compositions | classement (`scales.y.reverse`), pente et étiquettes de fin de ligne (`style.endLabels`), puces (bullet), haltères, chandeliers |
 
+### Exploration animée
+
+Un clic sur un segment du `sunburst` zoome sur cette branche, un clic au centre remonte d'un niveau. Un clic sur
+une série de la `rose` l'isole, un second clic (ou le centre) ramène les autres. Les transitions durent 650 ms et
+sont immédiates si le système demande moins d'animations. L'événement `drill` (`onDrill` en React, `@drill` en
+Vue, `chart-drill` pour le Web Component) donne le chemin choisi, pour filtrer les autres graphiques d'un tableau
+de bord. Le focus survit au redimensionnement et aux changements de données ou de thème.
+
+Ces deux marques s'appuient sur la primitive `arc` (secteur d'anneau) : une animation n'y fait varier que quatre
+nombres par segment, sans recalculer de géométrie.
+
 ### Épaisseur et couleur des barres
 
 ```json
@@ -158,6 +169,12 @@ Le conteneur doit avoir une hauteur. En Ember classique (templates `.hbs`), rée
 
 Conséquences sur l'architecture : une clé d'identité par donnée pour apparier deux états, et une interpolation
 faite sur GPU entre deux états de buffer, pilotée par un uniform de progression.
+
+## Prévu : diagrammes de flux
+
+Des boîtes reliées pour tracer un processus de bout en bout : début et fin, embranchements, boucles. À la différence
+du Sankey, les liens ne sont pas proportionnels à un volume : il faut un placement de graphe orienté qui gère les
+cycles, des liens routés avec flèches et des formes de nœuds (étape, décision, début / fin).
 
 ## Pas encore fait
 

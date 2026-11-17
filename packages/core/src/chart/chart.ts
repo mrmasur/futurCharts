@@ -58,6 +58,8 @@ export interface ChartEvents {
   zoom: { kx: number; ky: number; tx: number; ty: number };
   legend: { series: string; hidden: boolean };
   select: SelectionPayload;
+  /** A drill-down mark (sunburst, rose) changed its focus. `path` is empty when back to everything. */
+  drill: { layer: number; path: string[] };
 }
 
 interface Zoom {
@@ -172,6 +174,8 @@ export class Chart {
   private aspect?: number;
   private lasso?: { points: Point[]; additive: boolean; rect: boolean };
   private shape?: ShapeHit;
+  /** Per-layer state kept across rebuilds (drill-down focus…). */
+  private layerState = new Map<number, Record<string, unknown>>();
   private frame = 0;
   private destroyed = false;
 
@@ -223,6 +227,9 @@ export class Chart {
 
   /** Replace the spec and recompile. */
   update(spec: ChartSpec): void {
+    // Keep drill-down states when the layers are the same marks (theme or data change).
+    const same = spec.layers.length === this.spec.layers.length && spec.layers.every((l, i) => l.mark === this.spec.layers[i].mark);
+    if (!same) this.layerState.clear();
     this.spec = spec;
     this.theme = resolveTheme(spec.theme);
     this.zoom = { kx: 1, ky: 1, tx: 0, ty: 0 };
@@ -549,6 +556,7 @@ export class Chart {
           fields,
           hidden: this.hidden,
           pixel: [1 / Math.max(1, view.width), 1 / Math.max(1, view.height)],
+          state: this.stateOf(data.index),
           categorical,
           format: (v, field = layerValue) => numberFormatter(fields[field ?? '']?.format ?? axisFormat)(v),
           ramp: (t) => sampleRamp(ramp, t),
@@ -599,6 +607,12 @@ export class Chart {
     this.renderer.resize(this.width, this.height, this.dpr);
     this.overlay.width = Math.round(this.width * this.dpr);
     this.overlay.height = Math.round(this.height * this.dpr);
+  }
+
+  private stateOf(layer: number): Record<string, unknown> {
+    let s = this.layerState.get(layer);
+    if (!s) this.layerState.set(layer, (s = {}));
+    return s;
   }
 
   /** Install the map scales and return the aspect ratio (width / height) to keep. */
@@ -765,6 +779,11 @@ export class Chart {
       const y1 = Math.min(plot.y + plot.height, T.oy);
       clip = { x: x0, y: y0, width: Math.max(0, x1 - x0), height: Math.max(0, y1 - y0) };
     }
+    // Marks that animate themselves (drill-down) advance before drawing.
+    const now = performance.now();
+    let animating = false;
+    for (const b of this.built) if (b.mark.animate?.(now)) animating = true;
+
     // With a selection, selectable marks are dimmed and the selected ones redrawn on top.
     const selecting = this.built.some((b) => b.sel);
     for (const b of this.built) {
@@ -776,6 +795,7 @@ export class Chart {
     }
     this.renderer.render({ clearColor: parseColor(theme.background), calls });
     this.drawOverlay(L);
+    if (animating) this.requestRender();
   }
 
   private drawOverlay(L: Layout): void {
@@ -808,10 +828,11 @@ export class Chart {
       const l = theme.legend;
       ctx.font = font(l.label.weight, l.label.size, ff);
       ctx.textBaseline = 'middle';
+      const muted = new Set(this.built.flatMap((b) => b.mark.muted?.() ?? []));
       for (const e of this.legend) {
         const r = e.rect!;
         const cy = r.y + r.height / 2;
-        ctx.globalAlpha = this.hidden.has(e.key) ? l.hiddenOpacity : 1;
+        ctx.globalAlpha = this.hidden.has(e.key) || muted.has(e.key) ? l.hiddenOpacity : 1;
         ctx.fillStyle = toCss(e.color);
         if (e.symbol === 'line') {
           ctx.fillRect(r.x, cy - 1, l.symbolSize + 2, 2);
@@ -1223,6 +1244,7 @@ export class Chart {
     if (this.spec.interactions?.tooltip === false) return;
     const picked = this.pick(p);
     this.shape = picked.length ? undefined : this.pickShape(p);
+    if (this.shape && this.built.some((b) => b.mark.click)) this.root.style.cursor = 'pointer';
     this.setPicked(picked);
     this.showTooltip(p);
     if (picked.length) this.emit('hover', { items: this.describe(picked), x: p.x, y: p.y });
@@ -1291,6 +1313,21 @@ export class Chart {
       const visibleCount = this.legend.filter((l) => !this.hidden.has(l.key)).length;
       if (this.hidden.has(entry.key) || visibleCount > 1) this.toggleSeries(entry.key);
       return;
+    }
+    // Drill-down marks handle their own clicks, topmost layer first.
+    const L = this.layout;
+    if (L && this.inPlot(p)) {
+      const tx = (p.x - L.transform.ox) / L.transform.sx;
+      const ty = (p.y - L.transform.oy) / L.transform.sy;
+      for (let i = this.built.length - 1; i >= 0; i--) {
+        const path = this.built[i].mark.click?.(tx, ty);
+        if (path === undefined) continue;
+        this.shape = undefined;
+        this.tip.style.opacity = '0';
+        this.emit('drill', { layer: i, path });
+        this.requestRender();
+        return;
+      }
     }
     const picked = this.pick(p);
     if (picked.length) this.emit('click', { items: this.describe(picked), x: p.x, y: p.y });

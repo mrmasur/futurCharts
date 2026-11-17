@@ -71,6 +71,22 @@ export const LAYOUTS: Record<PrimitiveKind, PrimitiveLayout> = {
       { name: 'width', size: 1 },
     ],
   },
+  /**
+   * arc:    cx, cy (scale space), r0, r1 (scale units along x; the view keeps x and y at the same scale)
+   * angles: a0, a1 (radians, clockwise from 12 o'clock), gap (px, trimmed on every side), unused
+   * fill:   rgba
+   * One annular sector per instance (pie, donut, sunburst, rose, gauge). Animating a
+   * sector is just changing these numbers: nothing is re-tessellated.
+   */
+  arc: {
+    topology: 'instanced-quad',
+    stride: 12,
+    attributes: [
+      { name: 'arc', size: 4 },
+      { name: 'angles', size: 4 },
+      { name: 'fill', size: 4 },
+    ],
+  },
   /** pos: x, y (scale space) · color: rgba — triangle list, per-vertex color */
   mesh: {
     topology: 'triangles',
