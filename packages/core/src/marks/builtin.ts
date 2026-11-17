@@ -4,6 +4,7 @@ import { parseColor, withAlpha } from '../util/color';
 import { STANDALONE_MARKS } from './charts';
 import { curvePoints, type Polyline } from './curve';
 import { EXTRA_MARKS } from './extra';
+import { MORE_MARKS } from './more';
 import { flow } from './flow';
 import { FLOW_MARKS } from './flows';
 import type { SeriesData } from './prepare';
@@ -273,7 +274,7 @@ const tick: MarkDefinition = {
   },
 };
 
-const builtins: Record<string, MarkDefinition> = { line, area, bar, point, rule, tick, ...STANDALONE_MARKS, ...FLOW_MARKS, ...EXTRA_MARKS, flow };
+const builtins: Record<string, MarkDefinition> = { line, area, bar, point, rule, tick, ...STANDALONE_MARKS, ...FLOW_MARKS, ...EXTRA_MARKS, ...MORE_MARKS, flow };
 
 /**
  * Register the built-in marks. Called when a chart is created rather than at

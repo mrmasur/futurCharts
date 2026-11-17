@@ -204,6 +204,10 @@ export class Chart {
   /** Entry animation: pending until the first frame, then its start time. */
   private enter: { pending: boolean; start: number; duration: number } = { pending: false, start: 0, duration: 0 };
   private frame = 0;
+  /** On screen (or close to it). Off screen, frames are skipped and drawn on return. */
+  private visible = typeof IntersectionObserver === 'undefined';
+  private dirty = false;
+  private intersection?: IntersectionObserver;
   private enterProgress = 1;
   private destroyed = false;
 
@@ -251,6 +255,19 @@ export class Chart {
     root.addEventListener('keydown', (e) => e.key === 'Escape' && this.clearSelection(), { signal });
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(this.container);
+    if (typeof IntersectionObserver !== 'undefined') {
+      this.intersection = new IntersectionObserver(
+        (entries) => {
+          this.visible = entries[entries.length - 1].isIntersecting;
+          if (this.visible && this.dirty) {
+            this.dirty = false;
+            this.requestRender();
+          }
+        },
+        { rootMargin: '120px' },
+      );
+      this.intersection.observe(root);
+    }
     this.measure();
   }
 
@@ -355,7 +372,8 @@ export class Chart {
       this.layout = undefined;
       this.compile();
     }
-    this.renderNow();
+    if (this.visible) this.renderNow();
+    else this.dirty = true;
   }
 
   /** PNG data URL of the chart as currently displayed. */
@@ -375,6 +393,7 @@ export class Chart {
     cancelAnimationFrame(this.frame);
     this.abort.abort();
     this.observer?.disconnect();
+    this.intersection?.disconnect();
     this.disposeMarks();
     this.gridBatch?.destroy();
     this.renderer.destroy();
@@ -638,7 +657,14 @@ export class Chart {
         return { data, def, mark: def.build(ctx) };
       });
 
-    const guess = this.layout?.view ?? { width: Math.max(1, this.width - 80), height: Math.max(1, this.height - 120) };
+    // Size-dependent marks (treemap, hexbin) build against the view they will get. The
+    // layout only needs the scales (set above) and the legend (kept from the last build),
+    // so it is usually exact here and the second build below is skipped.
+    const guess =
+      this.layout?.view ??
+      (this.built.length === 0 && layers.some((l) => sizeDependent({ data: l.data, def: l.def } as Built))
+        ? this.computeLayout().view
+        : { width: Math.max(1, this.width - 80), height: Math.max(1, this.height - 120) });
     this.built = buildAll(guess);
 
     // 5. Legend: series and mark entries, in slot order.
@@ -793,6 +819,11 @@ export class Chart {
 
   private requestRender(): void {
     if (this.frame || this.destroyed) return;
+    if (!this.visible) {
+      // Drawn when it scrolls into view (and its entry animation starts then).
+      this.dirty = true;
+      return;
+    }
     this.frame = requestAnimationFrame(() => {
       this.frame = 0;
       this.renderNow();

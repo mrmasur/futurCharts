@@ -76,7 +76,7 @@ const tileSpec = (spec: ChartSpec): ChartSpec => ({ ...spec, theme: themeFor() }
 function cardsForFamily(f: (typeof families)[number]): Card[] {
   return f.entries.map((e) => {
     const spec = e.spec ?? { layers: [] };
-    const isFlow = spec.layers.some((l) => l.mark === 'flow');
+    const isFlow = spec.layers.some((l) => l.mark === 'flow' || l.mark === 'network' || l.mark === 'chord' || l.mark === 'pack');
     return {
       id: slug(e.title),
       title: spec.title ?? e.title,

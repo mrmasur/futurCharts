@@ -10,6 +10,11 @@ Librairie de graphiques GPU pour une future app de BI (sources : Elasticsearch, 
   Toute nouvelle primitive passe par `render/types.ts` et `render/layouts.ts`, et doit être traduisible en WebGPU.
 - Un seul contexte WebGL2 partagé par page (`SharedWebGL2Renderer`) : ne jamais revenir à un contexte par graphique
   par défaut, la galerie (19 graphiques) dépasse la limite des navigateurs.
+- **Performance** (mesurée le 2026-11-17 dans un onglet affiché : 60 i/s pour 12 graphiques redessinés à chaque image) :
+  un graphique hors écran ne se dessine pas (IntersectionObserver) et son animation d'entrée attend qu'il soit vu ;
+  une instance ne couvre que sa propre surface (cf. le quad serré de l'arc) ; les shaders sont compilés à la création
+  du contexte ; les marques dépendant de la taille sont construites une seule fois. Mesurer avant d'optimiser :
+  le rendu n'était pas le goulot, c'étaient les calculs de données et la compilation au premier affichage.
 - La spec reste du JSON sérialisable ; ce qui exige une fonction va dans `ChartOptions`.
 - **Animation** (demandée le 2026-11-16) : l'animation d'entrée est faite (`DrawCall.progress`, appliquée dans le
   vertex shader ; lignes et aplats révélés par le clip). Restent à venir : transitions entre deux états de données,

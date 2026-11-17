@@ -7,6 +7,8 @@ export interface FormatSpec {
   prefix?: string;
   suffix?: string;
   locale?: string;
+  /** Show magnitudes only (a population pyramid draws men as negatives). */
+  absolute?: boolean;
 }
 
 export interface FormatHint {
@@ -48,5 +50,5 @@ export function numberFormatter(spec: FormatSpec | undefined, hint: FormatHint =
   const nf = new Intl.NumberFormat(s.locale, opts);
   const pre = s.prefix ?? '';
   const suf = s.suffix ?? '';
-  return (v) => (Number.isFinite(v) ? pre + nf.format(v) + suf : '–');
+  return (v) => (Number.isFinite(v) ? pre + nf.format(s.absolute ? Math.abs(v) : v) + suf : '–');
 }

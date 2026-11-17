@@ -224,16 +224,38 @@ out vec2 v_p;
 flat out vec4 v_geo;   // r0, r1 (px), a0, a1
 flat out float v_gap;
 flat out vec4 v_fill;
+// Direction of a clockwise angle from 12 o'clock, in screen space (y down).
+vec2 dirOf(float a) { return vec2(sin(a), -cos(a)); }
 void main() {
   vec2 center = toPx(a_arc.xy);
   float scale = abs(u_t.x);
+  float r0 = a_arc.z * scale;
   float r1 = a_arc.w * scale;
-  float ext = r1 + 2.0;
-  vec2 off = (corner() * 2.0 - 1.0) * ext;
-  v_p = off;
   // Entry: the whole circle sweeps open clockwise.
   float k = u_progress < 1.0 ? enterK(0.0) : 1.0;
-  v_geo = vec4(a_arc.z * scale, r1, a_angles.x * k, a_angles.y * k);
+  float a0 = a_angles.x * k;
+  float a1 = a_angles.y * k;
+  float sweep = a1 - a0;
+  // Bounding box of the sector only: the arc ends, plus every quarter turn it passes.
+  // A slice of a pie then shades its own pixels instead of the whole disc.
+  vec2 bmin = vec2(-r1);
+  vec2 bmax = vec2(r1);
+  if (sweep < 6.2831 && sweep > 0.0) {
+    vec2 p0 = dirOf(a0), p1 = dirOf(a1);
+    bmin = min(min(p0 * r0, p0 * r1), min(p1 * r0, p1 * r1));
+    bmax = max(max(p0 * r0, p0 * r1), max(p1 * r0, p1 * r1));
+    for (int q = 0; q < 8; q++) {
+      float c = float(q) * 1.5707963;
+      if (mod(c - a0, 6.2831853) <= sweep) {
+        vec2 p = dirOf(c) * r1;
+        bmin = min(bmin, p);
+        bmax = max(bmax, p);
+      }
+    }
+  }
+  vec2 off = mix(bmin - 2.0, bmax + 2.0, corner());
+  v_p = off;
+  v_geo = vec4(r0, r1, a0, a1);
   v_gap = a_angles.z;
   v_fill = a_fill;
   gl_Position = toClip(center + off);

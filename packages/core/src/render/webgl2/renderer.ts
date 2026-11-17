@@ -59,6 +59,9 @@ class GLCore {
     const gl = canvas.getContext('webgl2', { antialias: true, alpha: true, premultipliedAlpha: true });
     if (!gl) throw new Error('futurCharts: WebGL2 is not available in this browser.');
     this.gl = gl;
+    // Compile every program now, while the chart is being created, rather than in the
+    // middle of its first animated frame (a one-time hitch of several frames otherwise).
+    for (const kind of Object.keys(SHADERS) as PrimitiveKind[]) this.program(kind);
   }
 
   createBatch(kind: PrimitiveKind): Batch {
@@ -69,10 +72,13 @@ class GLCore {
   draw(frame: Frame, width: number, height: number, dpr: number, W: number, H: number): void {
     const gl = this.gl;
     gl.viewport(0, 0, W, H);
-    gl.disable(gl.SCISSOR_TEST);
+    // Clear only this chart's region: a shared canvas is as large as the largest chart.
+    gl.enable(gl.SCISSOR_TEST);
+    gl.scissor(0, 0, W, H);
     const [r, g, b, a] = frame.clearColor;
     gl.clearColor(r * a, g * a, b * a, a);
     gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.disable(gl.SCISSOR_TEST);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 

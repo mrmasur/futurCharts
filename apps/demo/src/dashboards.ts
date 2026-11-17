@@ -100,6 +100,26 @@ const sales = {
 }
 
 const dateOf = (d: number) => new Date(END - (DAYS - 1 - d) * DAY);
+// Per-day lookups computed once: aggregating 73 000 rows must not build a Date per row.
+const DAY_MONTH = new Int32Array(DAYS);
+const DAY_WEEKDAY = new Int8Array(DAYS);
+const MONTH_START: Date[] = [];
+const MONTH_LABEL: string[] = [];
+{
+  const fmt = new Intl.DateTimeFormat('fr-FR', { month: 'short' });
+  const index = new Map<number, number>();
+  for (let d = 0; d < DAYS; d++) {
+    const date = dateOf(d);
+    const key = date.getFullYear() * 12 + date.getMonth();
+    if (!index.has(key)) {
+      index.set(key, MONTH_START.length);
+      MONTH_START.push(new Date(date.getFullYear(), date.getMonth(), 1));
+      MONTH_LABEL.push(fmt.format(date));
+    }
+    DAY_MONTH[d] = index.get(key)!;
+    DAY_WEEKDAY[d] = (date.getDay() + 6) % 7;
+  }
+}
 
 /** Rows that pass every filter except `skip` (a chart never filters itself: it highlights its own choice). */
 function rows(f: Filters, skip?: keyof Filters, from = DAYS - f.period): (i: number) => boolean {
@@ -157,19 +177,9 @@ export const sales_: Dashboard = {
     const months: { month: Date; channel: string; orders: number }[] = [];
     {
       const keep = rows(f, 'channel', 0);
-      const acc = new Map<string, number>();
-      for (let i = 0; i < N; i++) {
-        if (!keep(i)) continue;
-        const d = dateOf(sales.day[i]);
-        const key = `${d.getFullYear()}-${d.getMonth()}|${sales.channel[i]}`;
-        acc.set(key, (acc.get(key) ?? 0) + sales.orders[i]);
-      }
-      for (const [key, v] of acc) {
-        const [ym, h] = key.split('|');
-        const [y, m] = ym.split('-').map(Number);
-        months.push({ month: new Date(y, m, 1), channel: CHANNELS[Number(h)][0], orders: Math.round(v) });
-      }
-      months.sort((a, b) => a.month.getTime() - b.month.getTime());
+      const acc = new Float64Array(MONTH_START.length * CHANNELS.length);
+      for (let i = 0; i < N; i++) if (keep(i)) acc[DAY_MONTH[sales.day[i]] * CHANNELS.length + sales.channel[i]] += sales.orders[i];
+      MONTH_START.forEach((month, m) => CHANNELS.forEach(([channel], h) => months.push({ month, channel, orders: Math.round(acc[m * CHANNELS.length + h]) })));
     }
     // Conversion funnel from the filtered totals.
     let visitors = 0;
@@ -190,21 +200,10 @@ export const sales_: Dashboard = {
     const heat: { weekday: string; month: string; orders: number }[] = [];
     {
       const names = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
-      const fmt = new Intl.DateTimeFormat('fr-FR', { month: 'short' });
-      const acc = new Map<string, { weekday: string; month: string; orders: number; order: number }>();
       const keep = rows(f, undefined, 0);
-      for (let i = 0; i < N; i++) {
-        if (!keep(i)) continue;
-        const d = dateOf(sales.day[i]);
-        const wd = names[(d.getDay() + 6) % 7];
-        const mo = fmt.format(d);
-        const key = `${wd}|${mo}`;
-        const e = acc.get(key) ?? { weekday: wd, month: mo, orders: 0, order: d.getFullYear() * 12 + d.getMonth() };
-        e.orders += sales.orders[i];
-        acc.set(key, e);
-      }
-      const list = [...acc.values()].sort((a, b) => a.order - b.order || names.indexOf(a.weekday) - names.indexOf(b.weekday));
-      for (const e of list) heat.push({ weekday: e.weekday, month: e.month, orders: Math.round(e.orders / 4.3) });
+      const acc = new Float64Array(MONTH_START.length * 7);
+      for (let i = 0; i < N; i++) if (keep(i)) acc[DAY_MONTH[sales.day[i]] * 7 + DAY_WEEKDAY[sales.day[i]]] += sales.orders[i];
+      MONTH_LABEL.forEach((month, m) => names.forEach((weekday, w) => heat.push({ weekday, month, orders: Math.round(acc[m * 7 + w] / 4.3) })));
     }
 
     const kpi = (title: string, value: 'revenue' | 'orders' | 'basket' | 'conversion', format: object, upIsGood = true): ChartSpec => ({

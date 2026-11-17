@@ -299,6 +299,55 @@ export const supportFlow: FlowGraph = {
 
 const quarterly = ['T1', 'T2', 'T3', 'T4'].flatMap((quarter) => ['France', 'Allemagne', 'Espagne'].map((country) => ({ quarter, country, sales: Math.round(80 + r() * 120) })));
 
+// More chart types.
+const marketShare = ['Europe', 'Amérique du Nord', 'Asie', 'Amérique latine', 'Afrique'].flatMap((region, i) =>
+  ['Grand public', 'Professionnels', 'Public'].map((segment, j) => ({ region, segment, sales: Math.round([520, 410, 380, 120, 60][i] * [0.55, 0.32, 0.13][j] * (0.7 + r() * 0.6)) })),
+);
+const tradeRegions = ['Europe', 'Amérique du Nord', 'Chine', 'Japon', 'Inde', 'Moyen-Orient'];
+const trade = tradeRegions.flatMap((from, i) =>
+  tradeRegions.filter((to) => to !== from).map((to, j) => ({ from, to, billions: Math.round((40 + ((i * 37 + j * 53) % 160)) * (0.6 + r() * 0.8)) })),
+);
+const productCats = ['Ordinateurs', 'Téléphonie', 'Maison', 'Loisirs'];
+const products = Array.from({ length: 160 }, (_, i) => {
+  const k = i % 4;
+  const price = Math.round([900, 450, 180, 90][k] * (0.5 + r()));
+  return {
+    category: productCats[k],
+    price,
+    margin: Math.round([18, 24, 35, 42][k] + gauss(r) * 5),
+    rating: Math.round((3.4 + r() * 1.5) * 10) / 10,
+    sales: Math.round(4000 / Math.sqrt(price) * (0.5 + r())),
+    returns: Math.round(([6, 4, 3, 2][k] + gauss(r)) * 10) / 10,
+  };
+});
+const teamGraph: FlowGraph = (() => {
+  const teams = [['Produit', 6], ['Tech', 9], ['Ventes', 7], ['Support', 6]] as const;
+  const people = teams.flatMap(([team, n], t) => Array.from({ length: n }, (_, k) => ({ id: `${team}-${k}`, label: `${team} ${k + 1}`, group: team, value: Math.round(2 + r() * 20), t })));
+  const edges: { from: string; to: string; value: number }[] = [];
+  for (const a of people) {
+    for (const b of people) {
+      if (a.id >= b.id) continue;
+      const p = a.t === b.t ? 0.32 : (a.t === 0 || b.t === 0) ? 0.07 : 0.025;
+      if (r() < p) edges.push({ from: a.id, to: b.id, value: Math.round(1 + r() * 9) });
+    }
+  }
+  return { nodes: people.map(({ t, ...n }) => n), edges };
+})();
+const dense = { x: new Float64Array(150000), y: new Float64Array(150000) };
+for (let i = 0; i < dense.x.length; i++) {
+  const c = i % 3;
+  dense.x[i] = [30, 55, 75][c] + gauss(r) * [9, 6, 11][c];
+  dense.y[i] = [40, 70, 35][c] + gauss(r) * [10, 7, 8][c] + (c === 2 ? (dense.x[i] - 75) * 0.6 : 0);
+}
+const ageBands = ['0-9', '10-19', '20-29', '30-39', '40-49', '50-59', '60-69', '70-79', '80+'];
+const pyramid = ageBands.flatMap((age, i) => {
+  const base = 820 - Math.abs(i - 3.5) * 70 - (i > 6 ? (i - 6) * 140 : 0);
+  return [
+    { age, sex: 'Hommes', people: -Math.round(base * (1 - i * 0.012) * (0.95 + r() * 0.1)) },
+    { age, sex: 'Femmes', people: Math.round(base * (1 + i * 0.02) * (0.95 + r() * 0.1)) },
+  ];
+}).reverse();
+
 export type Entry = { title: string; caption: string; wide?: boolean; spec?: ChartSpec; tiles?: ChartSpec[]; showLayout?: boolean };
 export const entries: Entry[] = [
   {
@@ -939,19 +988,97 @@ export const entries: Entry[] = [
       ],
     },
   },
+  {
+    title: 'Marimekko',
+    caption: 'marimekko · largeur = part du total, hauteur = part dans la colonne',
+    wide: true,
+    spec: {
+      title: 'Marché par région et segment',
+      subtitle: 'En millions d’euros',
+      data: marketShare,
+      fields: { sales: { label: 'Ventes', format: { suffix: ' M€' } } },
+      layers: [{ mark: 'marimekko', encode: { x: 'region', color: 'segment', value: 'sales' } }],
+    },
+  },
+  {
+    title: 'Cercles imbriqués',
+    caption: 'pack · path: [région, pays, ville] · aire proportionnelle',
+    spec: {
+      title: 'Ventes par région, pays et ville',
+      data: geoSales,
+      fields: { sales: { label: 'Ventes', format: { suffix: ' k€' } } },
+      layers: [{ mark: 'pack', encode: { path: ['region', 'country', 'city'], value: 'sales' } }],
+    },
+  },
+  {
+    title: 'Diagramme en cordes',
+    caption: 'chord · échanges entre régions, ruban à la couleur de l’exportateur',
+    spec: {
+      title: 'Échanges commerciaux',
+      subtitle: 'Milliards de dollars',
+      data: trade,
+      fields: { billions: { label: 'Échanges', format: { suffix: ' Md$' } } },
+      layers: [{ mark: 'chord', encode: { source: 'from', target: 'to', value: 'billions' } }],
+    },
+  },
+  {
+    title: 'Réseau',
+    caption: 'network · placement par forces, taille selon l’activité · glissez les nœuds',
+    wide: true,
+    spec: {
+      title: 'Collaboration entre équipes',
+      subtitle: '28 personnes · liens = projets communs',
+      fields: { activite: { label: 'Activité' } },
+      layers: [{ mark: 'network', graph: teamGraph, encode: { value: 'activite' } }],
+    },
+  },
+  {
+    title: 'Coordonnées parallèles',
+    caption: 'parallel · path: champs à comparer · une ligne par produit',
+    wide: true,
+    spec: {
+      title: 'Profil des produits',
+      subtitle: '160 produits, par catégorie',
+      data: products,
+      fields: { price: { label: 'Prix (€)' }, margin: { label: 'Marge (%)' }, rating: { label: 'Note', format: { decimals: 1 } }, sales: { label: 'Ventes' }, returns: { label: 'Retours (%)', format: { decimals: 1 } } },
+      layers: [{ mark: 'parallel', encode: { path: ['price', 'margin', 'rating', 'sales', 'returns'], color: 'category' } }],
+    },
+  },
+  {
+    title: 'Densité hexagonale',
+    caption: 'hexbin · 150 000 points comptés par hexagone',
+    spec: {
+      title: 'Durée de session et pages vues',
+      data: { columns: dense },
+      fields: { x: { label: 'Durée (min)' }, y: { label: 'Pages vues' } },
+      layers: [{ mark: 'hexbin', encode: { x: 'x', y: 'y' }, style: { radius: 8 } }],
+    },
+  },
+  {
+    title: 'Pyramide des âges',
+    caption: 'barres horizontales empilées · hommes en négatif, format absolu',
+    spec: {
+      title: 'Population par âge et sexe',
+      subtitle: 'En milliers',
+      data: pyramid,
+      fields: { people: { label: 'Personnes', format: { absolute: true } } },
+      scales: { color: { colors: { Hommes: '$1', Femmes: '$2' } } },
+      layers: [{ mark: 'bar', encode: { x: 'people', y: 'age', color: 'sex' }, stack: true, style: { thickness: 18, radius: 3 } }],
+    },
+  },
 ];
 
 // --------------------------------------------------------------- organisation
 
 export const GROUPS: [string, string[]][] = [
-  ['Comparaison', ['Barres horizontales triées', 'Barres horizontales empilées', 'Barres empilées à 100 %', 'Épaisseur et couleur par barre', 'Barres fines et mise en avant', 'Sucettes', 'Haltères (dumbbell)', 'Graphique à puces (bullet)']],
+  ['Comparaison', ['Pyramide des âges', 'Barres horizontales triées', 'Barres horizontales empilées', 'Barres empilées à 100 %', 'Épaisseur et couleur par barre', 'Barres fines et mise en avant', 'Sucettes', 'Haltères (dumbbell)', 'Graphique à puces (bullet)']],
   ['Évolution', ['Prévision avec intervalle', 'Courbe en escalier', 'Streamgraph', 'Classement (bump chart)', 'Graphique de pente', 'Chandeliers']],
   ['Temps et planning', ['Diagramme de Gantt', 'Calendrier']],
   ['Distribution', ['Histogramme', 'Boîte à moustaches', 'Violon', 'Distribution en traits']],
   ['Petits multiples', ['Petits multiples de courbes', 'Petits multiples de barres']],
-  ['Corrélation', ['Nuage de points et régression', 'Bulles']],
-  ['Parts et hiérarchies', ['Camembert', 'Anneau', 'Treemap', 'Sunburst', 'Gaufre']],
-  ['Flux', ['Pipeline de données', 'Diagramme de flux', 'Processus avec volumes', 'Chemin mis en avant', 'Sankey', 'Entonnoir', 'Cascade']],
+  ['Corrélation', ['Nuage de points et régression', 'Bulles', 'Densité hexagonale', 'Coordonnées parallèles']],
+  ['Parts et hiérarchies', ['Camembert', 'Anneau', 'Treemap', 'Sunburst', 'Cercles imbriqués', 'Marimekko', 'Gaufre']],
+  ['Flux', ['Pipeline de données', 'Diagramme de flux', 'Processus avec volumes', 'Chemin mis en avant', 'Sankey', 'Diagramme en cordes', 'Réseau', 'Entonnoir', 'Cascade']],
   ['Matrices et polaires', ['Carte de chaleur', 'Radar', 'Rose polaire']],
   ['Indicateurs', ['Tuiles KPI', 'Jauge']],
   ['Cartes', ['Points sur une carte du monde', 'Choroplèthe mondiale', 'Bulles sur une carte', 'Zoom sur l’Europe et mise en avant']],

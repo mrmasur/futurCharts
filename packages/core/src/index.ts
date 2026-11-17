@@ -24,6 +24,7 @@ export { squarify } from './marks/charts';
 export { sankeyLayout } from './marks/flows';
 export { apportion, density } from './marks/extra';
 export { layoutFlow } from './marks/flowLayout';
+export { packCircles, forceLayout } from './marks/more';
 export type { FlowLayout, PlacedNode, PlacedEdge } from './marks/flowLayout';
 export type { LayerData, SeriesData } from './marks/prepare';
 export { curvePoints } from './marks/curve';
