@@ -5,10 +5,12 @@ import { STANDALONE_MARKS } from './charts';
 import { curvePoints, type Polyline } from './curve';
 import { EXTRA_MARKS } from './extra';
 import { MORE_MARKS } from './more';
+import { race } from './race';
+import { SHAPE_MARKS } from './shapes';
 import { flow } from './flow';
 import { FLOW_MARKS } from './flows';
 import type { SeriesData } from './prepare';
-import { pushRect, pushSegment, pushVertex } from './primitives';
+import { dashed, pushRect, pushSegment, pushVertex } from './primitives';
 import { buildHit, hasMark, registerMark, type BuildContext, type MarkDefinition, type MarkLabel } from './registry';
 
 function normalized(ctx: BuildContext, s: SeriesData, y: Float64Array): { x: Float32Array; y: Float32Array } {
@@ -22,14 +24,31 @@ function normalized(ctx: BuildContext, s: SeriesData, y: Float64Array): { x: Flo
   return { x, y: out };
 }
 
-/** Append a polyline (in category / value space) as round-capped segments. */
-function pushPolyline(ctx: BuildContext, out: number[], line: Polyline, color: RGBA, width: number): void {
+/** Append a polyline (in category / value space) as round-capped segments, dashed if asked. */
+function pushPolyline(ctx: BuildContext, out: number[], line: Polyline, color: RGBA, width: number, dash?: number[]): void {
+  const pen = dash?.length ? dashed(out, dash, ctx.pixel, color, width) : undefined;
   for (let i = 0; i < line.x.length - 1; i++) {
     const [ax, ay] = ctx.pos(line.x[i], line.y[i]);
     const [bx, by] = ctx.pos(line.x[i + 1], line.y[i + 1]);
-    pushSegment(out, ax, ay, bx, by, color, width);
+    if (pen) pen.segment(ax, ay, bx, by);
+    else pushSegment(out, ax, ay, bx, by, color, width);
   }
 }
+
+/** Runs of consecutive points with no missing value between them: `[start, end)`. */
+function runs(s: SeriesData): [number, number][] {
+  const out: [number, number][] = [];
+  let start = 0;
+  for (let j = 1; j <= s.x.length; j++) {
+    if (j === s.x.length || s.breaks?.[j]) {
+      out.push([start, j]);
+      start = j;
+    }
+  }
+  return out;
+}
+
+const slice = (p: { x: Float32Array; y: Float32Array }, [a, b]: [number, number]) => ({ x: p.x.subarray(a, b), y: p.y.subarray(a, b) });
 
 /** Width of one category slot in scale space: the band, or the smallest step on a continuous axis. */
 function slotWidth(ctx: BuildContext): number {
@@ -38,21 +57,38 @@ function slotWidth(ctx: BuildContext): number {
 
 const line: MarkDefinition = {
   symbol: 'line',
+  // Dashes are measured in px.
+  sizeDependent: (layer) => !!layer.style?.dash?.length,
   build(ctx) {
     const { style } = ctx;
     const data: number[] = [];
+    const dots: number[] = [];
     const labels: MarkLabel[] = [];
     for (const s of ctx.data.series) {
       if (s.hidden || s.x.length === 0) continue;
       const p = normalized(ctx, s, s.y1);
       const color = withAlpha(ctx.color(s, 0), style.opacity ?? 1);
-      if (s.x.length === 1) {
-        // A single datum still has to be visible: draw a dot-sized segment.
-        const [x, y] = ctx.pos(p.x[0], p.y[0]);
-        pushSegment(data, x, y, x, y, color, Math.max(style.width, 4));
-        continue;
+      for (const run of runs(s)) {
+        if (run[1] - run[0] === 1) {
+          // A lone datum (or one between two gaps) still has to be visible: draw a dot-sized segment.
+          const [x, y] = ctx.pos(p.x[run[0]], p.y[run[0]]);
+          pushSegment(data, x, y, x, y, color, Math.max(style.width, 4));
+          continue;
+        }
+        const r = slice(p, run);
+        pushPolyline(ctx, data, curvePoints(r.x, r.y, style.curve), color, style.width, style.dash);
       }
-      pushPolyline(ctx, data, curvePoints(p.x, p.y, style.curve), color, style.width);
+      for (let i = 0; i < s.x.length; i++) {
+        const [x, y] = ctx.pos(p.x[i], p.y[i]);
+        // Highlighted or overridden points keep their own color.
+        const c = ctx.color(s, i);
+        if (style.markers) {
+          dots.push(x, y, Math.max(6, style.width * 3.5), 0, c[0], c[1], c[2], c[3], ctx.surface[0], ctx.surface[1], ctx.surface[2], 1, 2);
+        }
+        if (style.labels) {
+          labels.push({ tx: x, ty: y, text: ctx.format(s.value[i]), align: 'center', baseline: 'bottom', dy: -8, size: 11, color: ctx.theme.text.secondary });
+        }
+      }
       if (style.endLabels) {
         const last = s.x.length - 1;
         const [lx, ly] = ctx.pos(p.x[last], p.y[last]);
@@ -61,7 +97,13 @@ const line: MarkDefinition = {
     }
     const batch = ctx.renderer.createBatch('line');
     batch.update(new Float32Array(data), data.length / LAYOUTS.line.stride);
-    return { draws: [{ batch }], hit: buildHit(ctx), labels };
+    const draws = [{ batch }];
+    if (dots.length) {
+      const points = ctx.renderer.createBatch('point');
+      points.update(new Float32Array(dots), dots.length / LAYOUTS.point.stride);
+      draws.push({ batch: points });
+    }
+    return { draws, hit: buildHit(ctx), labels };
   },
 };
 
@@ -75,8 +117,12 @@ const area: MarkDefinition = {
     const lines: number[] = [];
     for (const s of ctx.data.series) {
       if (s.hidden || s.x.length < 2) continue;
-      const top = normalized(ctx, s, s.y1);
-      const bottom = normalized(ctx, s, s.y0);
+      const top0 = normalized(ctx, s, s.y1);
+      const bottom0 = normalized(ctx, s, s.y0);
+      for (const run of runs(s)) {
+      if (run[1] - run[0] < 2) continue;
+      const top = slice(top0, run);
+      const bottom = slice(bottom0, run);
       const t = curvePoints(top.x, top.y, style.curve);
       const b = curvePoints(bottom.x, bottom.y, style.curve);
       const base = ctx.color(s, 0);
@@ -95,6 +141,7 @@ const area: MarkDefinition = {
         v(b.x[i], b.y[i], cb);
       }
       if (style.line) pushPolyline(ctx, lines, t, base, style.lineWidth);
+      }
     }
     const fill = ctx.renderer.createBatch('mesh');
     fill.update(new Float32Array(mesh), mesh.length / LAYOUTS.mesh.stride);
@@ -274,7 +321,7 @@ const tick: MarkDefinition = {
   },
 };
 
-const builtins: Record<string, MarkDefinition> = { line, area, bar, point, rule, tick, ...STANDALONE_MARKS, ...FLOW_MARKS, ...EXTRA_MARKS, ...MORE_MARKS, flow };
+const builtins: Record<string, MarkDefinition> = { line, area, bar, point, rule, tick, ...STANDALONE_MARKS, ...FLOW_MARKS, ...EXTRA_MARKS, ...MORE_MARKS, ...SHAPE_MARKS, flow, race };
 
 /**
  * Register the built-in marks. Called when a chart is created rather than at

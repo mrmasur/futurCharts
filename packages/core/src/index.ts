@@ -17,7 +17,7 @@ export { lightTheme, darkTheme, registerTheme, resolveTheme, themeColor, resolve
 export type { Theme, ThemeSpec } from './theme/theme';
 
 export { registerMark, getMark, hasMark, buildHit, emptyHit } from './marks/registry';
-export type { MarkDefinition, BuildContext, BuiltMark, HitData, MarkDraw, ShapeHit, MarkLabel, MarkScales } from './marks/registry';
+export type { MarkDefinition, BuildContext, BuiltMark, HitData, MarkDraw, ShapeHit, MarkLabel, MarkScales, Timeline } from './marks/registry';
 export { pushRect, pushSegment, pushVertex, luminance } from './marks/primitives';
 export type { RectInstance } from './marks/primitives';
 export { squarify } from './marks/charts';

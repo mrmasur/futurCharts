@@ -348,8 +348,252 @@ const pyramid = ageBands.flatMap((age, i) => {
   ];
 }).reverse();
 
+// Bar chart race: cumulative sales of product lines over three years.
+const raceLines: [string, string, number, number, number][] = [
+  // name, family, start month, monthly base, growth per month
+  ['Atlas', 'Ordinateurs', 0, 420, 2], ['Nova', 'Téléphonie', 0, 380, 9], ['Orion', 'Ordinateurs', 0, 300, 6], ['Lyra', 'Maison', 0, 260, 4],
+  ['Vega', 'Téléphonie', 4, 120, 22], ['Cassio', 'Loisirs', 0, 210, 3], ['Helios', 'Maison', 6, 150, 18], ['Pixel One', 'Téléphonie', 10, 200, 28],
+  ['Terra', 'Maison', 0, 240, -2], ['Zephyr', 'Loisirs', 2, 160, 11], ['Kepler', 'Ordinateurs', 14, 260, 30], ['Mira', 'Loisirs', 0, 190, 1],
+  ['Sirius', 'Ordinateurs', 8, 140, 15], ['Echo', 'Téléphonie', 18, 300, 40],
+];
+const raceData: { month: Date; product: string; family: string; sales: number }[] = [];
+for (const [product, family, start, base, growth] of raceLines) {
+  let total = 0;
+  for (let m = 0; m < 36; m++) {
+    if (m >= start) total += Math.max(0, base + growth * (m - start) + Math.sin(m / 3 + base) * 30 + r() * 40);
+    raceData.push({ month: new Date(2024, m, 1), product, family, sales: Math.round(total) });
+  }
+}
+
+// Monthly revenue, actual then forecast, with a hole in the sensor-like series.
+const months = Array.from({ length: 24 }, (_, m) => new Date(2025, m, 1));
+const monthly = months.map((month, m) => ({ month, revenue: Math.round(820 + m * 22 + Math.sin(m / 1.9) * 60 + r() * 40) }));
+const actual = monthly.slice(0, 18);
+const projected = monthly.slice(17).map((d, i) => ({ month: d.month, revenue: Math.round(actual[17].revenue + (i * 31)) }));
+const sensor = Array.from({ length: 48 }, (_, h) => ({
+  hour: new Date(2026, 2, 3, h),
+  temperature: (h >= 14 && h <= 19) || h === 33 || (h >= 40 && h <= 41) ? null : Math.round((18 + Math.sin((h - 9) / 3.82) * 5 + gauss(r) * 0.4) * 10) / 10,
+}));
+const weekly = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8'].map((week, i) => ({ week, signups: [312, 348, 330, 401, 462, 438, 517, 495][i] }));
+const seats = [
+  { party: 'Écologistes', seats: 42 }, { party: 'Gauche', seats: 118 }, { party: 'Centre', seats: 171 },
+  { party: 'Droite', seats: 97 }, { party: 'Régionalistes', seats: 21 }, { party: 'Indépendants', seats: 28 },
+];
+const density = [
+  { country: 'Pays-Bas', area: 41.5, density: 520 }, { country: 'Belgique', area: 30.7, density: 383 },
+  { country: 'Allemagne', area: 357.6, density: 233 }, { country: 'Italie', area: 302.1, density: 196 },
+  { country: 'France', area: 551.7, density: 122 }, { country: 'Espagne', area: 506, density: 95 },
+];
+
+// A sampled CPU profile: stacks of function calls and the time spent in them.
+const profile = [
+  ['main', 'handleRequest', 'parseQuery', 'tokenize', 42], ['main', 'handleRequest', 'parseQuery', 'buildAst', 31],
+  ['main', 'handleRequest', 'runQuery', 'scanParts', 188], ['main', 'handleRequest', 'runQuery', 'aggregate', 126],
+  ['main', 'handleRequest', 'runQuery', 'sortRows', 64], ['main', 'handleRequest', 'serialize', 'toJson', 58],
+  ['main', 'handleRequest', 'serialize', 'compress', 37], ['main', 'gc', 'markHeap', '', 46], ['main', 'gc', 'sweep', '', 21],
+  ['main', 'eventLoop', 'timers', '', 18], ['main', 'eventLoop', 'io', 'readSocket', 29],
+].map(([f0, f1, f2, f3, ms]) => ({ f0, f1, f2, f3, ms }));
+const audiences = [
+  { sets: 'Web', users: 5200 }, { sets: 'Mobile', users: 3900 }, { sets: 'Magasin', users: 2300 },
+  { sets: 'Web&Mobile', users: 1450 }, { sets: 'Web&Magasin', users: 620 }, { sets: 'Mobile&Magasin', users: 410 }, { sets: 'Web&Mobile&Magasin', users: 190 },
+];
+const searchTerms = [
+  ['tableau de bord', 98], ['ventes', 86], ['marge', 64], ['clients', 71], ['prévision', 52], ['stock', 47], ['retours', 33], ['panier', 41],
+  ['attrition', 29], ['NPS', 38], ['région', 44], ['campagne', 36], ['conversion', 57], ['budget', 31], ['fournisseurs', 22], ['délais', 27],
+  ['livraison', 35], ['tarifs', 24], ['promotions', 30], ['abonnements', 26], ['cohortes', 18], ['saisonnalité', 16], ['objectifs', 39],
+  ['trésorerie', 21], ['factures', 25], ['recrutement', 14], ['satisfaction', 33], ['canal', 28], ['produits', 49], ['export', 19],
+].map(([term, count]) => ({ term, count }));
+const milestones = [
+  ['2024-01-15', 'Cadrage', 'Ateliers métiers'], ['2024-03-04', 'Maquettes', 'Validation UX'], ['2024-05-20', 'Bêta privée', '12 clients'],
+  ['2024-07-01', 'Connecteur ClickHouse', 'Requêtes en direct'], ['2024-09-16', 'Lancement', 'Offre publique'], ['2024-11-04', 'Modèles dbt', 'Couche sémantique'],
+  ['2025-01-20', 'Version 2', 'Rendu WebGPU'],
+].map(([date, step, detail]) => ({ date: new Date(date), step, detail }));
+const org = [
+  ['Direction', 'Produit', 'Design', 4], ['Direction', 'Produit', 'Recherche', 2], ['Direction', 'Ingénierie', 'Plateforme', 7],
+  ['Direction', 'Ingénierie', 'Visualisation', 5], ['Direction', 'Ingénierie', 'Données', 6], ['Direction', 'Commercial', 'Ventes', 8], ['Direction', 'Commercial', 'Succès client', 4],
+].map(([ceo, dept, team, people]) => ({ ceo, dept, team, people }));
+
 export type Entry = { title: string; caption: string; wide?: boolean; spec?: ChartSpec; tiles?: ChartSpec[]; showLayout?: boolean };
 export const entries: Entry[] = [
+  {
+    title: 'Barres radiales',
+    caption: 'radialBar · un anneau par catégorie, la plus grande fait trois quarts de tour',
+    spec: {
+      title: 'Chiffre d’affaires par pays',
+      subtitle: 'Six premiers pays, en milliers d’euros',
+      data: [...revenueByCountry].sort((a, b) => b.revenue - a.revenue).slice(0, 6),
+      fields: { revenue: { label: 'CA', format: { suffix: ' k€', decimals: 0 } } },
+      layers: [{ mark: 'radialBar', encode: { key: 'country', value: 'revenue' } }],
+    },
+  },
+  {
+    title: 'Icicle',
+    caption: 'icicle · une ligne par niveau, chaque nœud aussi large que sa valeur · cliquez pour zoomer',
+    spec: {
+      title: 'Ventes par région, pays et ville',
+      data: geoSales,
+      fields: { sales: { label: 'Ventes', format: { suffix: ' k€' } } },
+      layers: [{ mark: 'icicle', encode: { path: ['region', 'country', 'city'], value: 'sales' } }],
+    },
+  },
+  {
+    title: 'Flame chart',
+    caption: 'icicle · style.orientation BT · profil d’exécution, la racine en bas · cliquez pour zoomer',
+    spec: {
+      title: 'Profil d’une requête',
+      subtitle: 'Temps passé par fonction, en millisecondes',
+      data: profile,
+      fields: { ms: { label: 'Temps', format: { suffix: ' ms', decimals: 0 } } },
+      layers: [{ mark: 'icicle', encode: { path: ['f0', 'f1', 'f2', 'f3'], value: 'ms' }, style: { orientation: 'BT', radius: 2 } }],
+    },
+  },
+  {
+    title: 'Hémicycle',
+    caption: 'parliament · un point par siège, les groupes de gauche à droite',
+    spec: {
+      title: 'Composition de l’assemblée',
+      data: seats,
+      fields: { seats: { label: 'Sièges' } },
+      layers: [{ mark: 'parliament', encode: { key: 'party', value: 'seats' } }],
+    },
+  },
+  {
+    title: 'Diagramme de Venn',
+    caption: 'venn · aires proportionnelles aux ensembles et à leurs intersections (clé « A&B »)',
+    spec: {
+      title: 'Clients par canal d’achat',
+      subtitle: 'Sur les 12 derniers mois',
+      data: audiences,
+      fields: { users: { label: 'Clients' } },
+      layers: [{ mark: 'venn', encode: { key: 'sets', value: 'users' } }],
+    },
+  },
+  {
+    title: 'Nuage de mots',
+    caption: 'wordcloud · taille et teinte selon la fréquence, les plus fréquents au centre',
+    spec: {
+      title: 'Recherches dans le portail BI',
+      data: searchTerms,
+      fields: { count: { label: 'Recherches' } },
+      layers: [{ mark: 'wordcloud', encode: { key: 'term', value: 'count' } }],
+    },
+  },
+  {
+    title: 'Frise chronologique',
+    caption: 'timeline · étapes alternées au-dessus et au-dessous de la ligne',
+    spec: {
+      title: 'Feuille de route',
+      data: milestones,
+      fields: { date: { label: 'Date' }, detail: { label: 'Détail' } },
+      layers: [{ mark: 'timeline', encode: { x: 'date', key: 'step', value: 'detail' } }],
+    },
+  },
+  {
+    title: 'Dendrogramme',
+    caption: 'tree · une hiérarchie en arbre, liens courbes, feuilles alignées',
+    spec: {
+      title: 'Catalogue produits',
+      data: catalog,
+      fields: { sales: { label: 'Ventes', format: { suffix: ' k€' } } },
+      layers: [{ mark: 'tree', encode: { path: ['category', 'item'], value: 'sales' } }],
+    },
+  },
+  {
+    title: 'Organigramme',
+    caption: 'tree · style.boxes et direction TB · effectifs cumulés par équipe',
+    spec: {
+      title: 'Organisation',
+      data: org,
+      fields: { people: { label: 'Personnes' } },
+      layers: [{ mark: 'tree', encode: { path: ['ceo', 'dept', 'team'], value: 'people' }, style: { boxes: true, direction: 'TB', boxWidth: 116 } }],
+    },
+  },
+  {
+    title: 'Lignes de référence et zones',
+    caption: 'annotations · ligne d’objectif, bande de campagne et note sur un point, en coordonnées de données',
+    spec: {
+      title: 'Chiffre d’affaires mensuel',
+      subtitle: 'En milliers d’euros',
+      data: monthly,
+      fields: { revenue: { label: 'CA', format: { suffix: ' k€', decimals: 0 } }, month: { type: 'time' } },
+      layers: [{ mark: 'line', encode: { x: 'month', y: 'revenue' }, style: { curve: 'smooth' } }],
+      annotations: [
+        { x: ['2025-04-01', '2025-06-01'], text: 'Campagne printemps' },
+        { y: 1200, text: 'Objectif 1 200 k€', color: '$5' },
+        { x: '2025-10-01', y: monthly[9].revenue, text: 'Nouvelle gamme' },
+      ],
+    },
+  },
+  {
+    title: 'Réel et prévision en pointillés',
+    caption: 'line · style.dash · deux calques, la prévision reprend où le réel s’arrête',
+    spec: {
+      title: 'Chiffre d’affaires : réel et prévision',
+      subtitle: 'En milliers d’euros',
+      fields: { revenue: { label: 'CA', format: { suffix: ' k€', decimals: 0 } }, month: { type: 'time' } },
+      layers: [
+        { mark: 'line', name: 'Réel', data: actual, encode: { x: 'month', y: 'revenue' } },
+        { mark: 'line', name: 'Prévision', data: projected, encode: { x: 'month', y: 'revenue' }, style: { dash: [6, 5] } },
+      ],
+      annotations: [{ x: '2026-06-01', text: 'Aujourd’hui' }],
+    },
+  },
+  {
+    title: 'Valeurs manquantes',
+    caption: 'line · une valeur nulle coupe la ligne (style.connectNulls pour la relier) · style.markers',
+    spec: {
+      title: 'Température d’une salle serveur',
+      subtitle: 'Relevé horaire, capteur hors ligne par moments',
+      data: sensor,
+      fields: { temperature: { label: 'Température', format: { suffix: ' °C', decimals: 1 } }, hour: { type: 'time' } },
+      layers: [{ mark: 'line', encode: { x: 'hour', y: 'temperature' }, style: { markers: true, width: 1.5 } }],
+      annotations: [{ y: 22, text: 'Seuil d’alerte', color: '$5' }],
+    },
+  },
+  {
+    title: 'Étiquettes sur les points',
+    caption: 'line · style.labels et style.markers · highlight sur la meilleure semaine',
+    spec: {
+      title: 'Inscriptions par semaine',
+      data: weekly,
+      fields: { signups: { label: 'Inscriptions' } },
+      layers: [{ mark: 'line', encode: { x: 'week', y: 'signups' }, style: { labels: true, markers: true }, highlight: { field: 'week', values: ['S7'] } }],
+    },
+  },
+  {
+    title: 'Barres et objectif',
+    caption: 'bar + annotations · ligne verticale sur l’axe des valeurs d’un graphique horizontal',
+    spec: {
+      title: 'Chiffre d’affaires par pays',
+      subtitle: 'En milliers d’euros',
+      data: revenueByCountry,
+      fields: { revenue: { label: 'CA', format: { suffix: ' k€', decimals: 0 } } },
+      layers: [{ mark: 'bar', encode: { x: 'revenue', y: 'country' }, transform: [{ type: 'sort', field: 'revenue', order: 'desc' }] }],
+      annotations: [{ x: 600, text: 'Objectif', color: '$5', dash: [] }, { x: [0, 300], color: '$5', opacity: 0.06 }],
+    },
+  },
+  {
+    title: 'Demi-anneau',
+    caption: 'donut · style.startAngle -90 et style.endAngle 90 · total au centre',
+    spec: {
+      title: 'Composition de l’assemblée',
+      subtitle: '477 sièges',
+      data: seats,
+      fields: { seats: { label: 'Sièges' } },
+      layers: [{ mark: 'donut', encode: { key: 'party', value: 'seats' }, style: { startAngle: -90, endAngle: 90, innerRadius: 0.55 } }],
+    },
+  },
+  {
+    title: 'Camembert à rayon variable',
+    caption: 'pie · angle = superficie, rayon = densité (encode.size)',
+    spec: {
+      title: 'Superficie et densité',
+      subtitle: 'Angle : superficie (milliers de km²) · rayon : habitants par km²',
+      data: density,
+      fields: { area: { label: 'Superficie (k km²)' }, density: { label: 'Densité (hab./km²)' } },
+      layers: [{ mark: 'pie', encode: { key: 'country', value: 'area', size: 'density' } }],
+    },
+  },
   {
     title: 'Barres horizontales triées',
     caption: 'Catégories sur y, détectées automatiquement · transform sort · étiquettes de valeur',
@@ -1066,20 +1310,46 @@ export const entries: Entry[] = [
       layers: [{ mark: 'bar', encode: { x: 'people', y: 'age', color: 'sex' }, stack: true, style: { thickness: 18, radius: 3 } }],
     },
   },
+  {
+    title: 'Course de barres',
+    caption: 'race · une image par mois, rangs et valeurs interpolés · lecture, pause et curseur',
+    wide: true,
+    spec: {
+      title: 'Ventes cumulées par produit',
+      subtitle: 'Les 10 premiers, mois par mois',
+      data: raceData,
+      fields: { sales: { label: 'Ventes cumulées', format: { suffix: ' k€' } }, month: { label: 'Mois' } },
+      layers: [{ mark: 'race', encode: { key: 'product', value: 'sales', time: 'month' } }],
+    },
+  },
+  {
+    title: 'Course par famille',
+    caption: 'race · couleur par famille, 8 premiers, en boucle',
+    wide: true,
+    spec: {
+      title: 'Ventes cumulées, couleur par famille',
+      data: raceData,
+      fields: { sales: { label: 'Ventes cumulées', format: { suffix: ' k€' } } },
+      layers: [{ mark: 'race', encode: { key: 'product', value: 'sales', time: 'month', color: 'family' }, style: { top: 8, duration: 600, loop: true } }],
+    },
+  },
 ];
 
 // --------------------------------------------------------------- organisation
 
 export const GROUPS: [string, string[]][] = [
+  ['Lignes et annotations', ['Lignes de référence et zones', 'Réel et prévision en pointillés', 'Valeurs manquantes', 'Étiquettes sur les points', 'Barres et objectif']],
   ['Comparaison', ['Pyramide des âges', 'Barres horizontales triées', 'Barres horizontales empilées', 'Barres empilées à 100 %', 'Épaisseur et couleur par barre', 'Barres fines et mise en avant', 'Sucettes', 'Haltères (dumbbell)', 'Graphique à puces (bullet)']],
-  ['Évolution', ['Prévision avec intervalle', 'Courbe en escalier', 'Streamgraph', 'Classement (bump chart)', 'Graphique de pente', 'Chandeliers']],
+  ['Évolution', ['Course de barres', 'Course par famille', 'Prévision avec intervalle', 'Courbe en escalier', 'Streamgraph', 'Classement (bump chart)', 'Graphique de pente', 'Chandeliers']],
   ['Temps et planning', ['Diagramme de Gantt', 'Calendrier']],
   ['Distribution', ['Histogramme', 'Boîte à moustaches', 'Violon', 'Distribution en traits']],
   ['Petits multiples', ['Petits multiples de courbes', 'Petits multiples de barres']],
   ['Corrélation', ['Nuage de points et régression', 'Bulles', 'Densité hexagonale', 'Coordonnées parallèles']],
-  ['Parts et hiérarchies', ['Camembert', 'Anneau', 'Treemap', 'Sunburst', 'Cercles imbriqués', 'Marimekko', 'Gaufre']],
+  ['Parts et hiérarchies', ['Camembert', 'Anneau', 'Demi-anneau', 'Hémicycle', 'Camembert à rayon variable', 'Treemap', 'Sunburst', 'Cercles imbriqués', 'Marimekko', 'Gaufre']],
   ['Flux', ['Pipeline de données', 'Diagramme de flux', 'Processus avec volumes', 'Chemin mis en avant', 'Sankey', 'Diagramme en cordes', 'Réseau', 'Entonnoir', 'Cascade']],
-  ['Matrices et polaires', ['Carte de chaleur', 'Radar', 'Rose polaire']],
+  ['Matrices et polaires', ['Carte de chaleur', 'Radar', 'Rose polaire', 'Barres radiales']],
+  ['Arbres et ensembles', ['Dendrogramme', 'Organigramme', 'Icicle', 'Flame chart', 'Diagramme de Venn']],
+  ['Texte et chronologie', ['Nuage de mots', 'Frise chronologique']],
   ['Indicateurs', ['Tuiles KPI', 'Jauge']],
   ['Cartes', ['Points sur une carte du monde', 'Choroplèthe mondiale', 'Bulles sur une carte', 'Zoom sur l’Europe et mise en avant']],
   ['Mise en avant', ['Mise en avant dans un camembert', 'Mise en avant dans un treemap', 'Mise en avant d’une série', 'Mise en avant sur une carte de chaleur']],

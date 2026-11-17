@@ -142,12 +142,43 @@ export const heatmap: MarkDefinition = {
 
 // --------------------------------------------------------------- pie, donut
 
+/** Start angle and sweep, in radians, from `startAngle` / `endAngle` in degrees. */
+function arcSpan(style: { startAngle?: number; endAngle?: number }): [number, number] {
+  const a0 = ((style.startAngle ?? 0) * Math.PI) / 180;
+  const a1 = ((style.endAngle ?? 360) * Math.PI) / 180;
+  const sweep = Math.min(TAU, Math.max(0.01, a1 - a0));
+  return [a0, sweep];
+}
+
+/**
+ * The box a partial circle needs (a half donut is twice as wide as tall), in
+ * units of the radius, with room for a pulled-out slice and the center label.
+ */
+function arcBox(style: { startAngle?: number; endAngle?: number }): [number, number, number, number] {
+  const [a0, sweep] = arcSpan(style);
+  if (sweep >= TAU - 1e-6) return [-1, -1, 1, 1];
+  let x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+  for (let i = 0; i <= 64; i++) {
+    const a = a0 + (sweep * i) / 64;
+    const x = Math.sin(a), y = Math.cos(a);
+    x0 = Math.min(x0, x); x1 = Math.max(x1, x);
+    y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+  }
+  // Room under the center for the label that sits there.
+  y0 = Math.min(y0, -0.28);
+  const m = 0.08;
+  return [x0 - m, y0 - m, x1 + m, y1 + m];
+}
+
 function arcMark(defaultInner: number): MarkDefinition {
   return {
     standalone: true,
     themeKey: 'arc',
     symbol: 'square',
-    scales: () => ({ x: new LinearScale(-1, 1), y: new LinearScale(-1, 1), aspect: 1 }),
+    scales: ({ layer }) => {
+      const [x0, y0, x1, y1] = arcBox((layer.style ?? {}) as { startAngle?: number; endAngle?: number });
+      return { x: new LinearScale(x0, x1), y: new LinearScale(y0, y1), aspect: (x1 - x0) / (y1 - y0) };
+    },
     build(ctx) {
       const { layer, table } = ctx.data;
       const { style, theme } = ctx;
@@ -163,14 +194,22 @@ function arcMark(defaultInner: number): MarkDefinition {
       const PULL = 0.06;
       const r0 = R * inner;
       const colors = slices.map((d) => ctx.paint(legend.find((l) => l.key === d.key)!.color, d.row));
+      const [start, sweepAll] = arcSpan(style);
       const bounds = (() => {
-        let a = 0;
+        let a = start;
         return slices.map((d) => {
           const a0 = a;
-          a += (d.value / (total || 1)) * TAU;
+          a += (d.value / (total || 1)) * sweepAll;
           return [a0, a] as const;
         });
       })();
+      // Variable radius: `encode.size` sets how far each slice reaches (by area, from the hole outwards).
+      const zf = layer.encode.size;
+      const zcol = zf ? (table.column(zf).values as Float64Array) : undefined;
+      const zmax = zcol ? Math.max(...slices.map((d) => zcol[d.row] || 0)) : 0;
+      const outer = slices.map((d) =>
+        zcol && zmax > 0 ? r0 + (R - r0) * (0.35 + 0.65 * Math.sqrt(Math.max(0, zcol[d.row]) / zmax)) : R,
+      );
 
       let focus = ctx.state.focus as string | undefined;
       if (focus !== undefined && !slices.some((d) => d.key === focus)) focus = undefined;
@@ -192,7 +231,7 @@ function arcMark(defaultInner: number): MarkDefinition {
           const mid = (a0 + a1) / 2;
           const [cx, cy] = at(mid, g[i * 2]);
           const c = colors[i];
-          pushArc(out, cx, cy, r0 * unit, R * unit, a0, a1, slices.length > 1 ? style.gap : 0, [c[0], c[1], c[2], c[3] * g[i * 2 + 1]]);
+          pushArc(out, cx, cy, r0 * unit, outer[i] * unit, a0, a1, slices.length > 1 ? style.gap : 0, [c[0], c[1], c[2], c[3] * g[i * 2 + 1]]);
         });
         batch.update(new Float32Array(out), slices.length);
       };
@@ -207,8 +246,9 @@ function arcMark(defaultInner: number): MarkDefinition {
           if (!style.labels || sweep < 0.3) return;
           const mid = (a0 + a1) / 2;
           const off = g[i * 2];
-          const rm = r0 > 0 ? (R + r0) / 2 : R * 0.62;
-          const half = Math.min((R - r0) / 2, Math.sin(Math.min(sweep / 2, Math.PI / 2)) * rm) * 0.9;
+          const Ri = outer[i];
+          const rm = r0 > 0 ? (Ri + r0) / 2 : Ri * 0.62;
+          const half = Math.min((Ri - r0) / 2, Math.sin(Math.min(sweep / 2, Math.PI / 2)) * rm) * 0.9;
           const px = Math.sin(mid) * (rm + off);
           const py = Math.cos(mid) * (rm + off);
           labels.push({
@@ -242,8 +282,8 @@ function arcMark(defaultInner: number): MarkDefinition {
           const px = x - Math.sin(mid) * g[i * 2];
           const py = y - Math.cos(mid) * g[i * 2];
           const r = Math.hypot(px, py);
-          const a = (Math.atan2(px, py) + TAU) % TAU;
-          if (r >= r0 && r <= R && a >= a0 && a < a1) return i;
+          const a = (((Math.atan2(px, py) - a0) % TAU) + TAU) % TAU;
+          if (r >= r0 && r <= outer[i] && a < a1 - a0) return i;
         }
         return -1;
       };

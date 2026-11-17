@@ -51,7 +51,20 @@ export interface Theme {
   };
   marks: {
     /** `endLabels`: the series name at the end of each line (direct labeling). */
-    line: { width: number; curve: 'linear' | 'step' | 'smooth'; opacity: number; endLabels: boolean };
+    line: {
+      width: number;
+      curve: 'linear' | 'step' | 'smooth';
+      opacity: number;
+      endLabels: boolean;
+      /** Dash pattern in px, e.g. `[6, 5]` (a forecast, a target). Empty: solid. */
+      dash: number[];
+      /** A dot on every data point. */
+      markers: boolean;
+      /** The value above every point: for short series, or with `highlight` on a few. */
+      labels: boolean;
+      /** Join across missing values instead of leaving a gap. */
+      connectNulls: boolean;
+    };
     bar: {
       /** Radius of the data end, px. The baseline end stays square. */
       radius: number;
@@ -85,7 +98,15 @@ export interface Theme {
     tick: { width: number; length: number; maxWidth: number; opacity: number };
     heatmap: { radius: number; labels: boolean; gap: number };
     /** Pie and donut. `gap`: px separator between slices; `innerRadius`: share of the radius (donut). */
-    arc: { innerRadius: number; gap: number; labels: boolean; center: boolean };
+    arc: {
+      innerRadius: number;
+      gap: number;
+      labels: boolean;
+      center: boolean;
+      /** Where the circle starts and ends, in degrees clockwise from 12 o'clock: `-90` and `90` make a half donut. */
+      startAngle: number;
+      endAngle: number;
+    };
     treemap: { gap: number; radius: number; labels: boolean; header: number };
     funnel: { gap: number; radius: number; labels: boolean; connector: number };
     /** `thickness`: share of the radius. `track`: empty part of the arc (`auto` follows the grid color). */
@@ -113,6 +134,22 @@ export interface Theme {
      * arrows). `direction`: LR or TB. Sizes in px at 100 %; the diagram is scaled to fit.
      * `edge`: link color (`auto` follows the muted ink). `tint`: how much of the node color fills a box.
      */
+    /** Bar chart race: `top` bars shown, `duration` ms per frame, start on its own, start over at the end. */
+    race: { top: number; duration: number; autoplay: boolean; loop: boolean };
+    /** Concentric bars around a center: `endAngle` degrees for the longest, `gap` share of a ring left empty. */
+    radialBar: { innerRadius: number; gap: number; endAngle: number; track: string; labels: boolean };
+    /** Partition in rows: `orientation` TB (icicle), BT (flame chart, root at the bottom) or LR. Click to zoom. */
+    icicle: { orientation: 'TB' | 'BT' | 'LR'; gap: number; radius: number; labels: boolean };
+    /** One dot per item on a half circle (seats of an assembly). `innerRadius`: share of the radius left empty. */
+    parliament: { innerRadius: number; center: boolean };
+    /** Overlapping circles, areas proportional to the sets and their intersections (2 or 3 sets). */
+    venn: { opacity: number; labels: boolean };
+    /** Words sized by `value`, font sizes in px. */
+    wordcloud: { minSize: number; maxSize: number; weight: number };
+    /** Events along a line, labels alternating above and below. `proportional`: space them by date. */
+    timeline: { proportional: boolean; markerSize: number };
+    /** Hierarchy as a tree: dots (dendrogram) or `boxes` (org chart), growing along `direction`. Sizes in px. */
+    tree: { direction: 'LR' | 'TB'; boxes: boolean; nodeSize: number; linkWidth: number; boxWidth: number; boxHeight: number };
     flow: {
       variant: 'pipeline' | 'boxes';
       /** Steps can be dragged; the chart then emits `layout` with every position. */
@@ -198,7 +235,7 @@ export const lightTheme: Theme = {
     hiddenOpacity: 0.35,
   },
   marks: {
-    line: { width: 2, curve: 'linear', opacity: 1, endLabels: false },
+    line: { width: 2, curve: 'linear', opacity: 1, endLabels: false, dash: [], markers: false, labels: false, connectNulls: false },
     bar: { radius: 4, gap: 2, maxWidth: 28, bandPadding: 0.3, opacity: 1, strokeWidth: 0, stroke: 'transparent', labels: false, thickness: 0 },
     point: { size: 8, shape: 'circle', opacity: 1, strokeWidth: 2, stroke: 'surface', sizeRange: [4, 28] },
     area: { opacity: 0.12, stackedOpacity: 0.8, gradient: false, line: true, lineWidth: 2, curve: 'linear' },
@@ -206,7 +243,7 @@ export const lightTheme: Theme = {
     rule: { width: 1.5, opacity: 1 },
     tick: { width: 2, length: 0.6, maxWidth: 0, opacity: 1 },
     heatmap: { radius: 3, labels: true, gap: 2 },
-    arc: { innerRadius: 0, gap: 2, labels: true, center: true },
+    arc: { innerRadius: 0, gap: 2, labels: true, center: true, startAngle: 0, endAngle: 360 },
     treemap: { gap: 2, radius: 4, labels: true, header: 22 },
     funnel: { gap: 6, radius: 4, labels: true, connector: 0.14 },
     gauge: { min: 0, max: 100, thickness: 0.24, track: 'auto', target: NaN },
@@ -218,6 +255,14 @@ export const lightTheme: Theme = {
     waffle: { rows: 10, columns: 10, gap: 2, radius: 2 },
     rose: { levels: 3, gap: 2, innerRadius: 0.08, labels: true },
     violin: { width: 0.8, fillOpacity: 0.28, strokeWidth: 1.5, box: true, samples: 64, scale: 'width' },
+    race: { top: 10, duration: 900, autoplay: true, loop: false },
+    radialBar: { innerRadius: 0.3, gap: 0.28, endAngle: 270, track: 'auto', labels: true },
+    icicle: { orientation: 'TB', gap: 1.5, radius: 3, labels: true },
+    parliament: { innerRadius: 0.38, center: true },
+    venn: { opacity: 0.3, labels: true },
+    wordcloud: { minSize: 11, maxSize: 46, weight: 650 },
+    timeline: { proportional: false, markerSize: 12 },
+    tree: { direction: 'LR', boxes: false, nodeSize: 9, linkWidth: 1.5, boxWidth: 132, boxHeight: 46 },
     flow: { variant: 'pipeline', editable: true, direction: 'LR', rankGap: 56, nodeGap: 28, fontSize: 13, edge: 'auto', edgeWidth: 1.5, tint: 0.16, radius: 6 },
   },
   tooltip: {

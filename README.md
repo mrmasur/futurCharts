@@ -51,18 +51,21 @@ Démo : `http://localhost:5273/gallery.html`, une application de tableau de bord
 - **Tableaux de bord** : Ventes (indicateurs, tendance, canaux, carte, catégories, tunnel, saisonnalité, avec
   filtres de période et filtres croisés : un clic sur une part, une bulle ou une barre filtre tout le reste),
   Opérations (parcours des tickets, délais, calendrier), Données (pipeline déplaçable, Sankey).
-- **Bibliothèque** : tous les types de graphiques, rangés par famille.
+- **Galerie** (`#/galerie`) : un aperçu vivant de chaque graphique, rangé par famille, avec une recherche
+  (titre, description, marque). Un clic ouvre la page du graphique (`#/demo/<nom>`) : le graphique en grand, sa
+  description, ses marques et sa spec JSON à copier, avec précédent / suivant dans la famille. Les aperçus ne
+  sont créés qu'à l'approche de l'écran.
 - Menu ⋯ de chaque carte : voir la spec JSON, exporter en PNG, réinitialiser la vue. Palette et thème dans
   l'en-tête, retenus d'une visite à l'autre.
 
 | Famille | Marques et options |
 |---|---|
 | Comparaison | `bar` vertical ou horizontal (catégories sur y : détecté automatiquement), groupé, empilé, étiquettes de valeur (`style.labels`) |
-| Évolution | `line` (droite, lissée, en escalier), `area` empilée ou en bande (`y` → `y2`) |
+| Évolution | `line` (droite, lissée, en escalier ; `dash` en px, `markers`, `labels` sur chaque point, trous aux valeurs manquantes sauf `connectNulls`), `area` empilée ou en bande (`y` → `y2`) |
 | Intervalles | `bar` avec `x2` / `y2` : Gantt, cascade ; `rule` : moustaches, barres d'erreur, sucettes ; `tick` : médianes, distributions en traits |
 | Distribution | histogramme (transform `bin` + `bar`), boîte à moustaches (transform `boxplot` + `rule` + `bar` + `tick` + `point`), `violin` (densité, quartiles, médiane) |
 | Corrélation | `point` (nuage, bulles avec `size`), droite de régression (transform `regression`) |
-| Parts | `pie`, `donut`, `treemap` (squarifié, groupes) |
+| Parts | `pie`, `donut` (`startAngle` / `endAngle` en degrés : `-90` et `90` pour un demi-anneau ; `encode.size` : rayon variable), `treemap` (squarifié, groupes), `parliament` (un point par siège) |
 | Indicateurs | `gauge` (min, max, objectif), `funnel` (taux de conversion) |
 | Matrices | `heatmap` (deux axes de catégories) |
 | Profils | `radar` |
@@ -71,7 +74,10 @@ Démo : `http://localhost:5273/gallery.html`, une application de tableau de bord
 | Hiérarchies | `sunburst` (`path`: liste de champs, du niveau extérieur au plus fin), `treemap` |
 | Calendrier | `calendar` (une case par jour, `x`: date) |
 | Indicateurs (suite) | `kpi` (dernière valeur, évolution, sparkline ; `upIsGood`), `waffle` (100 cases) |
-| Polaires | `rose` (rose polaire, aire proportionnelle, séries empilées) |
+| Polaires | `rose` (rose polaire, aire proportionnelle, séries empilées), `radialBar` (un anneau par catégorie) |
+| Arbres | `tree` (`path` ; dendrogramme, ou organigramme avec `boxes` et `direction: "TB"`), `icicle` (partition en lignes, zoom au clic ; `orientation: "BT"` pour un flame chart) |
+| Ensembles | `venn` (2 ou 3 ensembles ; `key` vaut `A`, `A&B` ou `A&B&C`, aires proportionnelles) |
+| Texte et temps | `wordcloud` (taille selon `value`), `timeline` (frise : `x` date, `key` titre, `value` détail) |
 | Parts (suite) | `marimekko` (largeur = part du total, hauteur = part dans la colonne), `pack` (cercles imbriqués) |
 | Relations | `chord` (échanges entre entités), `network` (placement par forces, nœuds déplaçables) |
 | Multivarié | `parallel` (coordonnées parallèles, `path` = champs à comparer), `hexbin` (densité de très nombreux points) |
@@ -209,11 +215,39 @@ Un panneau par valeur du champ, avec le même ordre de catégories, les mêmes c
 (`shared: false` pour des échelles libres) et une seule légende, qui masque une série dans tous les panneaux.
 `createChart()` choisit la bonne vue ; les wrappers l'utilisent.
 
+## Annotations
+
+```json
+"annotations": [
+  { "y": 1200, "text": "Objectif", "color": "$5" },
+  { "x": ["2025-04-01", "2025-06-01"], "text": "Campagne" },
+  { "x": "2025-10-01", "y": 1013, "text": "Nouvelle gamme" }
+]
+```
+
+En coordonnées de données, sur tout graphique cartésien : une valeur donne une ligne (pointillée par défaut,
+`dash: []` pour un trait plein), une paire donne une bande, `x` et `y` ensemble une note sur un point. `x` et `y`
+sont les axes de l'écran (sur des barres horizontales, les valeurs sont en `x`). Une ligne d'objectif hors des
+données élargit l'axe pour rester visible. Les annotations suivent le zoom.
+
+## Course de barres
+
+```json
+{ "mark": "race", "encode": { "key": "product", "value": "sales", "time": "month", "color": "family" },
+  "style": { "top": 10, "duration": 900, "autoplay": true, "loop": false } }
+```
+
+Une image par valeur de `time`. Entre deux images, les valeurs progressent en continu, les barres glissent vers
+leur nouveau rang, l'axe suit le meneur et la date avance. Une barre de lecture (lecture / pause, curseur) est
+ajoutée sous le graphique. API : `chart.play()`, `chart.pause()`, `chart.seek(index)` ; l'événement `frame`
+(`onFrame`, `@frame`, `chart-frame`) annonce chaque nouvelle image, pour synchroniser le reste d'un tableau de bord.
+La lecture démarre quand le graphique devient visible.
+
 ## Prévu : transitions et évolution dans le temps
 
 - **Transitions** : passage fluide d'un état de données à un autre (filtre, série masquée, nouvelle période).
-- **Évolution dans le temps** : une dimension de la spec joue le rôle d'images successives, pour les courses de
-  barres et autres graphiques animés, avec lecture, pause et curseur temporel.
+- **Évolution dans le temps** pour d'autres graphiques (nuage de points animé façon Gapminder), sur le modèle de la
+  course de barres et de son `timeline`.
 
 Conséquences sur l'architecture : une clé d'identité par donnée pour apparier deux états, et une interpolation
 faite sur GPU entre deux états de buffer, pilotée par un uniform de progression.
@@ -266,4 +300,5 @@ Des boîtes reliées pour tracer un processus de bout en bout, embranchements et
 ## Pas encore fait
 
 Lecture du format Arrow, moteur WebGPU, publication sur npm,
-export SVG/PDF, tirets sur les lignes, barres horizontales, gestion de la perte de contexte WebGL.
+export SVG/PDF, gestion de la perte de contexte WebGL. Les tirets sont découpés à la construction : un zoom les
+étire avec les données.

@@ -17,6 +17,8 @@ export interface SeriesData {
   rows: Int32Array;
   colorValue?: Float64Array;
   sizeValue?: Float64Array;
+  /** `breaks[j] = 1`: a missing value lies between points j - 1 and j (lines and areas break there). */
+  breaks?: Uint8Array;
 }
 
 export interface LayerData {
@@ -101,9 +103,18 @@ export function prepareLayer(layer: LayerSpec, index: number, table: Table, ctx:
   const groups = new Map<string, number[]>();
   const xRaw = new Float64Array(table.length);
   const valid: number[] = [];
+  // Rows with an x but no value: a line breaks there (unless `connectNulls`).
+  const missing = new Map<string, number[]>();
+  const keepGaps = !(layer.style as { connectNulls?: boolean } | undefined)?.connectNulls;
   for (let i = 0; i < table.length; i++) {
     const x = xOf(i);
     xRaw[i] = x;
+    if (keepGaps && !Number.isNaN(x) && Number.isNaN(yVals[i])) {
+      const key = colorCol && !continuous ? String(colorCol.values[i]) : defaultKey;
+      let m = missing.get(key);
+      if (!m) missing.set(key, (m = []));
+      m.push(x);
+    }
     if (Number.isNaN(x) || Number.isNaN(yVals[i]) || (y2Vals && Number.isNaN(y2Vals[i]))) continue;
     valid.push(i);
     const key = colorCol && !continuous ? String(colorCol.values[i]) : defaultKey;
@@ -129,6 +140,15 @@ export function prepareLayer(layer: LayerSpec, index: number, table: Table, ctx:
       value: new Float64Array(n),
       rows: Int32Array.from(rows),
     };
+    const gaps = missing.get(key);
+    if (gaps) {
+      s.breaks = new Uint8Array(n);
+      for (let j = 1; j < n; j++) {
+        const a = xRaw[rows[j - 1]];
+        const b = xRaw[rows[j]];
+        if (gaps.some((g) => g > a && g < b)) s.breaks[j] = 1;
+      }
+    }
     if (continuous) s.colorValue = new Float64Array(n);
     if (sizeCol && sizeCol.type !== 'string') s.sizeValue = new Float64Array(n);
     for (let j = 0; j < n; j++) {

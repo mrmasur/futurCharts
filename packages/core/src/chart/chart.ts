@@ -3,8 +3,9 @@ import { ensureBuiltinMarks } from '../marks/builtin';
 import { applyTransforms } from '../data/transforms';
 import { prefersReducedMotion } from '../marks/animate';
 import { luminance } from '../marks/primitives';
+import { annotationRaw, buildAnnotations } from './annotations';
 import { prepareLayer, standaloneLayer, type LayerData, type SeriesData } from '../marks/prepare';
-import { getMark, type BuildContext, type BuiltMark, type MarkDefinition, type MarkDraw, type MarkLabel, type ShapeHit } from '../marks/registry';
+import { emptyHit, getMark, type BuildContext, type BuiltMark, type MarkDefinition, type MarkDraw, type MarkLabel, type ShapeHit, type Timeline } from '../marks/registry';
 import { createRenderer, type RendererChoice } from '../render';
 import { LAYOUTS } from '../render/layouts';
 import type { Batch, ClipRect, DrawCall, Renderer, RGBA, ViewTransform } from '../render/types';
@@ -61,6 +62,8 @@ export interface ChartEvents {
   select: SelectionPayload;
   /** A drill-down mark (sunburst, rose) changed its focus. `path` is empty when back to everything. */
   drill: { layer: number; path: string[] };
+  /** A time-driven chart (bar chart race) reached a new frame. */
+  frame: { index: number; label: string };
   /** Boxes of a diagram were moved by hand: every position, to save as `x` / `y` in the spec. */
   layout: { layer: number; positions: Record<string, { x: number; y: number }> };
 }
@@ -204,6 +207,10 @@ export class Chart {
   /** Entry animation: pending until the first frame, then its start time. */
   private enter: { pending: boolean; start: number; duration: number } = { pending: false, start: 0, duration: 0 };
   private frame = 0;
+  /** Play button and scrubber of a time-driven mark. */
+  private timeline?: Timeline;
+  private controls?: { root: HTMLDivElement; button: HTMLButtonElement; range: HTMLInputElement; label: HTMLSpanElement };
+  private shownFrame = -1;
   /** On screen (or close to it). Off screen, frames are skipped and drawn on return. */
   private visible = typeof IntersectionObserver === 'undefined';
   private dirty = false;
@@ -309,6 +316,25 @@ export class Chart {
     if (!set) this.listeners.set(type, (set = new Set()));
     set.add(handler);
     return () => set!.delete(handler);
+  }
+
+  /** Play a time-driven chart (bar chart race) from where it is, or from the start once finished. */
+  play(): void {
+    this.timeline?.play();
+    this.requestRender();
+  }
+
+  pause(): void {
+    this.timeline?.pause();
+    this.requestRender();
+  }
+
+  /** Jump to a frame (fractional values land between two frames). */
+  seek(frame: number): void {
+    if (!this.timeline) return;
+    this.timeline.pause();
+    this.timeline.set(frame);
+    this.requestRender();
   }
 
   /**
@@ -548,6 +574,18 @@ export class Chart {
           }
         }
       }
+      // A target line or band on the value axis must be in view, even past the data.
+      const valKey = horizontal ? 'x' : 'y';
+      for (const a of spec.annotations ?? []) {
+        const v = a[valKey];
+        if (v === undefined || (a.x !== undefined && a.y !== undefined && !Array.isArray(a.x) && !Array.isArray(a.y))) continue;
+        for (const u of Array.isArray(v) ? v : [v]) {
+          const n = annotationRaw(u, false, categories);
+          if (!Number.isFinite(n)) continue;
+          if (n < v0) v0 = n;
+          if (n > v1) v1 = n;
+        }
+      }
       if (c0 > c1) [c0, c1] = [0, 1];
       if (v0 > v1) [v0, v1] = [0, 1];
       if (!Number.isFinite(step)) step = c1 > c0 ? c1 - c0 : 1;
@@ -609,7 +647,27 @@ export class Chart {
     const surface = parseColor(theme.background);
     const opaqueSurface: RGBA = surface[3] === 0 ? [1, 1, 1, 1] : surface;
     const pos = horizontal ? (c: number, v: number): [number, number] => [v, c] : (c: number, v: number): [number, number] => [c, v];
+    const annotations = !geo && ref && spec.annotations?.length ? spec.annotations : undefined;
+    const bandCat = catType === 'band';
+    const annotationLayer = (part: 'under' | 'over', view: { width: number; height: number }): Built => {
+      // Dashes are measured in px: rebuilt with the view, like other size-dependent marks.
+      const def: MarkDefinition = { standalone: true, sizeDependent: true, symbol: 'square', build: () => ({ draws: [], hit: emptyHit() }) };
+      const data = standaloneLayer({ mark: 'rule', encode: {} }, -1, tableOf(refIndex));
+      const mark = buildAnnotations(annotations!, {
+        renderer: this.renderer,
+        theme,
+        x: this.xScale,
+        y: this.yScale,
+        categories,
+        bandX: bandCat && !horizontal,
+        bandY: bandCat && horizontal,
+        pixel: [1 / Math.max(1, view.width), 1 / Math.max(1, view.height)],
+      }, part);
+      return { data, def, mark };
+    };
     const buildAll = (view: { width: number; height: number }): Built[] =>
+      annotations ? [annotationLayer('under', view), ...buildLayers(view), annotationLayer('over', view)] : buildLayers(view);
+    const buildLayers = (view: { width: number; height: number }): Built[] =>
       layers.map(({ data, def }) => {
         const themeKey = def.themeKey ?? data.layer.mark;
         const style = deepMerge((theme.marks as Record<string, any>)[themeKey] ?? {}, data.layer.style ?? {});
@@ -679,11 +737,14 @@ export class Chart {
     }
     this.legend = [...slots.keys()].map((k) => entries.get(k)!).filter(Boolean);
 
+    this.syncTimeline();
     if (this.built.some((b) => sizeDependent(b))) {
       const view = (this.layout = this.computeLayout()).view;
       if (Math.abs(view.width - guess.width) > 0.5 || Math.abs(view.height - guess.height) > 0.5) {
         this.disposeMarks();
         this.built = buildAll(view);
+        // The play bar must drive the marks on screen, not the ones just discarded.
+        this.syncTimeline();
       }
     }
     this.requestRender();
@@ -704,6 +765,68 @@ export class Chart {
     let s = this.layerState.get(layer);
     if (!s) this.layerState.set(layer, (s = {}));
     return s;
+  }
+
+  /** Create, update or remove the play bar, depending on whether a mark plays through time. */
+  private syncTimeline(): void {
+    this.timeline = this.built.map((b) => b.mark.timeline).find((t): t is Timeline => !!t);
+    if (this.spec.interactions?.player === false) this.timeline = undefined;
+    if (!this.timeline) {
+      this.controls?.root.remove();
+      this.controls = undefined;
+      return;
+    }
+    if (!this.controls) {
+      const root = document.createElement('div');
+      root.style.cssText = 'position:absolute;left:12px;right:12px;bottom:10px;height:30px;display:flex;align-items:center;gap:10px;z-index:1;';
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.style.cssText = 'width:30px;height:30px;border-radius:50%;border:0;cursor:pointer;display:grid;place-items:center;font-size:12px;padding:0;';
+      const range = document.createElement('input');
+      range.type = 'range';
+      range.min = '0';
+      range.step = 'any';
+      range.style.cssText = 'flex:1;min-width:0;';
+      range.setAttribute('aria-label', 'Position dans le temps');
+      const label = document.createElement('span');
+      label.style.cssText = 'min-width:72px;text-align:right;font-variant-numeric:tabular-nums;';
+      root.append(button, range, label);
+      // The controls are not part of the plot: keep their pointer events away from zoom, lasso and drags.
+      for (const type of ['pointerdown', 'pointerup', 'pointermove', 'wheel', 'dblclick']) root.addEventListener(type, (e) => e.stopPropagation());
+      button.addEventListener('click', () => {
+        if (this.timeline?.playing) this.timeline.pause();
+        else this.timeline?.play();
+        this.requestRender();
+      });
+      range.addEventListener('input', () => this.seek(Number(range.value)));
+      this.root.appendChild(root);
+      this.controls = { root, button, range, label };
+    }
+    const { button, range, label } = this.controls;
+    const t = this.theme;
+    button.style.background = t.palette.categorical[0];
+    button.style.color = '#fff';
+    range.style.accentColor = t.palette.categorical[0];
+    label.style.color = t.text.secondary;
+    label.style.font = `600 12px ${t.font.family}`;
+    range.max = String(Math.max(0, this.timeline.frames.length - 1));
+    this.shownFrame = -1;
+  }
+
+  private updateControls(): void {
+    const tl = this.timeline;
+    const c = this.controls;
+    if (!tl || !c) return;
+    const t = tl.get();
+    if (document.activeElement !== c.range) c.range.value = String(t);
+    c.button.textContent = tl.playing ? '❚❚' : '▶';
+    c.button.setAttribute('aria-label', tl.playing ? 'Pause' : 'Lecture');
+    const index = Math.min(tl.frames.length - 1, Math.round(t));
+    if (index !== this.shownFrame) {
+      this.shownFrame = index;
+      c.label.textContent = tl.frames[index] ?? '';
+      this.emit('frame', { index, label: tl.frames[index] ?? '' });
+    }
   }
 
   /** Install the map scales and return the aspect ratio (width / height) to keep. */
@@ -764,6 +887,7 @@ export class Chart {
     const lab = theme.axis.label;
     const ttl = theme.axis.title;
     let bottom = pad;
+    if (this.timeline) bottom += 40;
     if (xAxis && xAxis.labels !== false) bottom += lab.size + lab.padding;
     if (xAxis?.title) bottom += ttl.size + ttl.padding;
     const plotH = Math.max(10, this.height - top - bottom);
@@ -918,6 +1042,7 @@ export class Chart {
     }
     this.renderer.render({ clearColor: parseColor(theme.background), calls });
     this.drawOverlay(L);
+    this.updateControls();
     if (animating) this.requestRender();
   }
 

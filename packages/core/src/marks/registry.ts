@@ -83,6 +83,18 @@ export interface MarkLabel {
   background?: string;
 }
 
+/** A mark that plays through time: the chart shows a play button and a scrubber for it. */
+export interface Timeline {
+  /** One label per frame. */
+  readonly frames: string[];
+  /** Current position, in frames (fractional while moving). */
+  get(): number;
+  set(t: number): void;
+  play(): void;
+  pause(): void;
+  readonly playing: boolean;
+}
+
 /** What a standalone mark tells the chart about its own coordinate system. */
 export interface MarkScales {
   x: Scale;
@@ -153,6 +165,8 @@ export interface BuiltMark {
   animate?(now: number): boolean;
   /** Legend entries to show dimmed because the mark's own focus leaves them out. */
   muted?(): string[];
+  /** The mark plays through time (bar chart race). */
+  timeline?: Timeline;
   /**
    * Direct manipulation (moving the boxes of a diagram). `start` says whether
    * the press is on something draggable; `end` returns the new state, which the

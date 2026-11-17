@@ -52,12 +52,12 @@ const families = GROUPS.map(([name, titles]) => ({
 
 function buildNav() {
   const nav = document.getElementById('nav')!;
-  const count = (list: Entry[]) => list.reduce((a, e) => a + (e.tiles?.length ?? 1), 0);
   nav.innerHTML = `
     <h3>Tableaux de bord</h3>
     ${DASHBOARDS.map((d) => `<a href="#/${d.id}" data-route="${d.id}">${icon(d.id)}${d.title}</a>`).join('')}
-    <h3 style="margin-top:18px">Bibliothèque</h3>
-    ${families.map((f) => `<a href="#/bib/${f.id}" data-route="bib/${f.id}">${icon('lib')}${f.name}<span class="count">${count(f.entries)}</span></a>`).join('')}`;
+    <h3 style="margin-top:18px">Galerie</h3>
+    <a href="#/galerie" data-route="galerie">${icon('lib')}Tous les graphiques<span class="count">${entries.length}</span></a>
+    ${families.map((f) => `<a href="#/galerie/${f.id}" data-route="galerie/${f.id}" class="sub">${f.name}<span class="count">${f.entries.length}</span></a>`).join('')}`;
 }
 
 // --------------------------------------------------------------- rendering
@@ -76,7 +76,7 @@ const tileSpec = (spec: ChartSpec): ChartSpec => ({ ...spec, theme: themeFor() }
 function cardsForFamily(f: (typeof families)[number]): Card[] {
   return f.entries.map((e) => {
     const spec = e.spec ?? { layers: [] };
-    const isFlow = spec.layers.some((l) => l.mark === 'flow' || l.mark === 'network' || l.mark === 'chord' || l.mark === 'pack');
+    const isFlow = spec.layers.some((l) => ['flow', 'network', 'chord', 'pack', 'race', 'tree', 'icicle', 'venn', 'wordcloud', 'timeline'].includes(l.mark));
     return {
       id: slug(e.title),
       title: spec.title ?? e.title,
@@ -178,12 +178,14 @@ function refresh() {
       const specs = m.card.tiles ?? [m.card.spec];
       m.charts.forEach((c, i) => c.update(m.card.tiles ? tileSpec(specs[i]) : withTheme(specs[i])));
     }
+    for (const c of thumbCharts) c.update({ ...c.getSpec(), theme: thumbTheme() });
   }
 }
 
 function renderFilters() {
   const box = document.getElementById('filters')!;
   const chips = document.getElementById('chips')!;
+  if (!current.dashboard?.filters && box.querySelector('.search, .btn')) return;
   box.replaceChildren();
   chips.replaceChildren();
   if (!current.dashboard?.filters) return;
@@ -227,35 +229,166 @@ function renderFilters() {
   }
 }
 
+// ------------------------------------------------------------------ gallery
+
+let thumbObserver: IntersectionObserver | undefined;
+let thumbCharts: ChartView[] = [];
+
+/** A small, quiet version of the theme for previews. */
+const thumbTheme = (): ChartSpec['theme'] => {
+  const base = themeFor();
+  const overrides = { padding: 8, legend: { label: { size: 10 }, symbolSize: 7, itemGap: 10 }, axis: { label: { size: 9 } } };
+  return typeof base === 'string' ? { extends: base, ...overrides } : { ...base, ...overrides };
+};
+
+const marksOf = (e: Entry) => [...new Set((e.tiles ?? [e.spec!]).flatMap((s) => s.layers.map((l) => l.mark)))];
+
+function familyOf(e: Entry) {
+  return families.find((f) => f.entries.includes(e));
+}
+
+function renderGallery(board: HTMLElement, only?: (typeof families)[number]) {
+  const list = only ? [only] : families;
+  const search = document.createElement('input');
+  search.type = 'search';
+  search.placeholder = 'Rechercher un graphique, une marque…';
+  search.className = 'search';
+  search.setAttribute('aria-label', 'Rechercher un graphique');
+  document.getElementById('filters')!.appendChild(search);
+  thumbObserver = new IntersectionObserver(
+    (seen) => {
+      for (const it of seen) {
+        if (!it.isIntersecting) continue;
+        const box = it.target as HTMLElement & { entry?: Entry };
+        thumbObserver!.unobserve(box);
+        const e = box.entry!;
+        const spec = e.tiles ? e.tiles[0] : e.spec!;
+        // Fewer bars in a race preview, so each name stays legible.
+        const layers = spec.layers.map((l) => (l.mark === 'race' ? { ...l, style: { ...l.style, top: 6 } } : l));
+        createChart(box, { ...spec, layers, title: undefined, subtitle: undefined, theme: thumbTheme(), interactions: { tooltip: false, player: false } })
+          .then((c) => thumbCharts.push(c))
+          .catch((error) => (box.textContent = String(error)));
+      }
+    },
+    { rootMargin: '200px' },
+  );
+  const cards: { el: HTMLElement; text: string; section: HTMLElement }[] = [];
+  for (const f of list) {
+    const section = document.createElement('section');
+    section.className = 'gal-section';
+    section.innerHTML = `<h2 class="section-title"></h2><div class="thumbs"></div>`;
+    section.querySelector('h2')!.textContent = `${f.name} · ${f.entries.length}`;
+    const grid = section.querySelector('.thumbs')!;
+    for (const e of f.entries) {
+      const a = document.createElement('a');
+      a.className = 'thumb';
+      a.href = `#/demo/${slug(e.title)}`;
+      const preview = document.createElement('div') as HTMLDivElement & { entry?: Entry };
+      preview.className = 'preview';
+      preview.entry = e;
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.innerHTML = `<h3></h3><p></p>`;
+      meta.querySelector('h3')!.textContent = e.title;
+      meta.querySelector('p')!.textContent = marksOf(e).join(' · ');
+      a.append(preview, meta);
+      grid.appendChild(a);
+      thumbObserver.observe(preview);
+      cards.push({ el: a, text: `${e.title} ${e.caption} ${marksOf(e).join(' ')} ${f.name}`.toLowerCase(), section });
+    }
+    board.appendChild(section);
+  }
+  search.addEventListener('input', () => {
+    const q = search.value.trim().toLowerCase();
+    for (const c of cards) c.el.hidden = !!q && !q.split(/\s+/).every((w) => c.text.includes(w));
+    for (const sec of board.querySelectorAll<HTMLElement>('.gal-section')) sec.hidden = !sec.querySelector('.thumb:not([hidden])');
+  });
+}
+
+async function renderDemo(board: HTMLElement, e: Entry) {
+  const f = familyOf(e);
+  const list = f?.entries ?? [e];
+  const i = list.indexOf(e);
+  const nav = document.getElementById('filters')!;
+  const link = (target: Entry | undefined, label: string) => {
+    const a = document.createElement('a');
+    a.className = 'btn';
+    a.textContent = label;
+    if (target) a.href = `#/demo/${slug(target.title)}`;
+    else a.setAttribute('aria-disabled', 'true');
+    return a;
+  };
+  const back = document.createElement('a');
+  back.className = 'btn';
+  back.href = f ? `#/galerie/${f.id}` : '#/galerie';
+  back.textContent = `← ${f?.name ?? 'Galerie'}`;
+  nav.append(back, link(list[i - 1], '‹ Précédent'), link(list[i + 1], 'Suivant ›'));
+  const card = cardsForFamily({ id: 'x', name: '', entries: [e] })[0];
+  card.span = 12;
+  card.height = card.tiles ? 'xs' : 'l';
+  mounted.push(await mountCard(board, card));
+  // What it is, and the spec that draws it.
+  const info = document.createElement('section');
+  info.className = 'card span-12 info';
+  const specs = e.tiles ?? [e.spec!];
+  const json = JSON.stringify(specs.length === 1 ? printable(specs[0]) : specs.map(printable), null, 2);
+  info.innerHTML = `<div class="about"><h2>À propos</h2><p></p><h2>Marques</h2><div class="tags"></div></div><div class="code"><div class="code-head"><h2>Spec JSON</h2><button class="btn" type="button">Copier</button></div><pre></pre></div>`;
+  info.querySelector('.about p')!.textContent = e.caption;
+  info.querySelector('.tags')!.innerHTML = marksOf(e).map((m) => `<code>${m}</code>`).join(' ');
+  info.querySelector('pre')!.textContent = json;
+  const copy = info.querySelector('.code button') as HTMLButtonElement;
+  copy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(json);
+      copy.textContent = 'Copié';
+    } catch {
+      copy.textContent = 'Copie impossible';
+    }
+    setTimeout(() => (copy.textContent = 'Copier'), 1500);
+  });
+  board.appendChild(info);
+}
+
 async function render() {
   closeMenu();
   for (const m of mounted) for (const c of m.charts) c.destroy();
   mounted = [];
+  thumbObserver?.disconnect();
+  for (const c of thumbCharts) c.destroy();
+  thumbCharts = [];
   const board = document.getElementById('board')!;
   board.replaceChildren();
-  const route = location.hash.replace(/^#\/?/, '') || DASHBOARDS[0].id;
+  board.classList.remove('gallery');
+  let route = location.hash.replace(/^#\/?/, '') || DASHBOARDS[0].id;
+  // Old library links now open the gallery.
+  if (route.startsWith('bib/')) route = `galerie/${route.slice(4)}`;
   document.querySelectorAll<HTMLAnchorElement>('#nav a').forEach((a) => (a.getAttribute('data-route') === route ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current')));
   document.getElementById('app')!.classList.remove('open');
   const dashboard = DASHBOARDS.find((d) => d.id === route);
-  const family = families.find((f) => `bib/${f.id}` === route);
-  current = { dashboard, family };
+  current = { dashboard };
   const title = document.getElementById('title')!;
   const subtitle = document.getElementById('subtitle')!;
-  let cards: Card[];
+  document.getElementById('filters')!.replaceChildren();
+  renderFilters();
+  window.scrollTo(0, 0);
   if (dashboard) {
     title.textContent = dashboard.title;
     subtitle.textContent = dashboard.subtitle;
-    cards = dashboard.cards(filters);
+    for (const card of dashboard.cards(filters)) mounted.push(await mountCard(board, card));
+  } else if (route.startsWith('demo/')) {
+    const e = entries.find((x) => slug(x.title) === route.slice(5)) ?? entries[0];
+    title.textContent = e.title;
+    subtitle.textContent = familyOf(e)?.name ?? '';
+    await renderDemo(board, e);
   } else {
-    const f = family ?? families[0];
-    title.textContent = f.name;
-    subtitle.textContent = 'Bibliothèque · chaque graphique est une spec JSON, ouvrez le menu ⋯ pour la voir';
-    cards = cardsForFamily(f);
+    const f = families.find((x) => route === `galerie/${x.id}`);
+    title.textContent = f ? f.name : 'Galerie';
+    subtitle.textContent = `${f ? f.entries.length : entries.length} graphiques · chaque aperçu est une spec JSON, cliquez pour l’ouvrir en grand`;
+    board.classList.add('gallery');
+    renderGallery(board, f);
   }
-  renderFilters();
-  window.scrollTo(0, 0);
-  for (const card of cards) mounted.push(await mountCard(board, card));
-  (window as any).gallery = mounted.flatMap((m) => m.charts);
+  (window as any).gallery = [...mounted.flatMap((m) => m.charts), ...thumbCharts];
+  (window as any).thumbs = thumbCharts;
 }
 
 // ---------------------------------------------------------- card menu

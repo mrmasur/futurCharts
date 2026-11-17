@@ -28,6 +28,12 @@ export interface ChartSpec {
    */
   projection?: ProjectionSpec;
   axes?: { x?: AxisSpec | false; y?: AxisSpec | false };
+  /**
+   * Reference lines, bands and notes, in data coordinates (cartesian charts).
+   * `{ "y": 100, "text": "Objectif" }`, `{ "x": ["2024-03-01", "2024-04-15"], "text": "Campagne" }`,
+   * `{ "x": "2024-06-01", "y": 120, "text": "Lancement" }`.
+   */
+  annotations?: AnnotationSpec[];
   legend?: boolean;
   interactions?: InteractionSpec;
   /**
@@ -79,10 +85,33 @@ export interface Encoding {
   target?: string;
   /** Hierarchy, from the outermost level to the innermost (sunburst). */
   path?: string[];
+  /** The field that steps through time, one frame per value (bar chart race). */
+  time?: string;
   /** Field name: a string field splits into series, a numeric field maps to the sequential ramp. */
   color?: string;
   /** Field name (point marks): numeric field mapped to the size range. */
   size?: string;
+}
+
+/** A number, a date (ISO string or epoch ms) or a category name. */
+export type AnnotationValue = number | string;
+
+/**
+ * One scalar: a line across the chart at that value. A pair: a band. Both x and
+ * y scalars: a note pinned to that point. `x` and `y` are screen axes.
+ */
+export interface AnnotationSpec {
+  x?: AnnotationValue | [AnnotationValue, AnnotationValue];
+  y?: AnnotationValue | [AnnotationValue, AnnotationValue];
+  text?: string;
+  /** Color or theme token (`$1`, `$muted`…). Lines default to `$muted`, bands to `$1`. */
+  color?: string;
+  /** Line width, px. */
+  width?: number;
+  /** Line dash in px; `[]` for a solid line. Default `[5, 4]`. */
+  dash?: number[];
+  /** Band opacity. Default 0.1. */
+  opacity?: number;
 }
 
 export interface LayerSpec {
@@ -143,7 +172,15 @@ export type MarkStyle = { color?: string } & DeepPartial<
     Theme['marks']['waffle'] &
     Theme['marks']['rose'] &
     Theme['marks']['violin'] &
-    Theme['marks']['flow']
+    Theme['marks']['flow'] &
+    Theme['marks']['race'] &
+    Theme['marks']['radialBar'] &
+    Theme['marks']['icicle'] &
+    Theme['marks']['parliament'] &
+    Theme['marks']['venn'] &
+    Theme['marks']['wordcloud'] &
+    Theme['marks']['timeline'] &
+    Theme['marks']['tree']
 >;
 
 /** A condition on one field of a row. Several conditions in an array must all hold. */
@@ -252,4 +289,6 @@ export interface InteractionSpec {
   select?: boolean | 'lasso' | 'rect';
   /** Click a legend entry to toggle its series. */
   legendToggle?: boolean;
+  /** Play button and scrubber for marks that play through time (`race`). Hide it for previews. */
+  player?: boolean;
 }

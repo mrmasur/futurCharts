@@ -42,6 +42,41 @@ export function pushSegment(out: number[], x0: number, y0: number, x1: number, y
   out.push(x0, y0, x1, y1, color[0], color[1], color[2], color[3], width);
 }
 
+/**
+ * Cut a path into dashes measured in px at build time (`[on, off, ...]`); the
+ * pattern carries on from one segment to the next, so a curve stays evenly dashed.
+ * Zooming stretches the dashes with the data, which keeps the batch untouched.
+ */
+export function dashed(out: number[], dash: number[], pixel: [number, number], color: RGBA, width: number) {
+  const total = dash.reduce((a, d) => a + Math.max(0, d), 0);
+  let phase = 0;
+  return {
+    reset() {
+      phase = 0;
+    },
+    segment(x0: number, y0: number, x1: number, y1: number) {
+      if (!(total > 0)) return pushSegment(out, x0, y0, x1, y1, color, width);
+      const L = Math.hypot((x1 - x0) / pixel[0], (y1 - y0) / pixel[1]);
+      if (!Number.isFinite(L)) return;
+      let pos = 0;
+      while (pos < L - 1e-6) {
+        // Where we are in the pattern.
+        let p = phase % total;
+        let k = 0;
+        while (p >= dash[k]) p -= dash[k++];
+        const step = Math.min(dash[k] - p, L - pos);
+        if (k % 2 === 0) {
+          const a = pos / L;
+          const b = (pos + step) / L;
+          pushSegment(out, x0 + (x1 - x0) * a, y0 + (y1 - y0) * a, x0 + (x1 - x0) * b, y0 + (y1 - y0) * b, color, width);
+        }
+        pos += step;
+        phase += step;
+      }
+    },
+  };
+}
+
 /** One annular sector: center and radii in scale space (radii along x), angles clockwise from 12 o'clock. */
 export function pushArc(
   out: number[],
