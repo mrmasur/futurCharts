@@ -103,6 +103,11 @@ export interface Theme {
     waffle: { rows: number; columns: number; gap: number; radius: number };
     /** Polar bars (Nightingale rose): `levels` grid circles, `gap` px between wedges. */
     rose: { levels: number; gap: number; innerRadius: number; labels: boolean };
+    /**
+     * `width`: share of the category slot at the widest density; `box`: quartile box and median inside;
+     * `scale`: `width` gives every violin the full width (shapes compare), `area` keeps densities comparable across categories.
+     */
+    violin: { width: number; fillOpacity: number; strokeWidth: number; box: boolean; samples: number; scale: 'width' | 'area' };
     /** Map shapes (basemap, choropleth). */
     geoshape: {
       fill: string;
@@ -194,6 +199,7 @@ export const lightTheme: Theme = {
     kpi: { upIsGood: true, sparkline: true, good: '#006300', bad: '#d03b3b', size: 34 },
     waffle: { rows: 10, columns: 10, gap: 2, radius: 2 },
     rose: { levels: 3, gap: 2, innerRadius: 0.08, labels: true },
+    violin: { width: 0.8, fillOpacity: 0.28, strokeWidth: 1.5, box: true, samples: 64, scale: 'width' },
   },
   tooltip: {
     background: '#ffffff',

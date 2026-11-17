@@ -11,7 +11,7 @@ import { SHADERS } from './shaders';
 
 interface Program {
   program: WebGLProgram;
-  u: Record<'u_res' | 'u_t' | 'u_dpr' | 'u_snap' | 'u_opacity', WebGLUniformLocation | null>;
+  u: Record<'u_res' | 'u_t' | 'u_dpr' | 'u_snap' | 'u_opacity' | 'u_progress', WebGLUniformLocation | null>;
 }
 
 class GLBatch implements Batch {
@@ -87,6 +87,7 @@ class GLCore {
       gl.uniform1f(prog.u.u_dpr, dpr);
       gl.uniform1f(prog.u.u_snap, call.pixelSnap ? 1 : 0);
       gl.uniform1f(prog.u.u_opacity, call.opacity ?? 1);
+      gl.uniform1f(prog.u.u_progress, call.progress ?? 1);
       if (call.clip) {
         const c = call.clip;
         gl.enable(gl.SCISSOR_TEST);
@@ -145,6 +146,7 @@ class GLCore {
         u_dpr: gl.getUniformLocation(program, 'u_dpr'),
         u_snap: gl.getUniformLocation(program, 'u_snap'),
         u_opacity: gl.getUniformLocation(program, 'u_opacity'),
+        u_progress: gl.getUniformLocation(program, 'u_progress'),
       },
     };
     this.programs.set(kind, p);

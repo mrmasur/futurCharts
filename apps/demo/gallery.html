@@ -14,11 +14,20 @@
       h1 { font-size: 20px; margin: 0; font-weight: 650; }
       header p { margin: 0; color: var(--ink-2); flex: 1; min-width: 200px; }
       button { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
-      main { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: 16px; padding: 16px 24px 32px; max-width: 1500px; margin: 0 auto; }
+      main { padding: 0 24px 32px; max-width: 1500px; margin: 0 auto; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: 16px; }
+      section { scroll-margin-top: 64px; }
+      h2 { font-size: 15px; font-weight: 650; margin: 28px 0 12px; }
+      nav { position: sticky; top: 0; z-index: 2; display: flex; gap: 6px; flex-wrap: wrap; padding: 10px 24px; max-width: 1500px; margin: 0 auto; background: var(--plane); }
+      nav a { color: var(--ink-2); text-decoration: none; font-size: 12px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); }
+      nav a:hover { color: var(--ink); }
+      .palette { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); font-size: 13px; }
+      select { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 5px 8px; }
       figure { margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
       figure.wide { grid-column: span 2; }
       @media (max-width: 960px) { figure.wide { grid-column: auto; } }
       .chart { height: 340px; }
+      .chart.auto { height: auto; }
       .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
       .tiles .chart { height: 190px; }
       .tiles .chart + .chart { border-left: 1px solid var(--border); }
@@ -33,8 +42,10 @@
       <a href="/">Graphiques</a>
       <a href="/maps.html">Cartes</a>
       <a href="/wrappers.html">Wrappers</a>
+      <label class="palette">Couleurs <select id="palette"></select></label>
       <button id="theme" type="button">Thème sombre</button>
     </header>
+    <nav id="groups"></nav>
     <main id="grid"></main>
     <script type="module" src="/src/gallery.ts"></script>
   </body>

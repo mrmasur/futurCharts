@@ -39,6 +39,8 @@ export interface BuildContext {
   categorical(key: string): RGBA;
   /** Entities toggled off in the legend. */
   hidden: Set<string>;
+  /** Apply the layer's `overrides` / `highlight` for table row `row` to a color. */
+  paint(color: RGBA, row: number | undefined): RGBA;
   /** Format a value of `field` (default: the layer's value field) with its catalog format. */
   format(value: number, field?: string): string;
   /** Size of one CSS pixel in scale space at the current size, unzoomed. */
@@ -82,6 +84,8 @@ export interface MarkScales {
   aspect?: number;
   /** Which axes to draw. Default none. */
   axes?: { x?: boolean; y?: boolean };
+  /** Which gridlines to draw. Default none. */
+  grid?: { x?: boolean; y?: boolean };
 }
 
 /** Per-datum lookup used for hover, tooltips and events. Positions are in scale space. */

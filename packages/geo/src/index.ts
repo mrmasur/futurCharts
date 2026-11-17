@@ -138,6 +138,7 @@ export const geoshape: MarkDefinition = {
     const colorField = layer.encode?.color;
     const keyField = layer.encode?.key;
     const values = new Map<string, number>();
+    const rowOf = new Map<string, number>();
     let lo = Infinity;
     let hi = -Infinity;
     if (colorField && keyField) {
@@ -148,6 +149,7 @@ export const geoshape: MarkDefinition = {
         const v = vals.values[i] as number;
         if (Number.isNaN(v)) continue;
         values.set(String(keys[i]), v);
+        rowOf.set(String(keys[i]), i);
         if (v < lo) lo = v;
         if (v > hi) hi = v;
       }
@@ -162,7 +164,7 @@ export const geoshape: MarkDefinition = {
     const pickers: Picker[] = [];
     for (const shape of shapes) {
       const value = values.get(shape.key);
-      const fill: RGBA = !choropleth ? base : value === undefined ? missing : ctx.ramp(hi > lo ? (value - lo) / (hi - lo) : 0.5);
+      const fill: RGBA = !choropleth ? base : value === undefined ? missing : ctx.paint(ctx.ramp(hi > lo ? (value - lo) / (hi - lo) : 0.5), rowOf.get(shape.key));
       const picker: Picker = { shape, value, rings: [], box: [Infinity, Infinity, -Infinity, -Infinity] };
       for (const polygon of shape.polygons.flatMap(unwrapPolygon)) {
         const flat: number[] = [];

@@ -1,6 +1,6 @@
 import {
   mountChart,
-  type Chart,
+  type ChartView,
   type ChartHandle,
   type ChartHandlers,
   type ChartOptions,
@@ -23,7 +23,7 @@ export interface FuturChartProps extends ChartHandlers {
 
 export interface FuturChartRef {
   /** The underlying chart, once ready (`resetZoom()`, `toImage()`, `toggleSeries()`…). */
-  readonly chart: Chart | undefined;
+  readonly chart: ChartView | undefined;
 }
 
 export const FuturChart = forwardRef<FuturChartRef, FuturChartProps>(function FuturChart(props, ref) {

@@ -10,7 +10,8 @@ import type { RGBA } from '../render/types';
 import { BandScale, LinearScale, niceDomain } from '../scale/scales';
 import type { LayerSpec } from '../spec/types';
 import { parseColor, withAlpha } from '../util/color';
-import { pushRect, pushSegment, pushVertex } from './primitives';
+import { Tween } from './animate';
+import { pushArc, pushRect, pushSegment, pushVertex } from './primitives';
 import { emptyHit, type BuildContext, type BuiltMark, type MarkDefinition, type MarkLabel, type ShapeHit } from './registry';
 
 const TAU = Math.PI * 2;
@@ -33,12 +34,12 @@ export function need(layer: LayerSpec, channel: Exclude<keyof LayerSpec['encode'
   return f;
 }
 
-/** Sum `value` per `key` (and per `group`), in first-seen order. */
-export function totals(table: Table, key: string, value: string, group?: string): { key: string; group: string; value: number }[] {
+/** Sum `value` per `key` (and per `group`), in first-seen order. `row`: the first source row, for overrides. */
+export function totals(table: Table, key: string, value: string, group?: string): { key: string; group: string; value: number; row: number }[] {
   const k = table.column(key).values;
   const v = table.column(value).values as Float64Array;
   const g = group ? table.column(group).values : undefined;
-  const out = new Map<string, { key: string; group: string; value: number }>();
+  const out = new Map<string, { key: string; group: string; value: number; row: number }>();
   for (let i = 0; i < table.length; i++) {
     if (Number.isNaN(v[i])) continue;
     const kk = String(k[i]);
@@ -46,7 +47,7 @@ export function totals(table: Table, key: string, value: string, group?: string)
     const id = `${gg}\u0000${kk}`;
     const e = out.get(id);
     if (e) e.value += v[i];
-    else out.set(id, { key: kk, group: gg, value: v[i] });
+    else out.set(id, { key: kk, group: gg, value: v[i], row: i });
   }
   return [...out.values()];
 }
@@ -116,7 +117,7 @@ export const heatmap: MarkDefinition = {
       cells.set(`${xi}|${yi}`, i);
       const cx = xs.norm(xi);
       const cy = ys.norm(yi);
-      const fill = ctx.ramp(hi > lo ? (values[i] - lo) / (hi - lo) : 0.5);
+      const fill = ctx.paint(ctx.ramp(hi > lo ? (values[i] - lo) / (hi - lo) : 0.5), i);
       const box: [number, number, number, number] = [cx - xs.band / 2 + gx, cy - ys.band / 2 + gy, cx + xs.band / 2 - gx, cy + ys.band / 2 - gy];
       const r = style.radius;
       pushRect(rects, { x0: box[0], y0: box[1], x1: box[2], y1: box[3], fill, radii: [r, r, r, r] });
@@ -149,7 +150,7 @@ function arcMark(defaultInner: number): MarkDefinition {
     scales: () => ({ x: new LinearScale(-1, 1), y: new LinearScale(-1, 1), aspect: 1 }),
     build(ctx) {
       const { layer, table } = ctx.data;
-      const { style } = ctx;
+      const { style, theme } = ctx;
       const kf = layer.encode.key ?? need(layer, 'color', 'pie');
       const vf = layer.encode.value ?? need(layer, 'y', 'pie');
       const all = totals(table, kf, vf).filter((d) => d.value > 0);
@@ -157,78 +158,129 @@ function arcMark(defaultInner: number): MarkDefinition {
       const slices = all.filter((d) => !ctx.hidden.has(d.key));
       const total = slices.reduce((a, d) => a + d.value, 0);
       const inner = layer.style?.innerRadius ?? (layer.mark === 'donut' ? defaultInner : style.innerRadius);
-      const R = 0.98;
+      // Room around the circle for a slice pulled out.
+      const R = 0.92;
+      const PULL = 0.06;
       const r0 = R * inner;
+      const colors = slices.map((d) => ctx.paint(legend.find((l) => l.key === d.key)!.color, d.row));
+      const bounds = (() => {
+        let a = 0;
+        return slices.map((d) => {
+          const a0 = a;
+          a += (d.value / (total || 1)) * TAU;
+          return [a0, a] as const;
+        });
+      })();
+
+      let focus = ctx.state.focus as string | undefined;
+      if (focus !== undefined && !slices.some((d) => d.key === focus)) focus = undefined;
+      /** Per slice: pull-out distance and opacity. The focused slice comes out, the others fade. */
+      const target = () => {
+        const out = new Float64Array(slices.length * 2);
+        slices.forEach((d, i) => out.set([focus === d.key ? PULL : 0, focus === undefined || focus === d.key ? 1 : 0.35], i * 2));
+        return out;
+      };
+      const tween = new Tween(target());
+      const unit = ctx.x.norm(1) - ctx.x.norm(0);
       const at = (a: number, r: number): [number, number] => [ctx.x.norm(Math.sin(a) * r), ctx.y.norm(Math.cos(a) * r)];
-      const mesh: number[] = [];
-      const lines: number[] = [];
+      const batch = ctx.renderer.createBatch('arc');
+      const write = () => {
+        const g = tween.current;
+        const out: number[] = [];
+        slices.forEach((_, i) => {
+          const [a0, a1] = bounds[i];
+          const mid = (a0 + a1) / 2;
+          const [cx, cy] = at(mid, g[i * 2]);
+          const c = colors[i];
+          pushArc(out, cx, cy, r0 * unit, R * unit, a0, a1, slices.length > 1 ? style.gap : 0, [c[0], c[1], c[2], c[3] * g[i * 2 + 1]]);
+        });
+        batch.update(new Float32Array(out), slices.length);
+      };
       const labels: MarkLabel[] = [];
-      const bounds: { a0: number; a1: number; d: (typeof slices)[number] }[] = [];
-      let a = 0;
-      for (const d of slices) {
-        const sweep = (d.value / total) * TAU;
-        const color = legend.find((l) => l.key === d.key)!.color;
-        const steps = Math.max(2, Math.ceil(sweep / (Math.PI / 90)));
-        for (let k = 0; k < steps; k++) {
-          const t0 = a + (sweep * k) / steps;
-          const t1 = a + (sweep * (k + 1)) / steps;
-          const [ox0, oy0] = at(t0, R);
-          const [ox1, oy1] = at(t1, R);
-          const [ix0, iy0] = at(t0, r0);
-          const [ix1, iy1] = at(t1, r0);
-          pushVertex(mesh, ox0, oy0, color);
-          pushVertex(mesh, ox1, oy1, color);
-          pushVertex(mesh, ix0, iy0, color);
-          if (r0 > 0) {
-            pushVertex(mesh, ix0, iy0, color);
-            pushVertex(mesh, ox1, oy1, color);
-            pushVertex(mesh, ix1, iy1, color);
-          }
-        }
-        // Surface-colored separators give the 2px gap between touching slices.
-        if (slices.length > 1 && style.gap > 0) {
-          const [sx0, sy0] = at(a, r0);
-          const [sx1, sy1] = at(a, R + 0.02);
-          pushSegment(lines, sx0, sy0, sx1, sy1, ctx.surface, style.gap);
-        }
-        if (style.labels && sweep > 0.3) {
-          const mid = a + sweep / 2;
-          const rm = (R + r0) / 2;
-          const [lx, ly] = at(mid, r0 > 0 ? rm : R * 0.62);
+      const placeLabels = () => {
+        labels.length = 0;
+        if (tween.moving) return;
+        const g = tween.current;
+        slices.forEach((d, i) => {
+          const [a0, a1] = bounds[i];
+          const sweep = a1 - a0;
+          if (!style.labels || sweep < 0.3) return;
+          const mid = (a0 + a1) / 2;
+          const off = g[i * 2];
+          const rm = r0 > 0 ? (R + r0) / 2 : R * 0.62;
           const half = Math.min((R - r0) / 2, Math.sin(Math.min(sweep / 2, Math.PI / 2)) * rm) * 0.9;
+          const px = Math.sin(mid) * (rm + off);
+          const py = Math.cos(mid) * (rm + off);
           labels.push({
-            tx: lx, ty: ly, text: share(d.value, total), on: color, align: 'center', baseline: 'middle', weight: 600,
-            box: [ctx.x.norm(Math.sin(mid) * rm - half), ctx.y.norm(Math.cos(mid) * rm - half), ctx.x.norm(Math.sin(mid) * rm + half), ctx.y.norm(Math.cos(mid) * rm + half)],
+            tx: ctx.x.norm(px), ty: ctx.y.norm(py), text: share(d.value, total), on: colors[i], align: 'center', baseline: 'middle', weight: 600,
+            box: [ctx.x.norm(px - half), ctx.y.norm(py - half), ctx.x.norm(px + half), ctx.y.norm(py + half)],
           });
+        });
+        if (r0 > 0.3 && style.center) {
+          const [cx, cy] = at(0, 0);
+          const f = focus === undefined ? undefined : slices.find((d) => d.key === focus);
+          const box: [number, number, number, number] = [ctx.x.norm(-r0 * 0.85), ctx.y.norm(-r0 * 0.7), ctx.x.norm(r0 * 0.85), ctx.y.norm(r0 * 0.7)];
+          labels.push({ tx: cx, ty: cy, text: ctx.format(f ? f.value : total, vf), color: theme.text.primary, size: 24, weight: 650, align: 'center', baseline: 'bottom', dy: 4, box });
+          labels.push({ tx: cx, ty: cy, text: f ? `${f.key} · ${share(f.value, total)}` : (ctx.fields[vf]?.label ?? vf), align: 'center', baseline: 'top', dy: 8, size: 12, box });
         }
-        bounds.push({ a0: a, a1: a + sweep, d });
-        a += sweep;
-      }
-      if (r0 > 0.3 && style.center) {
-        const [cx, cy] = at(0, 0);
-        labels.push({ tx: cx, ty: cy, text: ctx.format(total, vf), color: ctx.theme.text.primary, size: 24, weight: 650, align: 'center', baseline: 'bottom', dy: 4 });
-        labels.push({ tx: cx, ty: cy, text: ctx.fields[vf]?.label ?? vf, align: 'center', baseline: 'top', dy: 8, size: 12 });
-      }
+      };
+      write();
+      placeLabels();
+
+      const polar = (tx: number, ty: number) => {
+        const x = ctx.x.invert(tx);
+        const y = ctx.y.invert(ty);
+        return { x, y, r: Math.hypot(x, y) };
+      };
+      const hit = (tx: number, ty: number) => {
+        const { x, y } = polar(tx, ty);
+        const g = tween.current;
+        for (let i = 0; i < slices.length; i++) {
+          const [a0, a1] = bounds[i];
+          const mid = (a0 + a1) / 2;
+          // Undo the pull-out before testing.
+          const px = x - Math.sin(mid) * g[i * 2];
+          const py = y - Math.cos(mid) * g[i * 2];
+          const r = Math.hypot(px, py);
+          const a = (Math.atan2(px, py) + TAU) % TAU;
+          if (r >= r0 && r <= R && a >= a0 && a < a1) return i;
+        }
+        return -1;
+      };
       return {
-        draws: batches(ctx, [], mesh, lines),
+        draws: [{ batch }],
         hit: emptyHit(),
         labels,
         legend,
         pick(tx, ty): ShapeHit | null {
-          const x = ctx.x.invert(tx);
-          const y = ctx.y.invert(ty);
-          const r = Math.hypot(x, y);
-          if (r > R || r < r0) return null;
-          const ang = (Math.atan2(x, y) + TAU) % TAU;
-          const hit = bounds.find((b) => ang >= b.a0 && ang < b.a1);
-          if (!hit) return null;
+          const i = hit(tx, ty);
+          if (i < 0) return focus !== undefined && polar(tx, ty).r < r0 ? { title: '↑ Toutes les parts', rows: [] } : null;
+          const d = slices[i];
           return {
-            title: hit.d.key,
+            title: d.key,
             rows: [
-              { label: ctx.fields[vf]?.label ?? vf, value: ctx.format(hit.d.value, vf) },
-              { label: 'Part', value: share(hit.d.value, total) },
+              { label: ctx.fields[vf]?.label ?? vf, value: ctx.format(d.value, vf) },
+              { label: 'Part', value: share(d.value, total) },
             ],
           };
+        },
+        click(tx, ty) {
+          const i = hit(tx, ty);
+          const next = i < 0 ? undefined : focus === slices[i].key ? undefined : slices[i].key;
+          if (next === focus) return undefined;
+          focus = next;
+          ctx.state.focus = focus;
+          tween.go(target(), performance.now());
+          placeLabels();
+          return focus === undefined ? [] : [focus];
+        },
+        muted: () => (focus === undefined ? [] : slices.filter((d) => d.key !== focus).map((d) => d.key)),
+        animate(now) {
+          if (!tween.moving) return false;
+          const more = tween.step(now);
+          write();
+          if (!more) placeLabels();
+          return true;
         },
       };
     },
@@ -255,28 +307,16 @@ export const gauge: MarkDefinition = {
     const r0 = R * (1 - style.thickness);
     const at = (a: number, r: number): [number, number] => [ctx.x.norm(Math.sin(a) * r), ctx.y.norm(Math.cos(a) * r)];
     const track = parseColor(style.track === 'auto' ? ctx.theme.grid.y.color : style.track);
-    const fill = layer.style?.color ? parseColor(layer.style.color) : ctx.categorical(ctx.fields[vf]?.label ?? vf);
-    const mesh: number[] = [];
-    const band = (a0: number, a1: number, color: RGBA) => {
-      const steps = Math.max(2, Math.ceil((a1 - a0) / (Math.PI / 120)));
-      for (let k = 0; k < steps; k++) {
-        const t0 = a0 + ((a1 - a0) * k) / steps;
-        const t1 = a0 + ((a1 - a0) * (k + 1)) / steps;
-        const [ox0, oy0] = at(t0, R);
-        const [ox1, oy1] = at(t1, R);
-        const [ix0, iy0] = at(t0, r0);
-        const [ix1, iy1] = at(t1, r0);
-        pushVertex(mesh, ox0, oy0, color);
-        pushVertex(mesh, ox1, oy1, color);
-        pushVertex(mesh, ix0, iy0, color);
-        pushVertex(mesh, ix0, iy0, color);
-        pushVertex(mesh, ox1, oy1, color);
-        pushVertex(mesh, ix1, iy1, color);
-      }
-    };
+    const base = layer.style?.color ? parseColor(layer.style.color) : ctx.categorical(ctx.fields[vf]?.label ?? vf);
+    const fill = ctx.paint(base, table.length ? 0 : undefined);
+    const unit = ctx.x.norm(1) - ctx.x.norm(0);
+    const [cx, cy] = at(0, 0);
     const start = -Math.PI / 2;
-    band(start, Math.PI / 2, track);
-    if (t > 0) band(start, start + Math.PI * t, fill);
+    const arcs: number[] = [];
+    pushArc(arcs, cx, cy, r0 * unit, R * unit, start, Math.PI / 2, 0, track);
+    if (t > 0) pushArc(arcs, cx, cy, r0 * unit, R * unit, start, start + Math.PI * t, 0, fill);
+    const arcBatch = ctx.renderer.createBatch('arc');
+    arcBatch.update(new Float32Array(arcs), arcs.length / LAYOUTS.arc.stride);
     const lines: number[] = [];
     if (Number.isFinite(style.target)) {
       const ta = start + Math.PI * Math.min(1, Math.max(0, (style.target - style.min) / (style.max - style.min || 1)));
@@ -284,14 +324,13 @@ export const gauge: MarkDefinition = {
       const [bx, by] = at(ta, R + 0.05);
       pushSegment(lines, ax, ay, bx, by, parseColor(ctx.theme.text.primary), 2.5);
     }
-    const [cx, cy] = at(0, 0);
     const labels: MarkLabel[] = [
       { tx: cx, ty: cy, text: ctx.format(value, vf), color: ctx.theme.text.primary, size: 30, weight: 650, align: 'center', baseline: 'bottom', dy: -2 },
       { tx: cx, ty: cy, text: ctx.fields[vf]?.label ?? vf, align: 'center', baseline: 'top', dy: 6, size: 12 },
       { tx: ctx.x.norm(-(R + r0) / 2), ty: cy, text: ctx.format(style.min, vf), align: 'center', baseline: 'top', dy: 6 },
       { tx: ctx.x.norm((R + r0) / 2), ty: cy, text: ctx.format(style.max, vf), align: 'center', baseline: 'top', dy: 6 },
     ];
-    return { draws: batches(ctx, [], mesh, lines), hit: emptyHit(), labels };
+    return { draws: [{ batch: arcBatch }, ...batches(ctx, [], [], lines)], hit: emptyHit(), labels };
   },
 };
 
@@ -391,7 +430,7 @@ export const treemap: MarkDefinition = {
       for (const t of squarify(items, inner)) {
         const b = { x: t.x + g2 / 2, y: t.y + g2 / 2, w: Math.max(0, t.w - g2), h: Math.max(0, t.h - g2) };
         const box = toScale(b);
-        const fill = colorOf(t);
+        const fill = ctx.paint(colorOf(t), t.row);
         pushRect(rects, { x0: box[0], y0: box[1], x1: box[2], y1: box[3], fill, radii: [r, r, r, r] });
         tiles.push({ box, d: t });
         if (style.labels) {
@@ -454,7 +493,8 @@ export const funnel: MarkDefinition = {
     });
     stages.forEach((s, i) => {
       const box = boxes[i];
-      pushRect(rects, { x0: box[0], y0: box[1], x1: box[2], y1: box[3], fill: color, radii: [r, r, r, r] });
+      const fill = ctx.paint(color, s.row);
+      pushRect(rects, { x0: box[0], y0: box[1], x1: box[2], y1: box[3], fill, radii: [r, r, r, r] });
       if (i > 0) {
         // Trapezoid from the bottom of the previous stage to the top of this one.
         const p = boxes[i - 1];
@@ -470,7 +510,7 @@ export const funnel: MarkDefinition = {
         const text = `${ctx.format(s.value, vf)} · ${share(s.value, first)}`;
         const cy = (box[1] + box[3]) / 2;
         labels.push({
-          tx: 0.5, ty: cy, text, on: color, align: 'center', baseline: 'middle', weight: 600, box,
+          tx: 0.5, ty: cy, text, on: fill, align: 'center', baseline: 'middle', weight: 600, box,
           fallback: { tx: box[2], ty: cy, text, align: 'left', baseline: 'middle', dx: 8 },
         });
       }
@@ -554,7 +594,7 @@ export const radar: MarkDefinition = {
     const surface = ctx.surface;
     for (const name of seriesNames) {
       if (ctx.hidden.has(name)) continue;
-      const color = sf ? ctx.categorical(name) : ctx.categorical(ctx.fields[vf]?.label ?? vf);
+      const color = ctx.paint(sf ? ctx.categorical(name) : ctx.categorical(ctx.fields[vf]?.label ?? vf), data.find((d) => d.group === name)?.row);
       const fill = withAlpha(color, style.fillOpacity);
       const ring = axes.map((axis, k) => {
         const v = data.find((d) => d.group === name && d.key === axis)?.value ?? 0;

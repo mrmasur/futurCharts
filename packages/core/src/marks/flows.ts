@@ -168,13 +168,17 @@ export const sankey: MarkDefinition = {
     const src = table.column(sf).values;
     const dst = table.column(tf).values;
     const val = table.column(vf).values as Float64Array;
-    const flows = Array.from({ length: table.length }, (_, i) => ({ source: String(src[i]), target: String(dst[i]), value: val[i] }));
+    const flows = Array.from({ length: table.length }, (_, i) => ({ source: String(src[i]), target: String(dst[i]), value: val[i], row: i }));
     const W = 1 / ctx.pixel[0];
     const H = 1 / ctx.pixel[1];
     const { nodes, links } = sankeyLayout(flows, W, H, style.nodeWidth, style.nodePadding);
     const tx = (x: number) => x / W;
     const ty = (y: number) => 1 - y / H;
-    const colorOf = new Map(nodes.map((n) => [n.name, ctx.categorical(n.name)]));
+    const baseOf = new Map(nodes.map((n) => [n.name, ctx.categorical(n.name)]));
+    // A node takes the style of its first outgoing flow, or of its first incoming one.
+    const nodeRow = (name: string) => flows.find((f) => f.source === name)?.row ?? flows.find((f) => f.target === name)?.row;
+    const colorOf = new Map(nodes.map((n) => [n.name, ctx.paint(baseOf.get(n.name)!, nodeRow(n.name))]));
+    const linkRow = (l: SLink) => flows.find((f) => f.source === l.source.name && f.target === l.target.name)?.row;
 
     const mesh: number[] = [];
     const ribbons: { link: SLink; xs: Float64Array; top: Float64Array; bottom: Float64Array }[] = [];
@@ -195,8 +199,9 @@ export const sankey: MarkDefinition = {
         top[k] = l.sy + (l.ty - l.sy) * w;
         bottom[k] = top[k] + l.width;
       }
-      const c0 = withAlpha(colorOf.get(l.source.name)!, style.linkOpacity);
-      const c1 = withAlpha(colorOf.get(l.target.name)!, style.linkOpacity);
+      const row = linkRow(l);
+      const c0 = withAlpha(ctx.paint(baseOf.get(l.source.name)!, row), style.linkOpacity);
+      const c1 = withAlpha(ctx.paint(baseOf.get(l.target.name)!, row), style.linkOpacity);
       for (let k = 0; k < STEPS; k++) {
         const ca = mix(c0, c1, k / STEPS);
         const cb = mix(c0, c1, (k + 1) / STEPS);
@@ -278,6 +283,10 @@ interface SunNode {
   a0: number;
   a1: number;
   color: RGBA;
+  /** Color before overrides; inner levels derive from it. */
+  base: RGBA;
+  /** First source row, for overrides and highlights. */
+  row: number;
   /** Index into the tween (4 values: a0, a1, r0, r1). */
   slot: number;
 }
@@ -299,7 +308,7 @@ export const sunburst: MarkDefinition = {
     const vf = layer.encode.value ?? need(layer, 'y', 'sunburst');
     const levels = path.map((f) => table.column(f).values);
     const values = table.column(vf).values as Float64Array;
-    const root: SunNode = { name: '', path: [], value: 0, depth: 0, children: new Map(), a0: 0, a1: TAU, color: ctx.surface, slot: -1 };
+    const root: SunNode = { name: '', path: [], value: 0, depth: 0, children: new Map(), a0: 0, a1: TAU, color: ctx.surface, base: ctx.surface, row: -1, slot: -1 };
     const topNames: string[] = [];
     for (let i = 0; i < table.length; i++) {
       const v = values[i];
@@ -313,7 +322,7 @@ export const sunburst: MarkDefinition = {
         const name = String(levels[d][i]);
         let c = n.children.get(name);
         if (!c) {
-          c = { name, path: [...n.path, name], value: 0, depth: d + 1, children: new Map(), parent: n, a0: 0, a1: 0, color: ctx.surface, slot: -1 };
+          c = { name, path: [...n.path, name], value: 0, depth: d + 1, children: new Map(), parent: n, a0: 0, a1: 0, color: ctx.surface, base: ctx.surface, row: i, slot: -1 };
           n.children.set(name, c);
         }
         c.value += v;
@@ -332,7 +341,8 @@ export const sunburst: MarkDefinition = {
         c.a1 = a + ((n.a1 - n.a0) * c.value) / (n.value || 1);
         a = c.a1;
         // Inner levels take their branch's hue, lighter with depth.
-        c.color = c.depth === 1 ? ctx.categorical(c.name) : mix(n.color, ctx.surface, 0.24);
+        c.base = c.depth === 1 ? ctx.categorical(c.name) : mix(n.base, ctx.surface, 0.24);
+        c.color = ctx.paint(c.base, c.row);
         c.slot = all.length;
         all.push(c);
         layout(c);
@@ -493,6 +503,8 @@ interface CalendarModel {
   first: number;
   weeks: number;
   values: Map<number, number>;
+  /** First source row of each day. */
+  rows: Map<number, number>;
   lo: number;
   hi: number;
   weekLabels: string[];
@@ -503,11 +515,13 @@ function calendarModel(table: Table, dateField: string, valueField: string): Cal
   const dates = table.column(dateField).values;
   const vals = table.column(valueField).values as Float64Array;
   const values = new Map<number, number>();
+  const rows = new Map<number, number>();
   for (let i = 0; i < table.length; i++) {
     const t = typeof dates[i] === 'number' ? (dates[i] as number) : Date.parse(String(dates[i]));
     if (Number.isNaN(t) || Number.isNaN(vals[i])) continue;
     const n = dayNumber(new Date(t));
     values.set(n, (values.get(n) ?? 0) + vals[i]);
+    if (!rows.has(n)) rows.set(n, i);
   }
   const days = [...values.keys()];
   const start = days.length ? Math.min(...days) : dayNumber(new Date());
@@ -532,7 +546,7 @@ function calendarModel(table: Table, dateField: string, valueField: string): Cal
   });
   const weekday = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
   const dayLabels = Array.from({ length: 7 }, (_, d) => weekday.format(fromDayNumber(first + d)));
-  return { first, weeks, values, lo, hi, weekLabels, dayLabels };
+  return { first, weeks, values, rows, lo, hi, weekLabels, dayLabels };
 }
 
 /** `calendar`: one square per day (`x`: date), weeks as columns, colored by `value` (or `color`). */
@@ -568,7 +582,7 @@ export const calendar: MarkDefinition = {
       const w = Math.floor((n - m.first) / 7);
       const d = (n - m.first) % 7;
       const v = m.values.get(n);
-      const fill = v === undefined ? empty : ctx.ramp(m.hi > m.lo ? (v - m.lo) / (m.hi - m.lo) : 0.5);
+      const fill = v === undefined ? empty : ctx.paint(ctx.ramp(m.hi > m.lo ? (v - m.lo) / (m.hi - m.lo) : 0.5), m.rows.get(n));
       const cx = xs.norm(w);
       const cy = ys.norm(d);
       const r = style.radius;

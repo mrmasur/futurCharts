@@ -1,6 +1,6 @@
 /** Stat tile (KPI), waffle and polar bars (rose): standalone marks. */
 import { LAYOUTS } from '../render/layouts';
-import { LinearScale } from '../scale/scales';
+import { BandScale, LinearScale, niceDomain } from '../scale/scales';
 import { parseColor, withAlpha } from '../util/color';
 import { batches, categoriesOf, need, share, totals } from './charts';
 import { Tween } from './animate';
@@ -151,7 +151,7 @@ export const waffle: MarkDefinition = {
       // Fill from the top-left, row by row.
       const y1 = ctx.y.norm(style.rows - row);
       const y0 = ctx.y.norm(style.rows - row - 1);
-      const fill = legend.find((l) => l.key === shown[o].key)!.color;
+      const fill = ctx.paint(legend.find((l) => l.key === shown[o].key)!.color, shown[o].row);
       pushRect(rects, { x0: x0 + gx, y0: y0 + gy, x1: x1 - gx, y1: y1 - gy, fill, radii: [r, r, r, r] });
     });
     return {
@@ -205,12 +205,10 @@ export const rose: MarkDefinition = {
     const step = TAU / Math.max(1, cats.length);
     // One segment per (category, series), in a fixed order so the tween can follow them.
     const segments = cats.flatMap((cat) =>
-      (sf ? seriesNames : ['']).map((series) => ({
-        cat,
-        series,
-        value: data.find((d) => d.key === cat && d.group === series)?.value ?? 0,
-        color: ctx.categorical(sf ? series : cat),
-      })),
+      (sf ? seriesNames : ['']).map((series) => {
+        const d = data.find((e) => e.key === cat && e.group === series);
+        return { cat, series, value: d?.value ?? 0, color: ctx.paint(ctx.categorical(sf ? series : cat), d?.row) };
+      }),
     );
     let focus = (ctx.state.focus as string | undefined) ?? undefined;
     if (focus !== undefined && !seriesNames.includes(focus)) focus = undefined;
@@ -334,4 +332,155 @@ export const rose: MarkDefinition = {
   },
 };
 
-export const EXTRA_MARKS: Record<string, MarkDefinition> = { kpi, waffle, rose };
+
+// ------------------------------------------------------------------- violin
+
+/** Gaussian kernel density at `n` points over [lo, hi], with Silverman's bandwidth. */
+export function density(values: number[], lo: number, hi: number, n: number): Float64Array {
+  const m = values.length;
+  const out = new Float64Array(n);
+  if (m === 0) return out;
+  const mean = values.reduce((a, v) => a + v, 0) / m;
+  const sd = Math.sqrt(values.reduce((a, v) => a + (v - mean) ** 2, 0) / Math.max(1, m - 1));
+  const sorted = [...values].sort((a, b) => a - b);
+  const iqr = quantile(sorted, 0.75) - quantile(sorted, 0.25);
+  const spread = Math.min(sd, iqr / 1.34) || sd || 1;
+  const h = 0.9 * spread * Math.pow(m, -0.2);
+  for (let i = 0; i < n; i++) {
+    const x = lo + ((hi - lo) * i) / (n - 1);
+    let sum = 0;
+    for (const v of values) {
+      const u = (x - v) / h;
+      sum += Math.exp(-0.5 * u * u);
+    }
+    out[i] = sum / (m * h * Math.sqrt(2 * Math.PI));
+  }
+  return out;
+}
+
+function quantile(sorted: number[], p: number): number {
+  if (!sorted.length) return NaN;
+  const h = (sorted.length - 1) * p;
+  const i = Math.floor(h);
+  return sorted[i] + (sorted[Math.min(i + 1, sorted.length - 1)] - sorted[i]) * (h - i);
+}
+
+/**
+ * `violin`: the distribution of `y` for each `x` category, as a mirrored
+ * density, with the quartile box and the median inside. Raw values in, no
+ * transform needed.
+ */
+export const violin: MarkDefinition = {
+  standalone: true,
+  symbol: 'square',
+  scales({ layer, table }) {
+    const yf = need(layer, 'y', 'violin');
+    const v = table.column(yf).values as Float64Array;
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const x of v) {
+      if (x < lo) lo = x;
+      if (x > hi) hi = x;
+    }
+    const pad = (hi - lo) * 0.08 || 1;
+    const [d0, d1] = niceDomain(lo - pad, hi + pad, 5);
+    return {
+      x: new BandScale(categoriesOf(table, need(layer, 'x', 'violin')), 0.2, 0.1),
+      y: new LinearScale(d0, d1),
+      axes: { x: true, y: true },
+      grid: { y: true },
+    };
+  },
+  build(ctx) {
+    const { layer, table } = ctx.data;
+    const { style } = ctx;
+    const xf = layer.encode.x!;
+    const yf = layer.encode.y!;
+    const xs = ctx.x as BandScale;
+    const cats = xs.categories;
+    const xv = table.column(xf).values;
+    const yv = table.column(yf).values as Float64Array;
+    const groups = new Map<string, number[]>(cats.map((c) => [c, []]));
+    const firstRow = new Map<string, number>();
+    for (let i = 0; i < table.length; i++) {
+      if (Number.isNaN(yv[i])) continue;
+      const k = String(xv[i]);
+      groups.get(k)?.push(yv[i]);
+      if (!firstRow.has(k)) firstRow.set(k, i);
+    }
+    const [y0, y1] = [ctx.y.invert(0), ctx.y.invert(1)];
+    const sf = layer.encode.color;
+    const curves = cats.map((c) => {
+      const vals = groups.get(c)!;
+      const lo = Math.min(...vals);
+      const hi = Math.max(...vals);
+      // Stop the shape a little past the data, never past the axis.
+      const pad = (hi - lo) * 0.05;
+      const a = Math.max(y0, lo - pad);
+      const b = Math.min(y1, hi + pad);
+      return { c, vals, a, b, d: density(vals, a, b, style.samples) };
+    });
+    const peak = Math.max(1e-12, ...curves.flatMap((k) => [...k.d]));
+    const half = (xs.band * style.width) / 2;
+    const mesh: number[] = [];
+    const lines: number[] = [];
+    const rects: number[] = [];
+    const stats: { c: string; n: number; q1: number; med: number; q3: number }[] = [];
+    for (const k of curves) {
+      if (!k.vals.length) continue;
+      const cx = xs.norm(cats.indexOf(k.c));
+      const base = sf ? ctx.categorical(k.c) : ctx.categorical(ctx.fields[yf]?.label ?? yf);
+      const color = ctx.paint(base, firstRow.get(k.c));
+      const fill = withAlpha(color, style.fillOpacity * color[3]);
+      const n = k.d.length;
+      const top = style.scale === 'area' ? peak : Math.max(1e-12, ...k.d);
+      const pt = (i: number, side: number): [number, number] => [cx + side * (k.d[i] / top) * half, ctx.y.norm(k.a + ((k.b - k.a) * i) / (n - 1))];
+      for (let i = 0; i < n - 1; i++) {
+        const [lx0, y0p] = pt(i, -1);
+        const [rx0] = pt(i, 1);
+        const [lx1, y1p] = pt(i + 1, -1);
+        const [rx1] = pt(i + 1, 1);
+        pushVertex(mesh, lx0, y0p, fill);
+        pushVertex(mesh, rx0, y0p, fill);
+        pushVertex(mesh, rx1, y1p, fill);
+        pushVertex(mesh, lx0, y0p, fill);
+        pushVertex(mesh, rx1, y1p, fill);
+        pushVertex(mesh, lx1, y1p, fill);
+        pushSegment(lines, lx0, y0p, lx1, y1p, color, style.strokeWidth);
+        pushSegment(lines, rx0, y0p, rx1, y1p, color, style.strokeWidth);
+      }
+      const sorted = [...k.vals].sort((p, q) => p - q);
+      const q1 = quantile(sorted, 0.25);
+      const med = quantile(sorted, 0.5);
+      const q3 = quantile(sorted, 0.75);
+      stats.push({ c: k.c, n: sorted.length, q1, med, q3 });
+      if (style.box) {
+        // A slim quartile box and a median bar, in the series color.
+        const bw = Math.min(half * 0.18, xs.band * 0.06);
+        pushRect(rects, { x0: cx - bw, y0: ctx.y.norm(q1), x1: cx + bw, y1: ctx.y.norm(q3), fill: color, radii: [2, 2, 2, 2] });
+        pushSegment(lines, cx - bw * 2.2, ctx.y.norm(med), cx + bw * 2.2, ctx.y.norm(med), ctx.surface, 2);
+      }
+    }
+    return {
+      draws: [...batches(ctx, [], mesh, []), ...batches(ctx, rects, [], [], false), ...batches(ctx, [], [], lines)],
+      hit: emptyHit(),
+      pick(tx): ShapeHit | null {
+        const i = xs.invert(tx);
+        if (Math.abs(xs.norm(i) - tx) > half) return null;
+        const s = stats.find((x) => x.c === cats[i]);
+        if (!s) return null;
+        const f = (v: number) => ctx.format(v, yf);
+        return {
+          title: s.c,
+          rows: [
+            { label: 'Médiane', value: f(s.med) },
+            { label: 'Quartiles', value: `${f(s.q1)} → ${f(s.q3)}` },
+            { label: 'Observations', value: String(s.n) },
+          ],
+        };
+      },
+    };
+  },
+};
+
+export const EXTRA_MARKS: Record<string, MarkDefinition> = { kpi, waffle, rose, violin };

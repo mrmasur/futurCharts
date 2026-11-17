@@ -1,6 +1,8 @@
 export { Chart } from './chart/chart';
 export type { ChartOptions, ChartEvents, HoverItem, TooltipContext, SelectionPayload } from './chart/chart';
 export { mountChart } from './chart/mount';
+export { FacetChart, createChart } from './chart/facet';
+export type { ChartView } from './chart/facet';
 export type { ChartHandle, ChartHandlers } from './chart/mount';
 
 export { chart, ChartBuilder } from './spec/builder';
@@ -20,7 +22,7 @@ export { pushRect, pushSegment, pushVertex, luminance } from './marks/primitives
 export type { RectInstance } from './marks/primitives';
 export { squarify } from './marks/charts';
 export { sankeyLayout } from './marks/flows';
-export { apportion } from './marks/extra';
+export { apportion, density } from './marks/extra';
 export type { LayerData, SeriesData } from './marks/prepare';
 export { curvePoints } from './marks/curve';
 

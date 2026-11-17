@@ -53,7 +53,7 @@ Démo complète : `apps/demo/gallery.html` (`http://localhost:5273/gallery.html`
 | Comparaison | `bar` vertical ou horizontal (catégories sur y : détecté automatiquement), groupé, empilé, étiquettes de valeur (`style.labels`) |
 | Évolution | `line` (droite, lissée, en escalier), `area` empilée ou en bande (`y` → `y2`) |
 | Intervalles | `bar` avec `x2` / `y2` : Gantt, cascade ; `rule` : moustaches, barres d'erreur, sucettes ; `tick` : médianes, distributions en traits |
-| Distribution | histogramme (transform `bin` + `bar`), boîte à moustaches (transform `boxplot` + `rule` + `bar` + `tick` + `point`) |
+| Distribution | histogramme (transform `bin` + `bar`), boîte à moustaches (transform `boxplot` + `rule` + `bar` + `tick` + `point`), `violin` (densité, quartiles, médiane) |
 | Corrélation | `point` (nuage, bulles avec `size`), droite de régression (transform `regression`) |
 | Parts | `pie`, `donut`, `treemap` (squarifié, groupes) |
 | Indicateurs | `gauge` (min, max, objectif), `funnel` (taux de conversion) |
@@ -68,9 +68,25 @@ Démo complète : `apps/demo/gallery.html` (`http://localhost:5273/gallery.html`
 | Empilements | `stack: true`, `stack: "normalize"` (100 %), `stack: "center"` (streamgraph) |
 | Compositions | classement (`scales.y.reverse`), pente et étiquettes de fin de ligne (`style.endLabels`), puces (bullet), haltères, chandeliers |
 
+### Mettre une valeur en avant
+
+Sur n'importe quel graphique (barres, lignes, points, camembert, treemap, carte de chaleur, Sankey, sunburst,
+calendrier, carte…) :
+
+```json
+{ "mark": "donut", "encode": { "key": "channel", "value": "visits" },
+  "highlight": { "values": ["Email"], "color": "#e34948", "dim": 0.25 } }
+```
+
+Les valeurs citées gardent leur couleur (ou prennent `color`), les autres passent à l'opacité `dim`. `field` vaut
+par défaut la catégorie du calque (`x`, `y` à l'horizontale, `key`, premier niveau de `path`, `source`).
+C'est la forme la plus simple à produire pour une IA ; `overrides` reste disponible pour des règles plus fines
+(seuils, plusieurs couleurs).
+
 ### Exploration animée
 
-Un clic sur un segment du `sunburst` zoome sur cette branche, un clic au centre remonte d'un niveau. Un clic sur
+Un clic sur une part du `pie` ou du `donut` la fait sortir et atténue les autres (l'anneau affiche sa valeur au
+centre). Un clic sur un segment du `sunburst` zoome sur cette branche, un clic au centre remonte d'un niveau. Un clic sur
 une série de la `rose` l'isole, un second clic (ou le centre) ramène les autres. Les transitions durent 650 ms et
 sont immédiates si le système demande moins d'animations. L'événement `drill` (`onDrill` en React, `@drill` en
 Vue, `chart-drill` pour le Web Component) donne le chemin choisi, pour filtrer les autres graphiques d'un tableau
@@ -131,6 +147,13 @@ chart(res.data).fields(fields).bar({ x: 'month', y: 'mrr', color: 'plan' }, { st
 
 Les libellés et formats se lisent dans dbt via `label`, `description` et `meta.format` (une `FormatSpec`).
 
+## Palettes
+
+La galerie propose quatre palettes (Défaut, Océan, Crépuscule, Forêt), chacune en clair et en sombre. Chaque
+palette a été validée : séparation pour les daltoniens entre couleurs voisines, distinction en vision normale,
+bande de luminosité et contraste avec le fond. Une palette se passe dans le thème :
+`theme: { extends: 'dark', palette: { categorical: [...], sequential: [...] } }`.
+
 ## Wrappers
 
 Tous reposent sur `mountChart` (dans le cœur), qui gère la création asynchrone, les mises à jour et la
@@ -159,10 +182,25 @@ Le conteneur doit avoir une hauteur. En Ember classique (templates `.hbs`), rée
 - Un moteur WebGPU s'ajoute en implémentant `Renderer` dans `render/webgpu/` et en le sondant dans
   `createRenderer('auto')`. Il se branche aussi dès maintenant via `options.renderer`.
 
-## Prévu : animation et évolution dans le temps
+## Animation d'entrée
 
-- **Animation d'entrée** : le graphique se construit en une seconde environ au chargement (barres qui montent,
-  lignes qui se tracent, points qui apparaissent), avec durée, courbe d'accélération et décalage réglables dans la spec.
+Au premier affichage, les barres poussent en vague, les lignes se tracent, les camemberts et anneaux s'ouvrent,
+les points grossissent, puis les étiquettes apparaissent (900 ms). `animation: false` la coupe, un nombre fixe sa
+durée en ms ; elle est sautée si le système demande moins d'animations. Elle se calcule sur le GPU : une image
+animée n'envoie aucune donnée.
+
+## Petits multiples
+
+```json
+{ "facet": { "field": "country", "columns": 3, "height": 190 }, "layers": [ ... ] }
+```
+
+Un panneau par valeur du champ, avec le même ordre de catégories, les mêmes couleurs, les mêmes échelles
+(`shared: false` pour des échelles libres) et une seule légende, qui masque une série dans tous les panneaux.
+`createChart()` choisit la bonne vue ; les wrappers l'utilisent.
+
+## Prévu : transitions et évolution dans le temps
+
 - **Transitions** : passage fluide d'un état de données à un autre (filtre, série masquée, nouvelle période).
 - **Évolution dans le temps** : une dimension de la spec joue le rôle d'images successives, pour les courses de
   barres et autres graphiques animés, avec lecture, pause et curseur temporel.

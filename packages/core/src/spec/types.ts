@@ -30,6 +30,18 @@ export interface ChartSpec {
   axes?: { x?: AxisSpec | false; y?: AxisSpec | false };
   legend?: boolean;
   interactions?: InteractionSpec;
+  /**
+   * Entry animation when the chart first appears: bars grow, lines draw,
+   * pies sweep open. `false` to turn it off, a number for its duration (ms).
+   * Skipped when the system asks for reduced motion. Default 900 ms.
+   */
+  animation?: boolean | number;
+  /**
+   * Small multiples: one panel per value of `field`, same scales, same colors,
+   * one shared legend. `columns` defaults to fitting the width; `height` is per
+   * panel (px, default 220).
+   */
+  facet?: { field: string; columns?: number; height?: number; shared?: boolean };
 }
 
 export interface FieldSpec {
@@ -98,6 +110,14 @@ export interface LayerSpec {
    * `{ when: { field: 'country', in: ['France', 'Italie'] }, style: { color: '#e34948' } }`
    */
   overrides?: StyleOverride[];
+  /**
+   * Put some values forward: they keep their color (or take `color`), the
+   * others fade to `dim` opacity. Works on every mark. `field` defaults to the
+   * layer's category (x, y on a horizontal chart, `key`, `color`, the first
+   * level of `path`, or `source`).
+   * `{ "values": ["France"], "color": "#e34948" }`
+   */
+  highlight?: Highlight;
 }
 
 export type MarkStyle = { color?: string } & DeepPartial<
@@ -119,7 +139,8 @@ export type MarkStyle = { color?: string } & DeepPartial<
     Theme['marks']['calendar'] &
     Theme['marks']['kpi'] &
     Theme['marks']['waffle'] &
-    Theme['marks']['rose']
+    Theme['marks']['rose'] &
+    Theme['marks']['violin']
 >;
 
 /** A condition on one field of a row. Several conditions in an array must all hold. */
@@ -127,10 +148,19 @@ export interface Predicate {
   field: string;
   equals?: string | number;
   in?: (string | number)[];
+  notIn?: (string | number)[];
   gt?: number;
   gte?: number;
   lt?: number;
   lte?: number;
+}
+
+export interface Highlight {
+  field?: string;
+  values: (string | number)[];
+  color?: string;
+  /** Opacity of the other values. Default 0.25; 1 keeps them as they are. */
+  dim?: number;
 }
 
 export interface StyleOverride {
@@ -148,6 +178,8 @@ export interface ScaleSpec {
   zero?: boolean;
   /** Run the axis the other way: rank 1 at the top, first category at the bottom… */
   reverse?: boolean;
+  /** Category order of a band axis (others follow in data order). */
+  categories?: string[];
 }
 
 export interface ColorScaleSpec {

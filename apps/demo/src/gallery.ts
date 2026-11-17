@@ -1,4 +1,11 @@
-import { Chart, type ChartSpec } from '@futurcharts/core';
+import { createChart, type ChartSpec, type ChartView } from '@futurcharts/core';
+import { registerGeo } from '@futurcharts/geo';
+import { feature } from 'topojson-client';
+import world from 'world-atlas/countries-110m.json';
+
+registerGeo();
+// Natural Earth countries (public domain), shipped as TopoJSON by world-atlas.
+const countriesGeo = feature(world as any, (world as any).objects.countries) as unknown as { features: { properties: { name: string } }[] };
 
 // Deterministic data, so the gallery looks the same on every load.
 function rng(seed: number) {
@@ -156,6 +163,53 @@ const budgetShare = [{ poste: 'Salaires', amount: 47 }, { poste: 'Locaux', amoun
 const windRose = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'].flatMap((dir, k) =>
   ['Faible', 'Modéré', 'Fort'].map((speed, j) => ({ dir, speed, hours: Math.round((j === 0 ? 30 : j === 1 ? 18 : 7) * (0.4 + Math.abs(Math.sin(k * 0.9 + 1)) * 1.2) + r() * 6) })),
 );
+
+// Maps: stores around large cities, revenue per country.
+const worldCities: [string, number, number, string][] = [
+  ['Paris', 2.35, 48.86, 'Europe'], ['Londres', -0.13, 51.51, 'Europe'], ['Berlin', 13.4, 52.52, 'Europe'], ['Madrid', -3.7, 40.42, 'Europe'],
+  ['Rome', 12.5, 41.9, 'Europe'], ['Stockholm', 18.07, 59.33, 'Europe'], ['New York', -74.0, 40.71, 'Amériques'], ['Los Angeles', -118.24, 34.05, 'Amériques'],
+  ['Chicago', -87.63, 41.88, 'Amériques'], ['Mexico', -99.13, 19.43, 'Amériques'], ['São Paulo', -46.63, -23.55, 'Amériques'], ['Buenos Aires', -58.38, -34.6, 'Amériques'],
+  ['Lagos', 3.38, 6.52, 'Afrique'], ['Le Caire', 31.24, 30.04, 'Afrique'], ['Johannesburg', 28.05, -26.2, 'Afrique'], ['Nairobi', 36.82, -1.29, 'Afrique'],
+  ['Tokyo', 139.69, 35.69, 'Asie-Pacifique'], ['Shanghai', 121.47, 31.23, 'Asie-Pacifique'], ['Delhi', 77.21, 28.61, 'Asie-Pacifique'], ['Singapour', 103.82, 1.35, 'Asie-Pacifique'],
+  ['Séoul', 126.98, 37.57, 'Asie-Pacifique'], ['Sydney', 151.21, -33.87, 'Asie-Pacifique'], ['Dubaï', 55.27, 25.2, 'Asie-Pacifique'],
+];
+const storesN = worldCities.length * 90;
+const worldStores = { lon: new Float64Array(storesN), lat: new Float64Array(storesN), revenue: new Float64Array(storesN), region: new Array<string>(storesN) };
+{
+  let i = 0;
+  for (const [, lon, lat, region] of worldCities) {
+    for (let k = 0; k < 90; k++, i++) {
+      worldStores.lat[i] = lat + gauss(r) * 1.4;
+      worldStores.lon[i] = lon + (gauss(r) * 1.4) / Math.cos((lat * Math.PI) / 180);
+      worldStores.revenue[i] = Math.round(40 + Math.abs(gauss(r)) * 260);
+      worldStores.region[i] = region;
+    }
+  }
+}
+const cityRevenue = worldCities.map(([city, lon, lat, region]) => ({ city, lon, lat, region, revenue: Math.round(200 + r() * 1800) }));
+const countryScores = countriesGeo.features.map((f) => ({ country: f.properties.name, score: Math.round(20 + r() * 75) })).filter((_, i) => i % 9 !== 0);
+const europeNames = ['France', 'Germany', 'Spain', 'Italy', 'Poland', 'Sweden', 'Norway', 'Finland', 'United Kingdom', 'Portugal', 'Netherlands', 'Belgium', 'Switzerland', 'Austria', 'Ireland', 'Denmark', 'Greece', 'Romania', 'Czechia', 'Hungary'];
+
+// Small multiples and violins.
+const monthsShort = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
+const salesByCountry = ['France', 'Allemagne', 'Espagne', 'Italie', 'Pays-Bas', 'Belgique'].flatMap((country, c) =>
+  ['En ligne', 'Magasin'].flatMap((channel, k) =>
+    monthsShort.map((month, m) => ({
+      country, channel, month: new Date(2026, m, 1),
+      sales: Math.round((k === 0 ? 60 + m * (4 + c) : 90 - m * (1 + c * 0.4)) * (1 + c * 0.15) + r() * 12),
+    })),
+  ),
+);
+const npsByTeam = ['Support', 'Livraison', 'Facturation', 'Retours'].flatMap((team, t) =>
+  ['T1', 'T2', 'T3', 'T4'].map((quarter, q) => ({ team, quarter, nps: Math.round(30 + t * 6 + q * (3 - t) + r() * 8) })),
+);
+const responseTimes: { team: string; minutes: number }[] = [];
+for (const [team, mu, sd, bimodal] of [['Support', 12, 4, false], ['Ventes', 25, 9, false], ['Technique', 40, 12, true], ['Facturation', 18, 3, false]] as const) {
+  for (let i = 0; i < 400; i++) {
+    const shift = bimodal && r() < 0.4 ? 35 : 0;
+    responseTimes.push({ team, minutes: Math.max(1, mu + shift + gauss(r) * sd) });
+  }
+}
 
 const quarterly = ['T1', 'T2', 'T3', 'T4'].flatMap((quarter) => ['France', 'Allemagne', 'Espagne'].map((country) => ({ quarter, country, sales: Math.round(80 + r() * 120) })));
 
@@ -613,38 +667,262 @@ const entries: Entry[] = [
       layers: [{ mark: 'rose', encode: { key: 'dir', value: 'hours', color: 'speed' } }],
     },
   },
+  {
+    title: 'Mise en avant dans un camembert',
+    caption: 'highlight: { values: ["Email"] } · les autres parts s’effacent',
+    spec: {
+      title: 'Visites par canal',
+      subtitle: 'L’email mis en avant',
+      data: channels,
+      fields: { visits: { label: 'Visites' } },
+      layers: [{ mark: 'donut', encode: { key: 'channel', value: 'visits' }, highlight: { values: ['Email'] } }],
+    },
+  },
+  {
+    title: 'Mise en avant dans un treemap',
+    caption: 'highlight: { field: "category", values: ["Maison"], color: "$ink" }',
+    spec: {
+      title: 'Ventes par famille de produits',
+      subtitle: 'La famille Maison mise en avant',
+      data: catalog,
+      fields: { sales: { label: 'Ventes', format: { suffix: ' k€' } } },
+      layers: [{ mark: 'treemap', encode: { key: 'item', value: 'sales', color: 'category' }, highlight: { field: 'category', values: ['Maison'] } }],
+    },
+  },
+  {
+    title: 'Mise en avant d’une série',
+    caption: 'highlight sur la série : une équipe ressort, les autres passent en retrait',
+    spec: {
+      title: 'Classement de Lyon',
+      data: rankings,
+      fields: { rank: { label: 'Rang' } },
+      scales: { y: { reverse: true, zero: false } },
+      legend: false,
+      layers: [
+        { mark: 'line', encode: { x: 'week', y: 'rank', color: 'team' }, style: { width: 2.5, endLabels: true, curve: 'smooth' }, highlight: { field: 'team', values: ['Lyon'], dim: 0.18 } },
+        { mark: 'point', encode: { x: 'week', y: 'rank', color: 'team' }, style: { size: 9 }, highlight: { field: 'team', values: ['Lyon'], dim: 0.18 } },
+      ],
+    },
+  },
+  {
+    title: 'Mise en avant sur une carte de chaleur',
+    caption: 'highlight: { field: "day", values: ["Sam", "Dim"], dim: 0.35 }',
+    wide: true,
+    spec: {
+      title: 'Trafic du week-end',
+      data: traffic,
+      fields: { visits: { label: 'Visites' } },
+      layers: [{ mark: 'heatmap', encode: { x: 'hour', y: 'day', color: 'visits' }, highlight: { field: 'day', values: ['Sam', 'Dim'], dim: 0.35 } }],
+    },
+  },
+  {
+    title: 'Points sur une carte du monde',
+    caption: 'projection mercator · glisser pour entourer au lasso, Maj + glisser pour déplacer, molette pour zoomer',
+    wide: true,
+    spec: {
+      title: 'Points de vente',
+      subtitle: `${storesN.toLocaleString('fr-FR')} magasins · taille selon le chiffre d’affaires`,
+      projection: { type: 'mercator' },
+      fields: { lon: { label: 'Longitude' }, lat: { label: 'Latitude' }, revenue: { label: 'CA', format: { suffix: ' k€' } } },
+      layers: [
+        { mark: 'geoshape', geo: countriesGeo, encode: {} },
+        { mark: 'point', data: { columns: worldStores }, encode: { x: 'lon', y: 'lat', color: 'region', size: 'revenue' }, style: { sizeRange: [3, 9], strokeWidth: 0.5, opacity: 0.85 } },
+      ],
+      interactions: { select: 'lasso', zoom: { axes: 'xy', max: 60 } },
+    },
+  },
+  {
+    title: 'Choroplèthe mondiale',
+    caption: 'geoshape · jointure sur le nom du pays · pays sans donnée en gris',
+    wide: true,
+    spec: {
+      title: 'Indice de satisfaction par pays',
+      data: countryScores,
+      projection: { type: 'mercator' },
+      fields: { score: { label: 'Indice', format: { suffix: ' / 100' } } },
+      layers: [{ mark: 'geoshape', geo: countriesGeo, encode: { key: 'country', color: 'score' } }],
+      interactions: { zoom: { axes: 'xy', max: 60 } },
+    },
+  },
+  {
+    title: 'Bulles sur une carte',
+    caption: 'point sur projection · aire proportionnelle au chiffre d’affaires · une couleur par région',
+    spec: {
+      title: 'Chiffre d’affaires par ville',
+      projection: { type: 'mercator', bounds: [[-130, -45], [160, 65]] },
+      fields: { revenue: { label: 'CA', format: { suffix: ' k€' } } },
+      layers: [
+        { mark: 'geoshape', geo: countriesGeo, encode: {} },
+        { mark: 'point', data: cityRevenue, encode: { x: 'lon', y: 'lat', size: 'revenue', color: 'region' }, style: { sizeRange: [6, 30], opacity: 0.8 } },
+      ],
+      interactions: { tooltip: { mode: 'nearest' } },
+    },
+  },
+  {
+    title: 'Zoom sur l’Europe et mise en avant',
+    caption: 'projection.bounds · highlight sur la choroplèthe',
+    spec: {
+      title: 'L’Europe en avant',
+      subtitle: 'Indice de satisfaction, autres pays en retrait',
+      data: countryScores,
+      projection: { type: 'mercator', bounds: [[-25, 34], [45, 71]] },
+      fields: { score: { label: 'Indice', format: { suffix: ' / 100' } } },
+      layers: [{ mark: 'geoshape', geo: countriesGeo, encode: { key: 'country', color: 'score' }, highlight: { values: europeNames, dim: 0.3 } }],
+    },
+  },
+  {
+    title: 'Violon',
+    caption: 'violin · densité par équipe, boîte des quartiles et médiane à l’intérieur · données brutes',
+    spec: {
+      title: 'Temps de première réponse',
+      subtitle: 'En minutes · 400 tickets par équipe',
+      data: responseTimes,
+      fields: { minutes: { label: 'Minutes', format: { decimals: 0 } } },
+      layers: [{ mark: 'violin', encode: { x: 'team', y: 'minutes' } }],
+    },
+  },
+  {
+    title: 'Petits multiples de courbes',
+    caption: 'facet: { field: "country", columns: 3 } · échelles, couleurs et légende partagées',
+    wide: true,
+    spec: {
+      title: 'Ventes mensuelles par pays',
+      subtitle: 'En ligne et en magasin · même échelle dans chaque panneau',
+      data: salesByCountry,
+      fields: { sales: { label: 'Ventes', format: { suffix: ' k€' } } },
+      facet: { field: 'country', columns: 3, height: 190 },
+      layers: [{ mark: 'line', encode: { x: 'month', y: 'sales', color: 'channel' }, style: { width: 2 } }],
+    },
+  },
+  {
+    title: 'Petits multiples de barres',
+    caption: 'facet par équipe · barres verticales · mise en avant du dernier trimestre',
+    wide: true,
+    spec: {
+      title: 'NPS par équipe et trimestre',
+      data: npsByTeam,
+      fields: { nps: { label: 'NPS' } },
+      facet: { field: 'team', columns: 4, height: 200 },
+      layers: [{ mark: 'bar', encode: { x: 'quarter', y: 'nps' }, style: { labels: true, thickness: 18 }, highlight: { values: ['T4'], dim: 0.4 } }],
+    },
+  },
 ];
 
+// --------------------------------------------------------------- organisation
+
+const GROUPS: [string, string[]][] = [
+  ['Comparaison', ['Barres horizontales triées', 'Barres horizontales empilées', 'Barres empilées à 100 %', 'Épaisseur et couleur par barre', 'Barres fines et mise en avant', 'Sucettes', 'Haltères (dumbbell)', 'Graphique à puces (bullet)']],
+  ['Évolution', ['Prévision avec intervalle', 'Courbe en escalier', 'Streamgraph', 'Classement (bump chart)', 'Graphique de pente', 'Chandeliers']],
+  ['Temps et planning', ['Diagramme de Gantt', 'Calendrier']],
+  ['Distribution', ['Histogramme', 'Boîte à moustaches', 'Violon', 'Distribution en traits']],
+  ['Petits multiples', ['Petits multiples de courbes', 'Petits multiples de barres']],
+  ['Corrélation', ['Nuage de points et régression', 'Bulles']],
+  ['Parts et hiérarchies', ['Camembert', 'Anneau', 'Treemap', 'Sunburst', 'Gaufre']],
+  ['Flux', ['Sankey', 'Entonnoir', 'Cascade']],
+  ['Matrices et polaires', ['Carte de chaleur', 'Radar', 'Rose polaire']],
+  ['Indicateurs', ['Tuiles KPI', 'Jauge']],
+  ['Cartes', ['Points sur une carte du monde', 'Choroplèthe mondiale', 'Bulles sur une carte', 'Zoom sur l’Europe et mise en avant']],
+  ['Mise en avant', ['Mise en avant dans un camembert', 'Mise en avant dans un treemap', 'Mise en avant d’une série', 'Mise en avant sur une carte de chaleur']],
+];
+
+// ----------------------------------------------------------- color themes
+
+/** Each palette was checked for color-blind separation, contrast and lightness, in light and dark. */
+const PALETTES: Record<string, { label: string; light: string[]; dark: string[]; ramp: string[] }> = {
+  default: { label: 'Défaut', light: [], dark: [], ramp: [] },
+  ocean: {
+    label: 'Océan',
+    light: ['#1764c4', '#e8713c', '#0e9c94', '#d4a017', '#8a5cd6', '#3b9ae0', '#d6497a', '#5f7f2a'],
+    dark: ['#2872d3', '#e16b35', '#0e9c94', '#b88a06', '#8a5cd6', '#3a99df', '#d6497a', '#61812c'],
+    ramp: ['#d2e9f7', '#8cc7ea', '#3b9ae0', '#1764c4', '#0b3a78'],
+  },
+  dusk: {
+    label: 'Crépuscule',
+    light: ['#d4543a', '#6a4fc9', '#e09a1a', '#c2447e', '#2f8fbf', '#9a6420', '#e07a9e', '#4a8f5c'],
+    dark: ['#d4543a', '#745bd6', '#c38407', '#c2447e', '#2f8fbf', '#9d6724', '#d16d91', '#4a8f5c'],
+    ramp: ['#fbe2d6', '#f2a988', '#e0704a', '#b0432a', '#5e1f0f'],
+  },
+  forest: {
+    label: 'Forêt',
+    light: ['#2f7d4f', '#c9822b', '#3f74b8', '#b8413e', '#8f9a2b', '#7a58b0', '#0f9a9d', '#a8663e'],
+    dark: ['#398658', '#c78029', '#4076ba', '#be4743', '#8f9a2b', '#815fb8', '#0f9a9d', '#a8663e'],
+    ramp: ['#dcefe2', '#9ccfac', '#57a473', '#2f7d4f', '#123f26'],
+  },
+};
+
+let mode: 'light' | 'dark' = 'light';
+let palette = 'default';
+const themeFor = (): ChartSpec['theme'] => {
+  const p = PALETTES[palette];
+  if (!p.light.length) return mode;
+  // Sequential ramps run light to dark on a light surface, and the reverse on a dark one.
+  return { extends: mode, palette: { categorical: mode === 'dark' ? p.dark : p.light, sequential: mode === 'dark' ? [...p.ramp].reverse() : p.ramp } };
+};
+
+// ------------------------------------------------------------------ render
+
+const nav = document.getElementById('groups')!;
 const grid = document.getElementById('grid')!;
-let theme = 'light';
-const charts: { chart: Chart; spec: ChartSpec }[] = [];
-for (const e of entries) {
-  const fig = document.createElement('figure');
-  if (e.wide) fig.className = 'wide';
-  const row = document.createElement('div');
-  row.className = e.tiles ? 'tiles' : '';
-  const cap = document.createElement('figcaption');
-  cap.textContent = `${e.title} — ${e.caption}`;
-  fig.append(row, cap);
-  grid.appendChild(fig);
-  for (const spec of e.tiles ?? [e.spec!]) {
-    const box = document.createElement('div');
-    box.className = e.tiles ? 'chart tile' : 'chart';
-    row.appendChild(box);
-    try {
-      charts.push({ chart: await Chart.create(box, { ...spec, theme }), spec });
-    } catch (error) {
-      box.textContent = String(error);
-      console.error(e.title, error);
+const charts: { chart: ChartView; spec: ChartSpec }[] = [];
+const byTitle = new Map(entries.map((e) => [e.title, e]));
+const placed = new Set<string>();
+const sections: [string, Entry[]][] = GROUPS.map(([name, titles]) => [name, titles.map((t) => byTitle.get(t)).filter((e): e is Entry => !!e)]);
+const rest = entries.filter((e) => !GROUPS.some(([, t]) => t.includes(e.title)));
+if (rest.length) sections.push(['Autres', rest]);
+
+for (const [name, list] of sections) {
+  const id = name.toLowerCase().normalize('NFD').replace(/[^a-z]+/g, '-');
+  const link = document.createElement('a');
+  link.href = `#${id}`;
+  link.textContent = `${name} · ${list.reduce((a, e) => a + (e.tiles?.length ?? 1), 0)}`;
+  nav.appendChild(link);
+  const section = document.createElement('section');
+  section.id = id;
+  const h2 = document.createElement('h2');
+  h2.textContent = name;
+  const inner = document.createElement('div');
+  inner.className = 'grid';
+  section.append(h2, inner);
+  grid.appendChild(section);
+  for (const e of list) {
+    placed.add(e.title);
+    const fig = document.createElement('figure');
+    if (e.wide) fig.className = 'wide';
+    const row = document.createElement('div');
+    row.className = e.tiles ? 'tiles' : '';
+    const cap = document.createElement('figcaption');
+    cap.textContent = `${e.title} — ${e.caption}`;
+    fig.append(row, cap);
+    inner.appendChild(fig);
+    for (const spec of e.tiles ?? [e.spec!]) {
+      const box = document.createElement('div');
+      box.className = e.tiles ? 'chart tile' : spec.facet ? 'chart auto' : 'chart';
+      row.appendChild(box);
+      try {
+        charts.push({ chart: await createChart(box, { ...spec, theme: themeFor() }), spec });
+      } catch (error) {
+        box.textContent = String(error);
+        console.error(e.title, error);
+      }
     }
   }
 }
 
-document.getElementById('theme')!.addEventListener('click', (ev) => {
-  theme = theme === 'light' ? 'dark' : 'light';
-  document.documentElement.dataset.theme = theme;
-  (ev.target as HTMLElement).textContent = theme === 'light' ? 'Thème sombre' : 'Thème clair';
-  for (const c of charts) c.chart.update({ ...c.spec, theme });
+const restyle = () => {
+  document.documentElement.dataset.theme = mode;
+  for (const c of charts) c.chart.update({ ...c.spec, theme: themeFor() });
+};
+const modeButton = document.getElementById('theme')!;
+modeButton.addEventListener('click', () => {
+  mode = mode === 'light' ? 'dark' : 'light';
+  modeButton.textContent = mode === 'light' ? 'Thème sombre' : 'Thème clair';
+  restyle();
+});
+const select = document.getElementById('palette') as HTMLSelectElement;
+for (const [key, p] of Object.entries(PALETTES)) select.add(new Option(p.label, key));
+select.addEventListener('change', () => {
+  palette = select.value;
+  restyle();
 });
 
 (window as any).gallery = charts.map((c) => c.chart);

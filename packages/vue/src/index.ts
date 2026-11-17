@@ -1,6 +1,6 @@
 import {
   mountChart,
-  type Chart,
+  type ChartView,
   type ChartEvents,
   type ChartHandle,
   type ChartOptions,
@@ -24,7 +24,7 @@ export const FuturChart = defineComponent({
     options: { type: Object as PropType<ChartOptions>, default: undefined },
   },
   emits: {
-    ready: (_chart: Chart) => true,
+    ready: (_chart: ChartView) => true,
     error: (_error: unknown) => true,
     hover: (_payload: ChartEvents['hover']) => true,
     leave: (_payload: ChartEvents['leave']) => true,
@@ -59,7 +59,7 @@ export const FuturChart = defineComponent({
       handle?.destroy();
       handle = undefined;
     });
-    expose({ getChart: (): Chart | undefined => handle?.chart });
+    expose({ getChart: (): ChartView | undefined => handle?.chart });
 
     return () => h('div', { ref: container, style: { width: '100%', height: '100%' } });
   },

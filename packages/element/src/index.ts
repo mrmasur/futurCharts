@@ -1,4 +1,4 @@
-import { mountChart, type Chart, type ChartHandle, type ChartOptions, type ChartSpec } from '@futurcharts/core';
+import { mountChart, type ChartView, type ChartHandle, type ChartOptions, type ChartSpec } from '@futurcharts/core';
 
 /**
  * `<futur-chart>` custom element: works in any framework, or none.
@@ -30,7 +30,7 @@ export class FuturChartElement extends HTMLElement {
   }
 
   /** The underlying chart, once ready. */
-  get chart(): Chart | undefined {
+  get chart(): ChartView | undefined {
     return this.handle?.chart;
   }
 

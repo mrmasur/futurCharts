@@ -6,7 +6,13 @@ uniform vec2 u_res;      // canvas size in CSS px
 uniform vec4 u_t;        // sx, sy, ox, oy
 uniform float u_dpr;
 uniform float u_snap;
+uniform float u_progress;
 vec2 toPx(vec2 p) { return p * u_t.xy + u_t.zw; }
+// Entry animation for one instance: \`stagger\` in [0, 1] delays it (a wave across the chart), eased out.
+float enterK(float stagger) {
+  float k = clamp(u_progress * 1.4 - clamp(stagger, 0.0, 1.0) * 0.4, 0.0, 1.0);
+  return 1.0 - pow(1.0 - k, 3.0);
+}
 vec4 toClip(vec2 px) { vec2 c = px / u_res * 2.0 - 1.0; return vec4(c.x, -c.y, 0.0, 1.0); }
 vec2 corner() { return vec2(float(gl_VertexID & 1), float(gl_VertexID >> 1)); }
 `;
@@ -33,7 +39,15 @@ flat out vec4 v_stroke;
 flat out vec4 v_radii;
 flat out float v_sw;
 void main() {
-  vec2 a = toPx(a_rect.xy), b = toPx(a_rect.zw);
+  vec4 r = a_rect;
+  if (u_progress < 1.0) {
+    // Grow from the start corner along the value axis, in a wave along the categories.
+    vec2 c = (r.xy + r.zw) * 0.5;
+    bool h = a_axis > 0.5;
+    float k = enterK(h ? 1.0 - c.y : c.x);
+    if (h) r.z = mix(r.x, r.z, k); else r.w = mix(r.y, r.w, k);
+  }
+  vec2 a = toPx(r.xy), b = toPx(r.zw);
   vec2 mn = min(a, b), mx = max(a, b);
   // Work in the frame of a vertical bar (thickness along x, data growing up),
   // then swap back for horizontal bars.
@@ -105,7 +119,7 @@ flat out vec4 v_stroke;
 flat out float v_sw;
 void main() {
   vec2 center = toPx(a_point.xy);
-  float r = a_point.z * 0.5;
+  float r = a_point.z * 0.5 * (u_progress < 1.0 ? enterK(a_point.x) : 1.0);
   float ext = r + a_sw + 1.0;
   vec2 off = (corner() * 2.0 - 1.0) * ext;
   v_p = off; v_r = r; v_shape = a_point.w;
@@ -217,7 +231,9 @@ void main() {
   float ext = r1 + 2.0;
   vec2 off = (corner() * 2.0 - 1.0) * ext;
   v_p = off;
-  v_geo = vec4(a_arc.z * scale, r1, a_angles.x, a_angles.y);
+  // Entry: the whole circle sweeps open clockwise.
+  float k = u_progress < 1.0 ? enterK(0.0) : 1.0;
+  v_geo = vec4(a_arc.z * scale, r1, a_angles.x * k, a_angles.y * k);
   v_gap = a_angles.z;
   v_fill = a_fill;
   gl_Position = toClip(center + off);

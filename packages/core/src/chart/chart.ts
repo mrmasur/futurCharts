@@ -1,6 +1,7 @@
 import { Table, type DataInput, type Row } from '../data/table';
 import { ensureBuiltinMarks } from '../marks/builtin';
 import { applyTransforms } from '../data/transforms';
+import { prefersReducedMotion } from '../marks/animate';
 import { luminance } from '../marks/primitives';
 import { prepareLayer, standaloneLayer, type LayerData, type SeriesData } from '../marks/prepare';
 import { getMark, type BuildContext, type BuiltMark, type MarkDefinition, type MarkDraw, type MarkLabel, type ShapeHit } from '../marks/registry';
@@ -111,10 +112,24 @@ const font = (weight: number | string, size: number, family: string) => `${weigh
 const sizeDependent = (b: Built) =>
   typeof b.def.sizeDependent === 'function' ? b.def.sizeDependent(b.data.layer) : !!b.def.sizeDependent;
 
-/** Compile `layer.overrides` into a per-row style lookup. */
-function compileOverrides(layer: LayerSpec, table: Table): ((row: number) => StyleOverride['style'] | undefined) | undefined {
-  if (!layer.overrides?.length) return undefined;
-  const rules = layer.overrides.map((o) => {
+/** The field a `highlight` targets when it names none. */
+function highlightField(layer: LayerSpec, horizontal: boolean): string | undefined {
+  const e = layer.encode;
+  return e.key ?? e.path?.[0] ?? e.source ?? (horizontal ? e.y : e.x) ?? e.color;
+}
+
+/** Compile `layer.highlight` and `layer.overrides` into a per-row style lookup. */
+function compileOverrides(layer: LayerSpec, table: Table, horizontal: boolean): ((row: number) => StyleOverride['style'] | undefined) | undefined {
+  const rulesIn: StyleOverride[] = [];
+  const h = layer.highlight;
+  const field = h ? (h.field ?? highlightField(layer, horizontal)) : undefined;
+  if (h && field && table.has(field)) {
+    rulesIn.push({ when: { field, in: h.values }, style: h.color ? { color: h.color } : {} });
+    if ((h.dim ?? 0.25) < 1) rulesIn.push({ when: { field, notIn: h.values }, style: { opacity: h.dim ?? 0.25 } });
+  }
+  rulesIn.push(...(layer.overrides ?? []));
+  if (!rulesIn.length) return undefined;
+  const rules = rulesIn.map((o) => {
     const conds = (Array.isArray(o.when) ? o.when : [o.when]).map((p) => {
       const values = table.column(p.field).values;
       const set = p.in ? new Set(p.in.map(String)) : undefined;
@@ -122,6 +137,7 @@ function compileOverrides(layer: LayerSpec, table: Table): ((row: number) => Sty
         const v = values[row];
         if (p.equals !== undefined && String(v) !== String(p.equals)) return false;
         if (set && !set.has(String(v))) return false;
+        if (p.notIn && p.notIn.map(String).includes(String(v))) return false;
         const n = typeof v === 'number' ? v : Number(v);
         if (p.gt !== undefined && !(n > p.gt)) return false;
         if (p.gte !== undefined && !(n >= p.gte)) return false;
@@ -170,13 +186,17 @@ export class Chart {
   /** The scales come from a standalone mark (no grid by default). */
   private markScales = false;
   private axesShown = { x: true, y: true };
+  private markGrid = { x: false, y: false };
   /** Width / height the view must keep (maps). */
   private aspect?: number;
   private lasso?: { points: Point[]; additive: boolean; rect: boolean };
   private shape?: ShapeHit;
   /** Per-layer state kept across rebuilds (drill-down focus…). */
   private layerState = new Map<number, Record<string, unknown>>();
+  /** Entry animation: pending until the first frame, then its start time. */
+  private enter: { pending: boolean; start: number; duration: number } = { pending: false, start: 0, duration: 0 };
   private frame = 0;
+  private enterProgress = 1;
   private destroyed = false;
 
   private constructor(private container: HTMLElement, private options: ChartOptions) {}
@@ -187,6 +207,9 @@ export class Chart {
     const chart = new Chart(container, options);
     await chart.init();
     chart.update(spec);
+    const a = spec.animation ?? true;
+    const duration = typeof a === 'number' ? a : a ? 900 : 0;
+    chart.enter = { pending: duration > 0 && !prefersReducedMotion(), start: 0, duration };
     return chart;
   }
 
@@ -244,6 +267,15 @@ export class Chart {
 
   getSpec(): ChartSpec {
     return this.spec;
+  }
+
+  /** Domains of the continuous axes as drawn (small multiples share them). */
+  getDomains(): { x?: [number, number]; y?: [number, number] } {
+    const d = (s: Scale): [number, number] | undefined => {
+      const l = s as Partial<{ d0: number; d1: number }>;
+      return s.type !== 'band' && typeof l.d0 === 'number' && typeof l.d1 === 'number' ? [Math.min(l.d0, l.d1), Math.max(l.d0, l.d1)] : undefined;
+    };
+    return this.markScales || this.geo ? {} : { x: d(this.xScale), y: d(this.yScale) };
   }
 
   on<K extends keyof ChartEvents>(type: K, handler: (payload: ChartEvents[K]) => void): () => void {
@@ -347,7 +379,12 @@ export class Chart {
     // Theme color tokens ($ink, $grid, $1…) resolve against the current theme.
     const spec: ChartSpec = {
       ...this.spec,
-      layers: this.spec.layers.map((l) => ({ ...l, style: resolveThemeColors(theme, l.style), overrides: resolveThemeColors(theme, l.overrides) })),
+      layers: this.spec.layers.map((l) => ({
+        ...l,
+        style: resolveThemeColors(theme, l.style),
+        overrides: resolveThemeColors(theme, l.overrides),
+        highlight: resolveThemeColors(theme, l.highlight),
+      })),
       scales: this.spec.scales && { ...this.spec.scales, color: resolveThemeColors(theme, this.spec.scales.color) },
     };
     const fields = spec.fields ?? {};
@@ -398,6 +435,8 @@ export class Chart {
 
     // 1. Prepare each layer: grouping into series, stacking, ranges.
     const categories = new Map<string, number>();
+    // An explicit order (also how small multiples share one) comes first.
+    for (const c of catSpec.categories ?? []) if (!categories.has(c)) categories.set(c, categories.size);
     const prep = { band: catType === 'band', horizontal, categories, fields, hidden: this.hidden };
     const layers = spec.layers.map((layer, i) => ({
       data: defs[i].standalone ? standaloneLayer(layer, i, tableOf(i)) : prepareLayer(layer, i, tableOf(i), prep),
@@ -438,6 +477,7 @@ export class Chart {
       this.yScale = ms?.y ?? new LinearScale(0, 1);
       this.aspect = ms?.aspect;
       this.axesShown = { x: !!ms?.axes?.x, y: !!ms?.axes?.y };
+      this.markGrid = { x: !!ms?.grid?.x, y: !!ms?.grid?.y };
       this.markScales = true;
       this.cat = this.xScale;
       this.val = this.yScale;
@@ -537,7 +577,13 @@ export class Chart {
         const enc = data.layer.encode;
         const layerValue = def.standalone ? (enc.value ?? enc.color ?? enc.y) : horizontal ? enc.x : enc.y;
         const axisFormat = def.standalone ? undefined : valAxis?.format;
-        const override = compileOverrides(data.layer, data.table);
+        const override = compileOverrides(data.layer, data.table, !def.standalone && horizontal);
+        const paint = (c: RGBA, row: number | undefined): RGBA => {
+          const o = row === undefined ? undefined : override?.(row);
+          if (!o) return c;
+          const p = o.color ? parseColor(o.color) : c;
+          return o.opacity !== undefined ? [p[0], p[1], p[2], p[3] * o.opacity] : p;
+        };
         const baseColor = (s: SeriesData, i: number): RGBA =>
           s.colorValue && !data.layer.style?.color
             ? sampleRamp(ramp, k1 > k0 ? (s.colorValue[i] - k0) / (k1 - k0) : 0.5)
@@ -560,12 +606,8 @@ export class Chart {
           categorical,
           format: (v, field = layerValue) => numberFormatter(fields[field ?? '']?.format ?? axisFormat)(v),
           ramp: (t) => sampleRamp(ramp, t),
-          color: (s, i) => {
-            const o = override?.(s.rows[i]);
-            if (!o) return baseColor(s, i);
-            const c = o.color ? parseColor(o.color) : baseColor(s, i);
-            return o.opacity !== undefined ? [c[0], c[1], c[2], c[3] * o.opacity] : c;
-          },
+          color: (s, i) => paint(baseColor(s, i), s.rows[i]),
+          paint,
           // Area-proportional sizing: the eye reads surface, not diameter.
           size: (s, i) =>
             s.sizeValue ? r0 + (r1 - r0) * Math.sqrt(s1 > s0 ? Math.max(0, (s.sizeValue[i] - s0) / (s1 - s0)) : 0.5) : (style.size ?? 8),
@@ -750,8 +792,8 @@ export class Chart {
       grid.push(x0, y0, x1, y1, c[0], c[1], c[2], c[3], width);
     };
     // The value axis carries the grid: y normally, x on a horizontal chart. Mark-owned scales (heatmap) have none.
-    const gridY = this.markScales ? false : this.horizontal ? theme.grid.x.visible : theme.grid.y.visible;
-    const gridX = this.markScales ? false : this.horizontal ? theme.grid.y.visible : theme.grid.x.visible;
+    const gridY = this.markScales ? this.markGrid.y : this.horizontal ? theme.grid.x.visible : theme.grid.y.visible;
+    const gridX = this.markScales ? this.markGrid.x : this.horizontal ? theme.grid.y.visible : theme.grid.x.visible;
     if (yAxis && (yAxis.grid ?? gridY)) {
       for (const t of L.yTicks) {
         const y = T.oy + t.t * T.sy;
@@ -782,6 +824,16 @@ export class Chart {
     // Marks that animate themselves (drill-down) advance before drawing.
     const now = performance.now();
     let animating = false;
+    // Entry animation: starts with the first frame actually drawn.
+    if (this.enter.pending) {
+      this.enter.pending = false;
+      this.enter.start = now;
+    }
+    const enterT = this.enter.duration > 0 ? Math.min(1, (now - this.enter.start) / this.enter.duration) : 1;
+    if (enterT < 1) animating = true;
+    this.enterProgress = enterT;
+    // Lines and fills are revealed left to right through their clip.
+    const reveal = enterT < 1 ? 1 - Math.pow(1 - enterT, 3) : 1;
     for (const b of this.built) if (b.mark.animate?.(now)) animating = true;
 
     // With a selection, selectable marks are dimmed and the selected ones redrawn on top.
@@ -789,7 +841,10 @@ export class Chart {
     for (const b of this.built) {
       for (const d of b.mark.draws) {
         const opacity = selecting && d.perDatum ? theme.selection.dimOpacity : 1;
-        calls.push({ batch: d.batch, transform: T, clip, pixelSnap: d.pixelSnap, opacity });
+        const kind = d.batch.kind;
+        const grows = kind === 'rect' || kind === 'arc' || kind === 'point';
+        const c = !grows && reveal < 1 ? { ...clip, width: clip.width * reveal } : clip;
+        calls.push({ batch: d.batch, transform: T, clip: c, pixelSnap: d.pixelSnap, opacity, progress: grows ? enterT : 1 });
       }
       for (const d of b.sel?.draws ?? []) calls.push({ batch: d.batch, transform: T, clip, pixelSnap: d.pixelSnap });
     }
@@ -945,7 +1000,10 @@ export class Chart {
   private drawLabels(L: Layout): void {
     const { ctx, theme } = this;
     const T = L.transform;
+    // Labels fade in at the end of the entry animation.
+    if (this.enterProgress < 0.75) return;
     ctx.save();
+    ctx.globalAlpha = Math.min(1, (this.enterProgress - 0.75) / 0.25);
     const avoid: { l: MarkLabel; ax: number; ay: number; y: number }[] = [];
     for (const b of this.built) {
       for (const l of b.mark.labels ?? []) {
@@ -1025,7 +1083,15 @@ export class Chart {
     }
     ctx.textAlign = align;
     ctx.textBaseline = baseline;
-    ctx.fillStyle = l.color ?? (l.on ? (luminance(l.on) > 0.4 ? '#0b0b0b' : '#ffffff') : theme.text.secondary);
+    let ink = theme.text.secondary;
+    if (l.on) {
+      // A faded fill (highlight, focus) shows the surface through: judge the color actually seen.
+      const bg = parseColor(theme.background === 'transparent' ? '#ffffff' : theme.background);
+      const a = l.on[3];
+      const seen: RGBA = [l.on[0] * a + bg[0] * (1 - a), l.on[1] * a + bg[1] * (1 - a), l.on[2] * a + bg[2] * (1 - a), 1];
+      ink = luminance(seen) > 0.4 ? '#0b0b0b' : '#ffffff';
+    }
+    ctx.fillStyle = l.color ?? ink;
     ctx.fillText(l.text, x, y);
   }
 

@@ -1,18 +1,19 @@
 import type { ChartSpec } from '../spec/types';
-import { Chart, type ChartEvents, type ChartOptions } from './chart';
+import type { ChartEvents, ChartOptions } from './chart';
+import { createChart, type ChartView } from './facet';
 
 /** `onHover`, `onClick`, `onZoom`, `onLegend`, `onLeave`, plus lifecycle callbacks. */
 export type ChartHandlers = {
   [K in keyof ChartEvents as `on${Capitalize<K>}`]?: (payload: ChartEvents[K]) => void;
 } & {
-  onReady?: (chart: Chart) => void;
+  onReady?: (chart: ChartView) => void;
   onError?: (error: unknown) => void;
 };
 
 export interface ChartHandle {
   /** The chart, once created. */
-  readonly chart: Chart | undefined;
-  readonly ready: Promise<Chart>;
+  readonly chart: ChartView | undefined;
+  readonly ready: Promise<ChartView>;
   update(spec: ChartSpec): void;
   /** Swap the callbacks without touching the chart. */
   setHandlers(handlers: ChartHandlers): void;
@@ -32,12 +33,12 @@ export function mountChart(
   options: ChartOptions = {},
   handlers: ChartHandlers = {},
 ): ChartHandle {
-  let chart: Chart | undefined;
+  let chart: ChartView | undefined;
   let latest = spec;
   let current = handlers;
   let destroyed = false;
 
-  const ready = Chart.create(container, spec, options).then((c) => {
+  const ready = createChart(container, spec, options).then((c) => {
     if (destroyed) {
       c.destroy();
       return c;

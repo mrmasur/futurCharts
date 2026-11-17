@@ -11,8 +11,8 @@ Librairie de graphiques GPU pour une future app de BI (sources : Elasticsearch, 
 - Un seul contexte WebGL2 partagé par page (`SharedWebGL2Renderer`) : ne jamais revenir à un contexte par graphique
   par défaut, la galerie (19 graphiques) dépasse la limite des navigateurs.
 - La spec reste du JSON sérialisable ; ce qui exige une fonction va dans `ChartOptions`.
-- **Animation et évolution dans le temps sont des exigences à venir** (demandées le 2026-11-16, pas encore implémentées) :
-  animation d'entrée (le graphique se construit en ~1 s au chargement), transitions entre deux états de données,
+- **Animation** (demandée le 2026-11-16) : l'animation d'entrée est faite (`DrawCall.progress`, appliquée dans le
+  vertex shader ; lignes et aplats révélés par le clip). Restent à venir : transitions entre deux états de données,
   et graphiques qui évoluent dans le temps (« bar chart race »). Ne rien concevoir qui l'empêche : chaque donnée doit
   pouvoir garder une identité stable d'un état à l'autre, et l'interpolation doit pouvoir se faire sur GPU
   (deux états de buffer + un uniform de progression), sans reconstruire les batches à chaque image.

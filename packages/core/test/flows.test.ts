@@ -1,6 +1,6 @@
 import { Tween } from '../src/marks/animate';
 import { Table } from '../src/data/table';
-import { apportion } from '../src/marks/extra';
+import { apportion, density } from '../src/marks/extra';
 import { prepareLayer } from '../src/marks/prepare';
 import { darkTheme, lightTheme, themeColor } from '../src/theme/theme';
 import { describe, expect, it } from 'vitest';
@@ -96,5 +96,17 @@ describe('tween', () => {
     t.step(50);
     t.go(Float64Array.from([0]), 50, 100);
     expect(t.current[0]).toBeCloseTo(5);
+  });
+});
+
+describe('kernel density (violin)', () => {
+  it('integrates to about 1 and peaks near the mode', () => {
+    const values = Array.from({ length: 500 }, (_, i) => 10 + Math.sin(i * 12.9898) * 2);
+    const d = density(values, 0, 20, 201);
+    const area = d.reduce((a, v) => a + v * 0.1, 0);
+    expect(area).toBeGreaterThan(0.95);
+    expect(area).toBeLessThan(1.05);
+    const peak = d.indexOf(Math.max(...d));
+    expect(Math.abs(peak * 0.1 - 10)).toBeLessThan(2.5);
   });
 });

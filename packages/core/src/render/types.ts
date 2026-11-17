@@ -54,6 +54,12 @@ export interface DrawCall {
   opacity?: number;
   /** Snap geometry to device pixels (crisp hairlines, bar edges). */
   pixelSnap?: boolean;
+  /**
+   * Entry animation, 0 → 1 (default 1: fully drawn). Rects grow along their
+   * value axis, arcs sweep open, points grow; each backend applies it in its
+   * vertex stage, so an animated frame costs no buffer upload.
+   */
+  progress?: number;
 }
 
 export interface Frame {
