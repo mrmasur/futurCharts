@@ -12,6 +12,7 @@ export const BullesGroupees: StoryObj = { name: "Bulles groupées", ...entryStor
 export const DiagrammeEnArcs: StoryObj = { name: "Diagramme en arcs", ...entryStory("Diagramme en arcs") };
 export const Dendrogramme: StoryObj = { name: "Dendrogramme", ...entryStory("Dendrogramme") };
 export const ArbreRadial: StoryObj = { name: "Arbre radial", ...entryStory("Arbre radial") };
+export const ArbreDeBasEnHaut: StoryObj = { name: "Arbre de bas en haut", ...entryStory("Arbre de bas en haut") };
 export const Organigramme: StoryObj = { name: "Organigramme", ...entryStory("Organigramme") };
 export const Icicle: StoryObj = { name: "Icicle", ...entryStory("Icicle") };
 export const FlameChart: StoryObj = { name: "Flame chart", ...entryStory("Flame chart") };

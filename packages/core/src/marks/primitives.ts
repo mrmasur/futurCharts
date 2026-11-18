@@ -88,8 +88,10 @@ export function pushArc(
   a1: number,
   gap: number,
   fill: RGBA,
+  /** Rounded corners, px (capped by the ring's thickness and the arc's length). */
+  corner = 0,
 ): void {
-  out.push(cx, cy, r0, r1, a0, a1, gap, 0, fill[0], fill[1], fill[2], fill[3]);
+  out.push(cx, cy, r0, r1, a0, a1, gap, corner, fill[0], fill[1], fill[2], fill[3]);
 }
 
 export function pushVertex(out: number[], x: number, y: number, c: RGBA): void {

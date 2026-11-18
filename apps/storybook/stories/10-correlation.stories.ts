@@ -8,6 +8,8 @@ const meta: Meta = {
 };
 export default meta;
 
+export const NuageDePoints3D: StoryObj = { name: "Nuage de points 3D", ...entryStory("Nuage de points 3D") };
+export const MatriceDeNuagesSPLOM: StoryObj = { name: "Matrice de nuages (SPLOM)", ...entryStory("Matrice de nuages (SPLOM)") };
 export const NuageAnimeGapminder: StoryObj = { name: "Nuage animé (Gapminder)", ...entryStory("Nuage animé (Gapminder)") };
 export const ChampDeVecteurs: StoryObj = { name: "Champ de vecteurs", ...entryStory("Champ de vecteurs") };
 export const NuageDePointsEtRegression: StoryObj = { name: "Nuage de points et régression", ...entryStory("Nuage de points et régression") };

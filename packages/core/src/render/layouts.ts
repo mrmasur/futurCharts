@@ -73,7 +73,7 @@ export const LAYOUTS: Record<PrimitiveKind, PrimitiveLayout> = {
   },
   /**
    * arc:    cx, cy (scale space), r0, r1 (scale units along x; the view keeps x and y at the same scale)
-   * angles: a0, a1 (radians, clockwise from 12 o'clock), gap (px, trimmed on every side), unused
+   * angles: a0, a1 (radians, clockwise from 12 o'clock), gap (px, trimmed on every side), corner radius (px)
    * fill:   rgba
    * One annular sector per instance (pie, donut, sunburst, rose, gauge). Animating a
    * sector is just changing these numbers: nothing is re-tessellated.

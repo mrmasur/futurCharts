@@ -13,7 +13,7 @@ import { flow } from './flow';
 import { FLOW_MARKS } from './flows';
 import type { SeriesData } from './prepare';
 import { dashed, pushRect, pushSegment, pushVertex } from './primitives';
-import { buildHit, hasMark, registerMark, type BuildContext, type MarkDefinition, type MarkLabel } from './registry';
+import { buildHit, hasMark, registerMark, type BuildContext, type BuiltMark, type MarkDefinition, type MarkLabel } from './registry';
 
 function normalized(ctx: BuildContext, s: SeriesData, y: Float64Array): { x: Float32Array; y: Float32Array } {
   const n = s.x.length;
@@ -78,7 +78,16 @@ const line: MarkDefinition = {
           continue;
         }
         const r = slice(p, run);
-        pushPolyline(ctx, data, curvePoints(r.x, r.y, style.curve), color, style.width, style.dash);
+        const curve = curvePoints(r.x, r.y, style.curve);
+        if (style.colorByValue && !style.dash?.length) {
+          // Each stretch takes the ramp's color at its height (positions are already 0–1 along y).
+          for (let k = 0; k < curve.x.length - 1; k++) {
+            const [ax, ay] = ctx.pos(curve.x[k], curve.y[k]);
+            const [bx, by] = ctx.pos(curve.x[k + 1], curve.y[k + 1]);
+            const t = Math.max(0, Math.min(1, (curve.y[k] + curve.y[k + 1]) / 2));
+            pushSegment(data, ax, ay, bx, by, withAlpha(ctx.ramp(0.15 + 0.85 * t), style.opacity ?? 1), style.width);
+          }
+        } else pushPolyline(ctx, data, curve, color, style.width, style.dash);
       }
       for (let i = 0; i < s.x.length; i++) {
         const [x, y] = ctx.pos(p.x[i], p.y[i]);
@@ -175,6 +184,8 @@ const bar: MarkDefinition = {
     if (style.thickness > 0 && groups > 1) sub = Math.min(sub, (style.thickness + style.gap) * ctx.pixel[H ? 1 : 0]);
     const stroke = parseColor(style.stroke);
     const out: number[] = [];
+    const tracks: number[] = [];
+    const trackColor = style.track ? parseColor(style.track === 'auto' ? ctx.theme.grid.y.color : style.track) : undefined;
     const labels: MarkLabel[] = [];
     const center = new Map<SeriesData, number>();
     // Identity of each bar (series and category), for transitions between data states.
@@ -214,6 +225,12 @@ const bar: MarkDefinition = {
         const [ax, ay] = ctx.pos(c - sub / 2, v0);
         const [bx, by] = ctx.pos(c + sub / 2, v1);
         keys.push(`${s.key}\u0000${ctx.x.type === 'band' ? ctx.x.format(s.x[i]) : s.x[i]}`);
+        if (trackColor && (!data.stacked || vi === 0)) {
+          // The whole value axis, behind the bar (one per category in a stack).
+          const [tx0, ty0] = ctx.pos(c - sub / 2, 0);
+          const [tx1, ty1] = ctx.pos(c + sub / 2, 1);
+          pushRect(tracks, { x0: tx0, y0: ty0, x1: tx1, y1: ty1, fill: trackColor, radii: [style.radius, style.radius, style.radius, style.radius], gap: groups > 1 || ctx.x.band === 0 ? style.gap : 0, maxWidth: groups > 1 ? 0 : style.thickness > 0 ? style.thickness : style.maxWidth, axis: H ? 1 : 0 });
+        }
         pushRect(out, {
           x0: ax, y0: ay, x1: bx, y1: by,
           fill, stroke, radii,
@@ -250,7 +267,13 @@ const bar: MarkDefinition = {
     const instances = new Float32Array(out);
     batch.update(instances, out.length / LAYOUTS.rect.stride);
     const hit = buildHit(ctx, (s, _si, i) => ctx.x.norm(s.x[i]) + (center.get(s) ?? 0));
-    return { draws: [{ batch, pixelSnap: true, perDatum: true, data: instances, keys }], hit, labels };
+    const draws: BuiltMark['draws'] = [{ batch, pixelSnap: true, perDatum: true, data: instances, keys }];
+    if (tracks.length) {
+      const tb = ctx.renderer.createBatch('rect');
+      tb.update(new Float32Array(tracks), tracks.length / LAYOUTS.rect.stride);
+      draws.unshift({ batch: tb, pixelSnap: true, enter: 'fade' });
+    }
+    return { draws, hit, labels };
   },
 };
 
@@ -297,7 +320,43 @@ const point: MarkDefinition = {
     }
     const batch = ctx.renderer.createBatch('point');
     batch.update(out, n);
-    return { draws: [{ batch, perDatum: true, data: out, keys }], hit: spread ? buildHit(ctx, (s, _si, i) => ctx.x.norm(s.x[i]) + offset(s.rows[i])) : buildHit(ctx) };
+    const draws: BuiltMark['draws'] = [{ batch, perDatum: true, data: out, keys }];
+    // Pulse: rings growing out of the dots, fading as they go (two, half a beat apart).
+    let animate: BuiltMark['animate'];
+    if (style.pulse) {
+      const stride = LAYOUTS.point.stride;
+      const highlighted = !!ctx.data.layer.highlight;
+      const sources: number[] = [];
+      for (let i = 0; i < n && sources.length < 400; i++) if (!highlighted || out[i * stride + 7] > 0.9 * (style.opacity ?? 1)) sources.push(i);
+      const rings = ctx.renderer.createBatch('point');
+      const buf = new Float32Array(sources.length * 2 * stride);
+      draws.unshift({ batch: rings, enter: 'fade' });
+      animate = (now) => {
+        let k = 0;
+        for (const i of sources) {
+          for (const phase of [0, 0.5]) {
+            const p = ((now / 1600 + phase + i * 0.037) % 1 + 1) % 1;
+            const o = i * stride;
+            buf[k++] = out[o];
+            buf[k++] = out[o + 1];
+            buf[k++] = out[o + 2] * (1 + 2.2 * p);
+            buf[k++] = 0;
+            buf[k++] = 0;
+            buf[k++] = 0;
+            buf[k++] = 0;
+            buf[k++] = 0;
+            buf[k++] = out[o + 4];
+            buf[k++] = out[o + 5];
+            buf[k++] = out[o + 6];
+            buf[k++] = 0.7 * (1 - p);
+            buf[k++] = 2;
+          }
+        }
+        rings.update(buf, sources.length * 2);
+        return true;
+      };
+    }
+    return { draws, animate, hit: spread ? buildHit(ctx, (s, _si, i) => ctx.x.norm(s.x[i]) + offset(s.rows[i])) : buildHit(ctx) };
   },
 };
 

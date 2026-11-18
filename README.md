@@ -137,6 +137,10 @@ Démo : `http://localhost:5273/gallery.html`, une application de tableau de bord
 | Grilles | `tilemap` (tuiles hexagonales ou carrées en colonne `x` / ligne `y`), `surface` (grille interpolée + courbes de niveau), `horizon` (séries repliées en bandes) |
 | Unités | `pictorial` (une rangée de symboles par catégorie, `style.unit` par symbole) |
 | Arbres (suite) | `tree` avec `style.radial` (arbre radial) |
+| Jauges (suite) | `gauge` avec `zones` (seuils colorés), `needle`, `ticks`, `sweep` (ouverture en degrés), `rounded` |
+| Matrices (suite) | `heatmap` avec `circles` (punch card) ou `diverging` (corrélations, transform `correlation`), `polarHeatmap` (cases en anneaux) |
+| Multivarié (suite) | `splom` (matrice de nuages, `path` = champs), `scatter3d` (`x`, `y`, `z`, à tourner à la souris) |
+| Effets | `point` avec `pulse` (ondes), `bar` avec `track` (piste), `line` avec `colorByValue`, parts avec `cornerRadius`, `tree` avec `reverse` |
 | Bourse | `candlestick` (`y` haut, `y2` bas, `open`, `close` ; `style.ohlc` pour des barres OHLC) |
 | Cartes (suite) | `route` (de `x`, `y` à `x2`, `y2`, courbée ; épaisseur avec `size`) |
 | Arbres | `tree` (`path` ; dendrogramme, ou organigramme avec `boxes` et `direction: "TB"`), `icicle` (partition en lignes, zoom au clic ; `orientation: "BT"` pour un flame chart) |

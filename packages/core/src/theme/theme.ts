@@ -64,6 +64,8 @@ export interface Theme {
       labels: boolean;
       /** Join across missing values instead of leaving a gap. */
       connectNulls: boolean;
+      /** Color each stretch of line by its height (the sequential ramp, low to high). */
+      colorByValue: boolean;
     };
     bar: {
       /** Radius of the data end, px. The baseline end stays square. */
@@ -81,6 +83,8 @@ export interface Theme {
       labels: boolean;
       /** Exact bar thickness in px (0 = from the band). Wins over `maxWidth`; never wider than the band. */
       thickness: number;
+      /** A full-length track behind each bar (`auto`: the grid color; empty: none). */
+      track: string;
     };
     point: {
       size: number;
@@ -94,11 +98,23 @@ export interface Theme {
       sizeRange: [number, number];
       /** Spread dots across their category slot (share of it, 0–1), so that equal values stay visible. */
       jitter: number;
+      /** Rings pulsing out of the dots (only the highlighted ones when the layer has a `highlight`). */
+      pulse: boolean;
     };
     rule: { width: number; opacity: number };
     /** `length`: share of the category slot; `maxWidth`: cap in px (0 = none), to match a capped bar. */
     tick: { width: number; length: number; maxWidth: number; opacity: number };
-    heatmap: { radius: number; labels: boolean; gap: number };
+    /**
+     * `circles`: a dot per cell sized by the value (punch card) instead of a filled cell.
+     * `diverging`: colors from one hue (negative) through neutral (0) to another (positive), symmetric around zero (correlations).
+     */
+    heatmap: { radius: number; labels: boolean; gap: number; circles: boolean; diverging: boolean };
+    /** Scatter plot matrix: every pair of `path` fields, histograms on the diagonal. `size`: dot px. */
+    splom: { size: number; opacity: number; bins: number };
+    /** 3D scatter (`x`, `y`, `z`): drag to turn it; `spin` turns it on its own until then. `size`: dot px. */
+    scatter3d: { size: number; opacity: number; spin: boolean; perspective: number };
+    /** Cells on rings: `x` around the circle, `y` from the center out. `innerRadius`: share left empty. */
+    polarHeatmap: { innerRadius: number; gap: number; labels: boolean };
     /** Pie and donut. `gap`: px separator between slices; `innerRadius`: share of the radius (donut). */
     arc: {
       innerRadius: number;
@@ -108,11 +124,29 @@ export interface Theme {
       /** Where the circle starts and ends, in degrees clockwise from 12 o'clock: `-90` and `90` make a half donut. */
       startAngle: number;
       endAngle: number;
+      /** Rounded corners on every slice, px. */
+      cornerRadius: number;
     };
     treemap: { gap: number; radius: number; labels: boolean; header: number };
     funnel: { gap: number; radius: number; labels: boolean; connector: number };
     /** `thickness`: share of the radius. `track`: empty part of the arc (`auto` follows the grid color). */
-    gauge: { min: number; max: number; thickness: number; track: string; target: number };
+    gauge: {
+      min: number;
+      max: number;
+      thickness: number;
+      track: string;
+      target: number;
+      /** Opening of the dial in degrees (180: half circle, 240: speedometer). */
+      sweep: number;
+      /** Colored zones along the dial, each up to a value (`[{ "to": 60, "color": "#e34948" }, …]`); the value then shows as a needle. */
+      zones: { to: number; color: string }[];
+      /** A needle pointing at the value. */
+      needle: boolean;
+      /** Graduations: this many intervals, labelled (0: none). */
+      ticks: number;
+      /** Round ends on the arcs. */
+      rounded: boolean;
+    };
     radar: { levels: number; fillOpacity: number; width: number; points: boolean };
     /** px sizes; `linkOpacity` applies to the flows. */
     sankey: { nodeWidth: number; nodePadding: number; linkOpacity: number; radius: number; labels: boolean };
@@ -183,7 +217,8 @@ export interface Theme {
     candlestick: { ohlc: boolean; rising: string; falling: string; body: number; wick: number };
     /** Routes on a map from (x, y) to (x2, y2), bent by `curvature`; width from `encode.size` (`sizeRange`, px). */
     route: { curvature: number; opacity: number; ends: boolean };
-    tree: { direction: 'LR' | 'TB'; radial: boolean; boxes: boolean; nodeSize: number; linkWidth: number; boxWidth: number; boxHeight: number };
+    /** `reverse`: grow right to left (LR) or bottom to top (TB). */
+    tree: { direction: 'LR' | 'TB'; reverse: boolean; radial: boolean; boxes: boolean; nodeSize: number; linkWidth: number; boxWidth: number; boxHeight: number };
     flow: {
       variant: 'pipeline' | 'boxes';
       /** Steps can be dragged; the chart then emits `layout` with every position. */
@@ -269,18 +304,21 @@ export const lightTheme: Theme = {
     hiddenOpacity: 0.35,
   },
   marks: {
-    line: { width: 2, curve: 'linear', opacity: 1, endLabels: false, dash: [], markers: false, labels: false, connectNulls: false },
-    bar: { radius: 4, gap: 2, maxWidth: 28, bandPadding: 0.3, opacity: 1, strokeWidth: 0, stroke: 'transparent', labels: false, thickness: 0 },
-    point: { size: 8, shape: 'circle', opacity: 1, strokeWidth: 2, stroke: 'surface', sizeRange: [4, 28], jitter: 0 },
+    line: { width: 2, curve: 'linear', opacity: 1, endLabels: false, dash: [], markers: false, labels: false, connectNulls: false, colorByValue: false },
+    bar: { radius: 4, gap: 2, maxWidth: 28, bandPadding: 0.3, opacity: 1, strokeWidth: 0, stroke: 'transparent', labels: false, thickness: 0, track: '' },
+    point: { size: 8, shape: 'circle', opacity: 1, strokeWidth: 2, stroke: 'surface', sizeRange: [4, 28], jitter: 0, pulse: false },
     area: { opacity: 0.12, stackedOpacity: 0.8, gradient: false, line: true, lineWidth: 2, curve: 'linear' },
     geoshape: { fill: '#e9e8e2', missing: '#e9e8e2', stroke: '#fcfcfb', strokeWidth: 0.75 },
     rule: { width: 1.5, opacity: 1 },
     tick: { width: 2, length: 0.6, maxWidth: 0, opacity: 1 },
-    heatmap: { radius: 3, labels: true, gap: 2 },
-    arc: { innerRadius: 0, gap: 2, labels: true, center: true, startAngle: 0, endAngle: 360 },
+    heatmap: { radius: 3, labels: true, gap: 2, circles: false, diverging: false },
+    polarHeatmap: { innerRadius: 0.22, gap: 1.5, labels: true },
+    splom: { size: 4, opacity: 0.7, bins: 14 },
+    scatter3d: { size: 7, opacity: 0.85, spin: true, perspective: 4 },
+    arc: { innerRadius: 0, gap: 2, labels: true, center: true, startAngle: 0, endAngle: 360, cornerRadius: 0 },
     treemap: { gap: 2, radius: 4, labels: true, header: 22 },
     funnel: { gap: 6, radius: 4, labels: true, connector: 0.14 },
-    gauge: { min: 0, max: 100, thickness: 0.24, track: 'auto', target: NaN },
+    gauge: { min: 0, max: 100, thickness: 0.24, track: 'auto', target: NaN, sweep: 180, zones: [], needle: false, ticks: 0, rounded: false },
     radar: { levels: 4, fillOpacity: 0.14, width: 2, points: true },
     sankey: { nodeWidth: 12, nodePadding: 14, linkOpacity: 0.32, radius: 2, labels: true },
     sunburst: { innerRadius: 0.32, gap: 1.5, labels: true },
@@ -310,7 +348,7 @@ export const lightTheme: Theme = {
     pyramid: { gap: 3, labels: true },
     candlestick: { ohlc: false, rising: 'auto', falling: 'auto', body: 0.7, wick: 1.25 },
     route: { curvature: 0.25, opacity: 0.6, ends: true },
-    tree: { direction: 'LR', radial: false, boxes: false, nodeSize: 9, linkWidth: 1.5, boxWidth: 132, boxHeight: 46 },
+    tree: { direction: 'LR', reverse: false, radial: false, boxes: false, nodeSize: 9, linkWidth: 1.5, boxWidth: 132, boxHeight: 46 },
     flow: { variant: 'pipeline', editable: true, direction: 'LR', rankGap: 56, nodeGap: 28, fontSize: 13, edge: 'auto', edgeWidth: 1.5, tint: 0.16, radius: 6 },
   },
   tooltip: {

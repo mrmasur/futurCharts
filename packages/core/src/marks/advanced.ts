@@ -7,14 +7,15 @@ import type { RGBA } from '../render/types';
 import { BandScale, LinearScale, TimeScale, niceDomain } from '../scale/scales';
 import type { Table } from '../data/table';
 import { mix, parseColor, withAlpha } from '../util/color';
-import { batches, categoriesOf, need, share, totals } from './charts';
-import { pushSegment, pushVertex } from './primitives';
+import { batches, categoriesOf, need, share, totals, valueColor } from './charts';
+import { pushArc } from './primitives';
+import { pushRect, pushSegment, pushVertex } from './primitives';
 import { emptyHit, type BuildContext, type MarkDefinition, type MarkLabel, type ShapeHit } from './registry';
 import { textWidth } from './shapes';
 
 const fieldLabel = (ctx: BuildContext, f: string) => ctx.fields[f]?.label ?? f;
 
-function batch(ctx: BuildContext, kind: 'point' | 'line' | 'mesh' | 'rect', data: number[]) {
+function batch(ctx: BuildContext, kind: 'point' | 'line' | 'mesh' | 'rect' | 'arc', data: number[]) {
   const b = ctx.renderer.createBatch(kind);
   b.update(new Float32Array(data), data.length / LAYOUTS[kind].stride);
   return b;
@@ -639,4 +640,326 @@ export const horizon: MarkDefinition = {
   },
 };
 
-export const ADVANCED_MARKS: Record<string, MarkDefinition> = { ridgeline, beeswarm, tilemap, pictorial, surface, horizon };
+// ------------------------------------------------------------- polar heatmap
+
+/**
+ * `polarHeatmap`: a heatmap on rings: `x` categories around the circle (hours,
+ * months), `y` categories from the center out (days, years), colored by `value`.
+ */
+export const polarHeatmap: MarkDefinition = {
+  standalone: true,
+  symbol: 'square',
+  scales: () => ({ x: new LinearScale(-1.16, 1.16), y: new LinearScale(-1.16, 1.16), aspect: 1 }),
+  build(ctx) {
+    const { layer, table } = ctx.data;
+    const { style, theme } = ctx;
+    const xf = need(layer, 'x', 'polarHeatmap');
+    const yf = need(layer, 'y', 'polarHeatmap');
+    const vf = layer.encode.value ?? need(layer, 'color', 'polarHeatmap');
+    const xc = categoriesOf(table, xf);
+    const yc = categoriesOf(table, yf);
+    const xv = table.column(xf).values;
+    const yv = table.column(yf).values;
+    const vals = numbers(table, vf);
+    const [lo, hi] = extent(vals);
+    const r0 = style.innerRadius;
+    const ring = (1 - r0) / Math.max(1, yc.length);
+    const step = (Math.PI * 2) / Math.max(1, xc.length);
+    const unit = ctx.x.norm(1) - ctx.x.norm(0);
+    const [cx, cy] = [ctx.x.norm(0), ctx.y.norm(0)];
+    const arcs: number[] = [];
+    const labels: MarkLabel[] = [];
+    const cells = new Map<string, number>();
+    for (let i = 0; i < table.length; i++) {
+      const a = xc.indexOf(String(xv[i]));
+      const b = yc.indexOf(String(yv[i]));
+      if (a < 0 || b < 0 || Number.isNaN(vals[i])) continue;
+      cells.set(`${a}|${b}`, i);
+      const fill = ctx.paint(valueColor(ctx, vals[i], lo, hi, false), i);
+      pushArc(arcs, cx, cy, (r0 + ring * b) * unit, (r0 + ring * (b + 1)) * unit, a * step, (a + 1) * step, style.gap, fill, 2);
+    }
+    // Categories around the outside; rings named along 12 o'clock.
+    xc.forEach((name, a) => {
+      const m = (a + 0.5) * step;
+      labels.push({ tx: ctx.x.norm(Math.sin(m) * 1.08), ty: ctx.y.norm(Math.cos(m) * 1.08), text: name, color: theme.text.muted, size: 10, align: 'center', baseline: 'middle' });
+    });
+    yc.forEach((name, b) => {
+      const r = r0 + ring * (b + 0.5);
+      labels.push({ tx: ctx.x.norm(0), ty: ctx.y.norm(r), text: name, color: theme.text.secondary, size: 10, weight: 600, align: 'right', baseline: 'middle', dx: -4, background: theme.background });
+    });
+    return {
+      draws: [{ batch: batch(ctx, 'arc', arcs) }],
+      hit: emptyHit(),
+      labels,
+      pick(tx, ty): ShapeHit | null {
+        const x = ctx.x.invert(tx);
+        const y = ctx.y.invert(ty);
+        const r = Math.hypot(x, y);
+        if (r < r0 || r > 1) return null;
+        const a = Math.floor((((Math.atan2(x, y) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) / step);
+        const b = Math.floor((r - r0) / ring);
+        const row = cells.get(`${a}|${b}`);
+        if (row === undefined) return null;
+        return { title: `${xc[a]} · ${yc[b]}`, rows: [{ label: fieldLabel(ctx, vf), value: ctx.format(vals[row], vf) }] };
+      },
+    };
+  },
+};
+
+// -------------------------------------------------------- scatter matrix
+
+/**
+ * `splom`: every pair of the `path` fields as a small scatter plot, the
+ * distribution of each field on the diagonal; `color` as on `point`.
+ */
+export const splom: MarkDefinition = {
+  standalone: true,
+  symbol: 'circle',
+  scales: () => ({ x: new LinearScale(0, 1), y: new LinearScale(0, 1) }),
+  build(ctx) {
+    const { layer, table } = ctx.data;
+    const { style, theme } = ctx;
+    const fields = layer.encode.path;
+    if (!fields?.length) throw new Error('futurCharts: mark "splom" needs encode.path (the fields to compare).');
+    const n = fields.length;
+    const cols = fields.map((f) => numbers(table, f));
+    const ext = cols.map((c) => {
+      const [lo, hi] = extent(c);
+      const pad = (hi - lo) * 0.06 || 1;
+      return [lo - pad, hi + pad] as [number, number];
+    });
+    const gf = layer.encode.color;
+    const groups = gf ? table.column(gf).values : undefined;
+    const legendKeys: string[] = [];
+    const color = (i: number): RGBA => {
+      if (!groups) return ctx.paint(ctx.categorical(fieldLabel(ctx, fields[0])), i);
+      const g = String(groups[i]);
+      if (!legendKeys.includes(g)) legendKeys.push(g);
+      return ctx.paint(ctx.categorical(g), i);
+    };
+    // Room for the field names: left column and bottom row.
+    const [px, py] = ctx.pixel;
+    const left = 0.0 + 18 * px;
+    const bottom = 18 * py;
+    const cw = (1 - left) / n;
+    const ch = (1 - bottom) / n;
+    const gap = 6;
+    const cell = (i: number, j: number) => ({ x0: left + j * cw + gap * px, x1: left + (j + 1) * cw - gap * px, y0: 1 - (i + 1) * ch + gap * py, y1: 1 - i * ch - gap * py });
+    const pts: number[] = [];
+    const rects: number[] = [];
+    const labels: MarkLabel[] = [];
+    const frame = parseColor(theme.grid.y.color);
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        const b = cell(i, j);
+        pushRect(rects, { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, fill: withAlpha(frame, 0.25), radii: [3, 3, 3, 3] });
+        if (i === j) {
+          // Histogram of the field.
+          const v = cols[i];
+          const [lo, hi] = ext[i];
+          const counts = new Array(style.bins).fill(0);
+          for (const x of v) if (!Number.isNaN(x)) counts[Math.min(style.bins - 1, Math.floor(((x - lo) / (hi - lo)) * style.bins))]++;
+          const max = Math.max(...counts, 1);
+          const bw = (b.x1 - b.x0) / style.bins;
+          const c = ctx.categorical(fieldLabel(ctx, fields[0]));
+          counts.forEach((k, q) => {
+            if (!k) return;
+            pushRect(rects, { x0: b.x0 + q * bw, y0: b.y0, x1: b.x0 + (q + 1) * bw, y1: b.y0 + ((b.y1 - b.y0) * k) / max * 0.85, fill: withAlpha(c, 0.75), gap: 1, axis: 0 });
+          });
+          labels.push({ tx: b.x0, ty: b.y1, text: fieldLabel(ctx, fields[i]), color: theme.text.primary, size: 11, weight: 650, align: 'left', baseline: 'top', dx: 5, dy: 4 });
+          continue;
+        }
+        const xs = cols[j], ys = cols[i];
+        const [x0, x1] = ext[j], [y0, y1] = ext[i];
+        for (let r = 0; r < table.length; r++) {
+          if (Number.isNaN(xs[r] + ys[r])) continue;
+          const c = color(r);
+          pts.push(b.x0 + ((xs[r] - x0) / (x1 - x0)) * (b.x1 - b.x0), b.y0 + ((ys[r] - y0) / (y1 - y0)) * (b.y1 - b.y0), style.size, 0, c[0], c[1], c[2], c[3] * style.opacity, 0, 0, 0, 0, 0);
+        }
+      }
+      // Field names along the left edge and the bottom.
+      const row = cell(i, 0);
+      labels.push({ tx: 0, ty: (row.y0 + row.y1) / 2, text: fieldLabel(ctx, fields[i]), color: theme.text.muted, size: 10, align: 'center', baseline: 'middle', dx: 7 });
+      const col = cell(n - 1, i);
+      labels.push({ tx: (col.x0 + col.x1) / 2, ty: 0, text: fieldLabel(ctx, fields[i]), color: theme.text.muted, size: 10, align: 'center', baseline: 'bottom', dy: -2 });
+    }
+    const draws = batches(ctx, rects, [], [], false);
+    draws.push({ batch: batch(ctx, 'point', pts), enter: 'fade' });
+    return {
+      draws,
+      hit: emptyHit(),
+      labels,
+      legend: legendKeys.map((k) => ({ key: k, color: ctx.categorical(k) })),
+      pick(tx, ty): ShapeHit | null {
+        const j = Math.floor((tx - left) / cw);
+        const i = Math.floor((1 - ty) / ch);
+        if (i < 0 || j < 0 || i >= n || j >= n || i === j) return null;
+        const b = cell(i, j);
+        const [x0, x1] = ext[j], [y0, y1] = ext[i];
+        let best = -1, bd = 8;
+        for (let r = 0; r < table.length; r++) {
+          const x = b.x0 + ((cols[j][r] - x0) / (x1 - x0)) * (b.x1 - b.x0);
+          const y = b.y0 + ((cols[i][r] - y0) / (y1 - y0)) * (b.y1 - b.y0);
+          const d = Math.hypot((x - tx) / px, (y - ty) / py);
+          if (d < bd) [best, bd] = [r, d];
+        }
+        if (best < 0) return null;
+        const rows = fields.map((f, k) => ({ label: fieldLabel(ctx, f), value: ctx.format(cols[k][best], f) }));
+        return { title: gf ? String(groups![best]) : `Ligne ${best + 1}`, rows };
+      },
+    };
+  },
+};
+
+// -------------------------------------------------------------- 3D scatter
+
+/**
+ * `scatter3d`: points in a box (`x`, `y`, `z`), seen in perspective. Drag to
+ * turn it; until then it spins slowly (`style.spin`). The projection is done on
+ * the CPU each frame and the dots drawn by the GPU, back to front.
+ */
+export const scatter3d: MarkDefinition = {
+  standalone: true,
+  symbol: 'circle',
+  scales: () => ({ x: new LinearScale(-1.25, 1.25), y: new LinearScale(-1.15, 1.15), aspect: 2.5 / 2.3 }),
+  build(ctx) {
+    const { layer, table } = ctx.data;
+    const { style, theme } = ctx;
+    const xf = need(layer, 'x', 'scatter3d'), yf = need(layer, 'y', 'scatter3d'), zf = need(layer, 'z', 'scatter3d');
+    const X = numbers(table, xf), Y = numbers(table, yf), Z = numbers(table, zf);
+    const ex = extent(X), ey = extent(Y), ez = extent(Z);
+    const norm = (v: number, [lo, hi]: [number, number]) => (hi > lo ? ((v - lo) / (hi - lo)) * 2 - 1 : 0);
+    const gf = layer.encode.color;
+    const gcol = gf ? table.column(gf) : undefined;
+    const numericColor = !!gcol && gcol.type !== 'string';
+    const [c0, c1] = numericColor ? extent(gcol!.values as Float64Array) : [0, 1];
+    const legendKeys: string[] = [];
+    const pts = Array.from({ length: table.length }, (_, i) => {
+      let c: RGBA;
+      if (!gcol) c = ctx.ramp(0.25 + 0.7 * ((norm(Z[i], ez) + 1) / 2));
+      else if (numericColor) c = ctx.ramp(c1 > c0 ? ((gcol.values[i] as number) - c0) / (c1 - c0) : 0.5);
+      else {
+        const g = String(gcol.values[i]);
+        if (!legendKeys.includes(g)) legendKeys.push(g);
+        c = ctx.categorical(g);
+      }
+      return { x: norm(X[i], ex), y: norm(Y[i], ey), z: norm(Z[i], ez), c: ctx.paint(c, i), row: i, ok: !Number.isNaN(X[i] + Y[i] + Z[i]) };
+    }).filter((p) => p.ok);
+    let yaw = (ctx.state.yaw as number | undefined) ?? -0.7;
+    let pitch = (ctx.state.pitch as number | undefined) ?? 0.42;
+    let spinning = style.spin && ctx.state.yaw === undefined;
+    let last = 0;
+    const scale = 0.5;
+    // Project a point of the [-1, 1]³ box: turn (yaw around the vertical axis, then pitch), then perspective.
+    const project = (x: number, y: number, z: number) => {
+      const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+      const x1 = x * cy - z * sy;
+      const z1 = x * sy + z * cy;
+      const y2 = y * cp - z1 * sp;
+      const z2 = y * sp + z1 * cp;
+      // Perspective: 1 at the center of the box, larger in front; `scale` keeps the nearest corner in the frame.
+      const p = Math.max(2, style.perspective);
+      const k = p / (p + z2);
+      return { sx: ctx.x.norm(x1 * k * scale), sy: ctx.y.norm(y2 * k * scale), depth: z2, k };
+    };
+    const dots = ctx.renderer.createBatch('point');
+    const lines = ctx.renderer.createBatch('line');
+    const labels: MarkLabel[] = [];
+    let shown: { sx: number; sy: number; i: number; size: number }[] = [];
+    const grid = parseColor(theme.grid.y.color);
+    const axis = parseColor(theme.axis.line.color);
+    const render = () => {
+      // Box: the floor grid and the back edges.
+      const seg: number[] = [];
+      const edge = (a: number[], b: number[], c: RGBA, w: number) => {
+        const p = project(a[0], a[1], a[2]);
+        const q = project(b[0], b[1], b[2]);
+        pushSegment(seg, p.sx, p.sy, q.sx, q.sy, c, w);
+      };
+      for (let k = -1; k <= 1.0001; k += 0.5) {
+        edge([k, -1, -1], [k, -1, 1], grid, 1);
+        edge([-1, -1, k], [1, -1, k], grid, 1);
+      }
+      const corners = [-1, 1];
+      for (const a of corners) for (const b of corners) {
+        edge([a, -1, b], [a, 1, b], withAlpha(axis, 0.35), 1);
+        edge([a, 1, -1], [a, 1, 1], withAlpha(axis, 0.2), 1);
+        edge([-1, 1, a], [1, 1, a], withAlpha(axis, 0.2), 1);
+      }
+      lines.update(new Float32Array(seg), seg.length / LAYOUTS.line.stride);
+      const proj = pts.map((p, i) => ({ ...project(p.x, p.y, p.z), i }));
+      // Back to front, so near dots cover far ones.
+      proj.sort((a, b) => b.depth - a.depth);
+      const out: number[] = [];
+      const sf = ctx.surface;
+      shown = [];
+      for (const p of proj) {
+        const c = pts[p.i].c;
+        const size = style.size * p.k;
+        out.push(p.sx, p.sy, size, 0, c[0], c[1], c[2], c[3] * style.opacity, sf[0], sf[1], sf[2], 0.8, 0.75);
+        shown.push({ sx: p.sx, sy: p.sy, i: p.i, size });
+      }
+      dots.update(new Float32Array(out), proj.length);
+      // Axis names at the far ends of three edges.
+      labels.length = 0;
+      const name = (pos: number[], text: string) => {
+        const p = project(pos[0], pos[1], pos[2]);
+        labels.push({ tx: p.sx, ty: p.sy, text, color: theme.text.muted, size: 11, weight: 600, align: 'center', baseline: 'middle', background: theme.background });
+      };
+      name([1.18, -1, -1], fieldLabel(ctx, xf));
+      name([-1, 1.12, -1], fieldLabel(ctx, yf));
+      name([-1, -1, 1.18], fieldLabel(ctx, zf));
+    };
+    render();
+    let dragFrom: { tx: number; ty: number; yaw: number; pitch: number } | undefined;
+    return {
+      draws: [{ batch: lines, enter: 'fade' }, { batch: dots, enter: 'fade' }],
+      hit: emptyHit(),
+      labels,
+      legend: legendKeys.map((k) => ({ key: k, color: ctx.categorical(k) })),
+      animate(now) {
+        if (!spinning) return false;
+        if (last) yaw += (now - last) * 0.00025;
+        last = now;
+        render();
+        return true;
+      },
+      drag: {
+        start(tx, ty) {
+          spinning = false;
+          dragFrom = { tx, ty, yaw, pitch };
+          return true;
+        },
+        move(tx, ty) {
+          if (!dragFrom) return;
+          yaw = dragFrom.yaw + (tx - dragFrom.tx) * 4;
+          pitch = Math.max(-1.4, Math.min(1.4, dragFrom.pitch - (ty - dragFrom.ty) * 4));
+          ctx.state.yaw = yaw;
+          ctx.state.pitch = pitch;
+          render();
+        },
+        end() {
+          dragFrom = undefined;
+          return {};
+        },
+      },
+      pick(tx, ty): ShapeHit | null {
+        // The nearest dot on top (the list is back to front).
+        for (let k = shown.length - 1; k >= 0; k--) {
+          const p = shown[k];
+          if (Math.hypot((p.sx - tx) / ctx.pixel[0], (p.sy - ty) / ctx.pixel[1]) <= p.size / 2 + 2) {
+            const r = pts[p.i].row;
+            const row = table.row(r);
+            return {
+              title: gf && !numericColor ? String(row[gf]) : `Point ${r + 1}`,
+              rows: [xf, yf, zf].map((f) => ({ label: fieldLabel(ctx, f), value: ctx.format(row[f] as number, f) })),
+            };
+          }
+        }
+        return null;
+      },
+    };
+  },
+};
+
+export const ADVANCED_MARKS: Record<string, MarkDefinition> = { ridgeline, beeswarm, tilemap, pictorial, surface, horizon, polarHeatmap, splom, scatter3d };

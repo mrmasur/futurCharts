@@ -93,6 +93,8 @@ export interface Encoding {
   size?: string;
   /** Direction in degrees, clockwise from up (`vector`). */
   angle?: string;
+  /** Depth (`scatter3d`). */
+  z?: string;
   /** Opening and closing prices (`candlestick`; `y` is the high, `y2` the low). */
   open?: string;
   close?: string;
@@ -194,6 +196,9 @@ export type MarkStyle = { color?: string } & DeepPartial<
     Theme['marks']['route'] &
     Theme['marks']['motion'] &
     Theme['marks']['pivot'] &
+    Theme['marks']['polarHeatmap'] &
+    Theme['marks']['splom'] &
+    Theme['marks']['scatter3d'] &
     Theme['marks']['ridgeline'] &
     Theme['marks']['beeswarm'] &
     Theme['marks']['tilemap'] &

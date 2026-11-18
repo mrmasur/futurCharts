@@ -49,6 +49,17 @@ export type TransformSpec =
   | { type: 'sort'; field: string; order?: 'asc' | 'desc' }
   | {
       /**
+       * Pearson correlation of every pair of `fields`: one row per pair, with
+       * `x` and `y` (the two field names) and `value` (from -1 to 1). Draw it
+       * as a heatmap (`style.diverging`).
+       */
+      type: 'correlation';
+      fields: string[];
+      /** Names to show instead of the field keys, in the same order. */
+      labels?: string[];
+    }
+  | {
+      /**
        * Density curve of `field`: kernel estimate (`kde`, default) or the fitted
        * normal law (`normal`, a bell curve). Outputs `field` and `density`, on
        * `steps` points spanning the data (± 3 standard deviations for `normal`).
@@ -232,6 +243,33 @@ export function applyTransform(table: Table, t: TransformSpec): Table {
       const cols: Record<string, Cell[]> = {};
       for (const f of table.fields) cols[f] = order.map((i) => table.column(f).values[i] as Cell);
       return output(table, cols);
+    }
+    case 'correlation': {
+      const cols = t.fields.map((f) => numeric(table, f));
+      const n = table.length;
+      const stats = cols.map((v) => {
+        let s = 0, c = 0;
+        for (let i = 0; i < n; i++) if (!Number.isNaN(v[i])) [s, c] = [s + v[i], c + 1];
+        return s / (c || 1);
+      });
+      const x: Cell[] = [], y: Cell[] = [], value: Cell[] = [];
+      t.fields.forEach((fa, a) =>
+        t.fields.forEach((fb, b) => {
+          let sab = 0, saa = 0, sbb = 0;
+          for (let i = 0; i < n; i++) {
+            const da = cols[a][i] - stats[a];
+            const db = cols[b][i] - stats[b];
+            if (Number.isNaN(da) || Number.isNaN(db)) continue;
+            sab += da * db;
+            saa += da * da;
+            sbb += db * db;
+          }
+          x.push(t.labels?.[a] ?? fa);
+          y.push(t.labels?.[b] ?? fb);
+          value.push(saa && sbb ? Math.round((sab / Math.sqrt(saa * sbb)) * 1000) / 1000 : a === b ? 1 : 0);
+        }),
+      );
+      return output(table, { x, y, value });
     }
     case 'density': {
       const xs = numeric(table, t.field);

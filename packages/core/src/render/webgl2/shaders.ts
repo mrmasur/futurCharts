@@ -246,6 +246,7 @@ layout(location=5) in vec4 a_pfill;
 out vec2 v_p;
 flat out vec4 v_geo;   // r0, r1 (px), a0, a1
 flat out float v_gap;
+flat out float v_corner;
 flat out vec4 v_fill;
 // Direction of a clockwise angle from 12 o'clock, in screen space (y down).
 vec2 dirOf(float a) { return vec2(sin(a), -cos(a)); }
@@ -290,6 +291,9 @@ void main() {
   v_p = off;
   v_geo = vec4(r0, r1, a0, a1);
   v_gap = a_angles.z;
+  // Corner radius: never more than half the ring's thickness, nor half the arc's length.
+  float sweepPx = (a1 - a0) * (r0 > 0.0 ? r0 : r1);
+  v_corner = max(0.0, min(ang.w, min((r1 - r0 - a_angles.z) * 0.5, sweepPx * 0.5)));
   v_fill = fill;
   gl_Position = toClip(center + off);
 }`;
@@ -298,6 +302,7 @@ const ARC_FS = FS_COMMON + /* glsl */ `
 in vec2 v_p;
 flat in vec4 v_geo;
 flat in float v_gap;
+flat in float v_corner;
 flat in vec4 v_fill;
 const float TAU = 6.28318530718;
 void main() {
@@ -316,6 +321,12 @@ void main() {
     // Distances along the arc, in px, to the two angular edges.
     float sdAng = rel <= sweep ? min(rel, sweep - rel) * d : -min(rel - sweep, TAU - rel) * d;
     sd = min(sd, sdAng - halfGap);
+    if (v_corner > 0.0) {
+      // Rounded corners: the sector shrunk by the radius, then grown back with round edges.
+      float a = sdRad - v_corner;
+      float b = sdAng - halfGap - v_corner;
+      sd = (a > 0.0 && b > 0.0) ? min(a, b) + v_corner : v_corner - length(vec2(max(-a, 0.0), max(-b, 0.0)));
+    }
   }
   float a = clamp(0.5 + sd * u_dpr, 0.0, 1.0);
   if (a <= 0.0) discard;

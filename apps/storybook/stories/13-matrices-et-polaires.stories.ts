@@ -8,6 +8,9 @@ const meta: Meta = {
 };
 export default meta;
 
+export const MatriceDeCorrelation: StoryObj = { name: "Matrice de corrélation", ...entryStory("Matrice de corrélation") };
+export const CarteDeChaleurPolaire: StoryObj = { name: "Carte de chaleur polaire", ...entryStory("Carte de chaleur polaire") };
+export const PunchCard: StoryObj = { name: "Punch card", ...entryStory("Punch card") };
 export const SurfaceEtCourbesDeNiveau: StoryObj = { name: "Surface et courbes de niveau", ...entryStory("Surface et courbes de niveau") };
 export const Horizon: StoryObj = { name: "Horizon", ...entryStory("Horizon") };
 export const CarteDeChaleur: StoryObj = { name: "Carte de chaleur", ...entryStory("Carte de chaleur") };

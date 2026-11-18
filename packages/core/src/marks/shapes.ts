@@ -745,6 +745,8 @@ export const tree: MarkDefinition = {
     walk(root, 0);
     const [px, py] = ctx.pixel;
     const LR = style.direction !== 'TB';
+    // Grown the other way: right to left (LR) or bottom to top (TB).
+    const flip = !!style.reverse;
     const boxes = style.boxes;
     // Boxes shrink to fit a small chart: across the leaves, and along the levels.
     const breadthPx = LR ? 1 / py : 1 / px;
@@ -772,7 +774,7 @@ export const tree: MarkDefinition = {
       if (radial) return toXY(...polar(n));
       const d = m0 * dpx + (depth ? n.v / depth : 0.5) * (1 - (m0 + m1) * dpx);
       const b = side * bpx + (leaves > 1 ? n.u / (leaves - 1) : 0.5) * (1 - 2 * side * bpx);
-      return LR ? [d, 1 - b] : [b, 1 - d];
+      return LR ? [flip ? 1 - d : d, 1 - b] : [b, flip ? d : 1 - d];
     };
     const lines: number[] = [];
     const rects: number[] = [];
@@ -843,13 +845,13 @@ export const tree: MarkDefinition = {
       } else if (LR) {
         labels.push(
           leaf
-            ? { tx: x, ty: y, text: n.name, align: 'left', baseline: 'middle', dx: 9, size: 12, color: theme.text.secondary }
+            ? { tx: x, ty: y, text: n.name, align: flip ? 'right' : 'left', baseline: 'middle', dx: flip ? -9 : 9, size: 12, color: theme.text.secondary }
             : { tx: x, ty: y, text: n.name, align: 'center', baseline: 'bottom', dy: -8, size: 12, weight: 650, color: theme.text.primary, background: theme.background },
         );
       } else {
         labels.push(
           leaf
-            ? { tx: x, ty: y, text: n.name, align: 'center', baseline: 'top', dy: 9, size: 11, color: theme.text.secondary }
+            ? { tx: x, ty: y, text: n.name, align: 'center', baseline: flip ? 'bottom' : 'top', dy: flip ? -9 : 9, size: 11, color: theme.text.secondary }
             : { tx: x, ty: y, text: n.name, align: 'left', baseline: 'bottom', dx: 7, dy: -5, size: 12, weight: 650, color: theme.text.primary, background: theme.background },
         );
       }

@@ -8,6 +8,7 @@ const meta: Meta = {
 };
 export default meta;
 
+export const CourbeColoreeParLaValeur: StoryObj = { name: "Courbe colorée par la valeur", ...entryStory("Courbe colorée par la valeur") };
 export const CourseDeBarres: StoryObj = { name: "Course de barres", ...entryStory("Course de barres") };
 export const CourseParFamille: StoryObj = { name: "Course par famille", ...entryStory("Course par famille") };
 export const PrevisionAvecIntervalle: StoryObj = { name: "Prévision avec intervalle", ...entryStory("Prévision avec intervalle") };

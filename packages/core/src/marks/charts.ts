@@ -78,9 +78,25 @@ export const share = (v: number, total: number) =>
 // ------------------------------------------------------------------ heatmap
 
 /** `heatmap`: x and y are categories, `color` (or `value`) the measure. */
+/**
+ * Color of a value: the sequential ramp from `lo` to `hi`, or (diverging) one
+ * hue below zero and another above, through the surface color at zero.
+ */
+export function valueColor(ctx: BuildContext, v: number, lo: number, hi: number, diverging: boolean): RGBA {
+  if (!diverging) return ctx.ramp(hi > lo ? (v - lo) / (hi - lo) : 0.5);
+  const m = Math.max(Math.abs(lo), Math.abs(hi)) || 1;
+  const t = Math.max(-1, Math.min(1, v / m));
+  const end = t >= 0 ? parseColor(ctx.theme.palette.categorical[0]) : parseColor(ctx.theme.marks.kpi.bad);
+  const k = Math.abs(t);
+  const s = ctx.surface;
+  return [s[0] + (end[0] - s[0]) * k, s[1] + (end[1] - s[1]) * k, s[2] + (end[2] - s[2]) * k, 1];
+}
+
 export const heatmap: MarkDefinition = {
   standalone: true,
   symbol: 'square',
+  // Dots are sized in px.
+  sizeDependent: (layer) => !!(layer.style as { circles?: boolean } | undefined)?.circles,
   scales({ layer, table }) {
     return {
       x: new BandScale(categoriesOf(table, need(layer, 'x', 'heatmap')), 0, 0),
@@ -106,8 +122,11 @@ export const heatmap: MarkDefinition = {
       if (v > hi) hi = v;
     }
     const rects: number[] = [];
+    const dots: number[] = [];
     const labels: MarkLabel[] = [];
     const cells = new Map<string, number>();
+    const amax = Math.max(Math.abs(lo), Math.abs(hi)) || 1;
+    const cellPx = Math.min(xs.band / ctx.pixel[0], ys.band / ctx.pixel[1]);
     const gx = (style.gap / 2) * ctx.pixel[0];
     const gy = (style.gap / 2) * ctx.pixel[1];
     for (let i = 0; i < table.length; i++) {
@@ -117,15 +136,28 @@ export const heatmap: MarkDefinition = {
       cells.set(`${xi}|${yi}`, i);
       const cx = xs.norm(xi);
       const cy = ys.norm(yi);
-      const fill = ctx.paint(ctx.ramp(hi > lo ? (values[i] - lo) / (hi - lo) : 0.5), i);
+      const fill = ctx.paint(valueColor(ctx, values[i], lo, hi, style.diverging), i);
       const box: [number, number, number, number] = [cx - xs.band / 2 + gx, cy - ys.band / 2 + gy, cx + xs.band / 2 - gx, cy + ys.band / 2 - gy];
+      if (style.circles) {
+        // Punch card: area by magnitude (zero is no dot), one color, or the value's color when diverging.
+        const d = Math.max(0, cellPx * 0.9 * Math.sqrt(Math.abs(values[i]) / amax));
+        const c = style.diverging ? fill : ctx.paint(layer.style?.color ? parseColor(layer.style.color) : ctx.categorical(ctx.fields[vf]?.label ?? vf), i);
+        dots.push(cx, cy, d, 0, c[0], c[1], c[2], c[3], 0, 0, 0, 0, 0);
+        continue;
+      }
       const r = style.radius;
       pushRect(rects, { x0: box[0], y0: box[1], x1: box[2], y1: box[3], fill, radii: [r, r, r, r] });
       if (style.labels) labels.push({ tx: cx, ty: cy, text: ctx.format(values[i], vf), on: fill, align: 'center', baseline: 'middle', box });
     }
     const label = ctx.fields[vf]?.label ?? vf;
+    const draws = batches(ctx, rects, [], [], false);
+    if (dots.length) {
+      const b = ctx.renderer.createBatch('point');
+      b.update(new Float32Array(dots), dots.length / LAYOUTS.point.stride);
+      draws.push({ batch: b });
+    }
     return {
-      draws: batches(ctx, rects, [], [], false),
+      draws,
       hit: emptyHit(),
       labels,
       pick(tx, ty): ShapeHit | null {
@@ -233,7 +265,7 @@ function arcMark(defaultInner: number): MarkDefinition {
           const mid = (a0 + a1) / 2;
           const [cx, cy] = at(mid, g[i * 2]);
           const c = colors[i];
-          pushArc(out, cx, cy, r0 * unit, outer[i] * unit, a0, a1, slices.length > 1 ? style.gap : 0, [c[0], c[1], c[2], c[3] * g[i * 2 + 1]]);
+          pushArc(out, cx, cy, r0 * unit, outer[i] * unit, a0, a1, slices.length > 1 ? style.gap : 0, [c[0], c[1], c[2], c[3] * g[i * 2 + 1]], style.cornerRadius);
         });
         draw.data = new Float32Array(out);
         batch.update(draw.data, slices.length);
@@ -336,44 +368,129 @@ export const donut = arcMark(0.62);
 // -------------------------------------------------------------------- gauge
 
 /** `gauge`: one value on a half circle, between `style.min` and `style.max`, with an optional `style.target`. */
+/** Box of a dial opened over `sweep` degrees (centered on 12 o'clock), with room for the value under it. */
+function gaugeBox(sweep: number): [number, number, number, number] {
+  const half = (Math.min(360, Math.max(30, sweep)) * Math.PI) / 360;
+  const low = Math.min(-0.3, Math.cos(half) - 0.12);
+  const side = half >= Math.PI / 2 ? 1.08 : Math.sin(half) + 0.08;
+  return [-side, low, side, 1.08];
+}
+
 export const gauge: MarkDefinition = {
   standalone: true,
   symbol: 'square',
-  scales: () => ({ x: new LinearScale(-1.08, 1.08), y: new LinearScale(-0.3, 1.06), aspect: 2.16 / 1.36 }),
+  scales: ({ layer }) => {
+    const [x0, y0, x1, y1] = gaugeBox((layer.style as { sweep?: number } | undefined)?.sweep ?? 180);
+    return { x: new LinearScale(x0, x1), y: new LinearScale(y0, y1), aspect: (x1 - x0) / (y1 - y0) };
+  },
   build(ctx) {
     const { layer, table } = ctx.data;
-    const { style } = ctx;
+    const { style, theme } = ctx;
     const vf = layer.encode.value ?? need(layer, 'y', 'gauge');
     const value = table.length ? (table.column(vf).values[0] as number) : NaN;
-    const t = Math.min(1, Math.max(0, (value - style.min) / (style.max - style.min || 1)));
+    const span = style.max - style.min || 1;
+    const share = (v: number) => Math.min(1, Math.max(0, (v - style.min) / span));
+    const t = share(value);
+    const sweep = (Math.min(360, Math.max(30, style.sweep)) * Math.PI) / 180;
+    const start = -sweep / 2;
+    const angle = (s: number) => start + sweep * s;
     const R = 1;
     const r0 = R * (1 - style.thickness);
     const at = (a: number, r: number): [number, number] => [ctx.x.norm(Math.sin(a) * r), ctx.y.norm(Math.cos(a) * r)];
-    const track = parseColor(style.track === 'auto' ? ctx.theme.grid.y.color : style.track);
+    const track = parseColor(style.track === 'auto' ? theme.grid.y.color : style.track);
     const base = layer.style?.color ? parseColor(layer.style.color) : ctx.categorical(ctx.fields[vf]?.label ?? vf);
     const fill = ctx.paint(base, table.length ? 0 : undefined);
     const unit = ctx.x.norm(1) - ctx.x.norm(0);
     const [cx, cy] = at(0, 0);
-    const start = -Math.PI / 2;
+    const corner = style.rounded ? 999 : 0;
+    const zones = ((style.zones ?? []) as { to: number; color: string }[]).filter((z) => Number.isFinite(z.to)).sort((a, b) => a.to - b.to);
+    // Zones (a grade dial) point with the needle; otherwise the value fills the arc.
+    const needle = style.needle || zones.length > 0;
     const arcs: number[] = [];
-    pushArc(arcs, cx, cy, r0 * unit, R * unit, start, Math.PI / 2, 0, track);
-    if (t > 0) pushArc(arcs, cx, cy, r0 * unit, R * unit, start, start + Math.PI * t, 0, fill);
+    if (zones.length) {
+      let from = 0;
+      for (const z of zones) {
+        const to = share(z.to);
+        if (to > from) pushArc(arcs, cx, cy, r0 * unit, R * unit, angle(from), angle(to), 2, parseColor(z.color), corner);
+        from = to;
+      }
+      if (from < 1) pushArc(arcs, cx, cy, r0 * unit, R * unit, angle(from), angle(1), 2, track, corner);
+    } else {
+      pushArc(arcs, cx, cy, r0 * unit, R * unit, start, start + sweep, 0, track, corner);
+      if (t > 0 && !needle) pushArc(arcs, cx, cy, r0 * unit, R * unit, start, angle(t), 0, fill, corner);
+      // With a needle and no zones, a thin progress arc on the inner edge.
+      if (t > 0 && needle) pushArc(arcs, cx, cy, r0 * unit, (r0 + (R - r0) * 0.35) * unit, start, angle(t), 0, fill, corner);
+    }
     const arcBatch = ctx.renderer.createBatch('arc');
     arcBatch.update(new Float32Array(arcs), arcs.length / LAYOUTS.arc.stride);
     const lines: number[] = [];
+    const mesh: number[] = [];
+    const ink = parseColor(theme.text.primary);
+    const labels: MarkLabel[] = [];
     if (Number.isFinite(style.target)) {
-      const ta = start + Math.PI * Math.min(1, Math.max(0, (style.target - style.min) / (style.max - style.min || 1)));
+      const ta = angle(share(style.target));
       const [ax, ay] = at(ta, r0 - 0.05);
       const [bx, by] = at(ta, R + 0.05);
-      pushSegment(lines, ax, ay, bx, by, parseColor(ctx.theme.text.primary), 2.5);
+      pushSegment(lines, ax, ay, bx, by, ink, 2.5);
     }
-    const labels: MarkLabel[] = [
-      { tx: cx, ty: cy, text: ctx.format(value, vf), color: ctx.theme.text.primary, size: 30, weight: 650, align: 'center', baseline: 'bottom', dy: -2 },
-      { tx: cx, ty: cy, text: ctx.fields[vf]?.label ?? vf, align: 'center', baseline: 'top', dy: 6, size: 12 },
-      { tx: ctx.x.norm(-(R + r0) / 2), ty: cy, text: ctx.format(style.min, vf), align: 'center', baseline: 'top', dy: 6 },
-      { tx: ctx.x.norm((R + r0) / 2), ty: cy, text: ctx.format(style.max, vf), align: 'center', baseline: 'top', dy: 6 },
-    ];
-    return { draws: [{ batch: arcBatch }, ...batches(ctx, [], [], lines)], hit: emptyHit(), labels };
+    // Graduations: a tick and a value at each step, inside the dial.
+    if (style.ticks > 0) {
+      const muted = parseColor(theme.text.muted);
+      for (let k = 0; k <= style.ticks; k++) {
+        const s = k / style.ticks;
+        const a = angle(s);
+        const [ax, ay] = at(a, r0 - 0.02);
+        const [bx, by] = at(a, r0 - 0.09);
+        pushSegment(lines, ax, ay, bx, by, muted, 1.5);
+        if (k < style.ticks) {
+          for (let q = 1; q < 5; q++) {
+            const am = angle((k + q / 5) / style.ticks);
+            const [mx, my] = at(am, r0 - 0.02);
+            const [nx, ny] = at(am, r0 - 0.05);
+            pushSegment(lines, mx, my, nx, ny, withAlpha(muted, 0.6), 1);
+          }
+        }
+        const [lx, ly] = at(a, r0 - 0.18);
+        labels.push({ tx: lx, ty: ly, text: ctx.format(style.min + span * s, vf), color: theme.text.muted, size: 10, align: 'center', baseline: 'middle' });
+      }
+    }
+    if (needle && Number.isFinite(value)) {
+      // A slim triangle from the hub to the value, and a hub over its base.
+      const a = angle(t);
+      const tipR = zones.length ? R - 0.02 : r0 - 0.04;
+      const w = 0.035;
+      const [tx, ty] = at(a, tipR);
+      const [lx, ly] = at(a - Math.PI / 2, w);
+      const [rx, ry] = at(a + Math.PI / 2, w);
+      const [bx, by] = at(a + Math.PI, 0.08);
+      pushVertex(mesh, tx, ty, ink);
+      pushVertex(mesh, lx, ly, ink);
+      pushVertex(mesh, bx, by, ink);
+      pushVertex(mesh, tx, ty, ink);
+      pushVertex(mesh, bx, by, ink);
+      pushVertex(mesh, rx, ry, ink);
+    }
+    const valueY = needle ? ctx.y.norm(-0.12) : cy;
+    labels.push(
+      { tx: cx, ty: valueY, text: ctx.format(value, vf), color: theme.text.primary, size: needle ? 24 : 30, weight: 650, align: 'center', baseline: needle ? 'top' : 'bottom', dy: needle ? 0 : -2 },
+      { tx: cx, ty: valueY, text: ctx.fields[vf]?.label ?? vf, align: 'center', baseline: 'top', dy: needle ? 30 : 6, size: 12 },
+    );
+    if (!style.ticks && style.sweep <= 200) {
+      const [mx, my] = at(start, (R + r0) / 2);
+      const [Mx, My] = at(start + sweep, (R + r0) / 2);
+      labels.push(
+        { tx: mx, ty: my, text: ctx.format(style.min, vf), align: 'center', baseline: 'top', dy: 6 },
+        { tx: Mx, ty: My, text: ctx.format(style.max, vf), align: 'center', baseline: 'top', dy: 6 },
+      );
+    }
+    const draws = [{ batch: arcBatch }, ...batches(ctx, [], mesh, lines, false)];
+    if (needle && Number.isFinite(value)) {
+      const hub = ctx.renderer.createBatch('point');
+      const sf = ctx.surface;
+      hub.update(new Float32Array([cx, cy, 14, 0, ink[0], ink[1], ink[2], ink[3], sf[0], sf[1], sf[2], 1, 3]), 1);
+      draws.push({ batch: hub });
+    }
+    return { draws, hit: emptyHit(), labels };
   },
 };
 

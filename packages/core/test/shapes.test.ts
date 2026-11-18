@@ -129,3 +129,20 @@ describe('contours', () => {
     for (let k = 0; k < segs.length; k += 2) expect(Math.abs(Math.hypot(segs[k] - 10, segs[k + 1] - 10) - 5)).toBeLessThan(0.1);
   });
 });
+
+describe('correlation', () => {
+  it('gives 1 on the diagonal, the sign of the relation elsewhere, and the labels asked for', async () => {
+    const { applyTransforms } = await import('../src/data/transforms');
+    const rows = Array.from({ length: 50 }, (_, i) => ({ a: i, b: 2 * i + 1, c: -i, d: (i * 7919) % 13 }));
+    const t = applyTransforms(Table.from(rows), [{ type: 'correlation', fields: ['a', 'b', 'c', 'd'], labels: ['A', 'B', 'C', 'D'] }]);
+    const get = (x: string, y: string) => {
+      for (let i = 0; i < t.length; i++) if (t.column('x').values[i] === x && t.column('y').values[i] === y) return t.column('value').values[i] as number;
+      return NaN;
+    };
+    expect(t.length).toBe(16);
+    expect(get('A', 'A')).toBe(1);
+    expect(get('A', 'B')).toBeCloseTo(1, 3);
+    expect(get('A', 'C')).toBeCloseTo(-1, 3);
+    expect(Math.abs(get('A', 'D'))).toBeLessThan(0.3);
+  });
+});

@@ -8,6 +8,7 @@ const meta: Meta = {
 };
 export default meta;
 
+export const PointsPulsants: StoryObj = { name: "Points pulsants", ...entryStory("Points pulsants") };
 export const CarteEnTuilesHexagonales: StoryObj = { name: "Carte en tuiles hexagonales", ...entryStory("Carte en tuiles hexagonales") };
 export const RoutesAeriennes: StoryObj = { name: "Routes aériennes", ...entryStory("Routes aériennes") };
 export const PointsSurUneCarteDuMonde: StoryObj = { name: "Points sur une carte du monde", ...entryStory("Points sur une carte du monde") };

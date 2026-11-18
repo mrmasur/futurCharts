@@ -521,6 +521,28 @@ const cpu = servers.flatMap((server, k) =>
   })),
 );
 
+// Store indicators, correlated on purpose (for the correlation matrix and the scatter matrix).
+const storeKpis = Array.from({ length: 160 }, (_, i) => {
+  const size = 200 + r() * 1800;
+  const staff = Math.round(size / 60 + gauss(r) * 3 + 4);
+  const visits = Math.round(size * 6 + gauss(r) * 900 + 2000);
+  const basket = Math.round((48 + gauss(r) * 9 - size / 400) * 10) / 10;
+  const revenue = Math.round((visits * basket) / 1000);
+  const satisfaction = Math.round((78 - staff / 6 + size / 300 + gauss(r) * 5) * 10) / 10;
+  return { store: `M${i + 1}`, region: ['Nord', 'Sud', 'Est', 'Ouest'][i % 4], size: Math.round(size), staff, visits, basket, revenue, satisfaction };
+});
+const kpiLabels = { size: { label: 'Surface (m²)' }, staff: { label: 'Effectif' }, visits: { label: 'Visites' }, basket: { label: 'Panier (€)' }, revenue: { label: 'CA (k€)' }, satisfaction: { label: 'Satisfaction' } };
+const weekHours = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].flatMap((day, d) =>
+  Array.from({ length: 24 }, (_, h) => ({ day, hour: `${h}h`, tickets: Math.round(Math.max(0, (d < 5 ? 1 : 0.35) * (6 + 30 * Math.exp(-((h - 10) ** 2) / 10) + 22 * Math.exp(-((h - 15) ** 2) / 8)) + gauss(r) * 3)) })),
+);
+const yearTemps = Array.from({ length: 365 }, (_, d) => ({ day: new Date(2025, 0, 1 + d), temp: Math.round((12 - 9.5 * Math.cos(((d - 15) / 365) * 2 * Math.PI) + gauss(r) * 2.4) * 10) / 10 }));
+const objectives = [['Ventes', 0.92], ['Marge', 0.71], ['Satisfaction', 0.84], ['Délais', 0.58], ['Rétention', 0.77]].map(([axis, done]) => ({ axis, done }));
+const cloud3d = Array.from({ length: 360 }, (_, i) => {
+  const g = i % 3;
+  const [cx, cy, cz] = [[-2, 1, 0], [2, 2, 1.5], [0, -2, -1]][g];
+  return { x: cx + gauss(r) * 0.9, y: cy + gauss(r) * 0.9, z: cz + gauss(r) * 0.9, segment: ['Fidèles', 'Occasionnels', 'Nouveaux'][g] };
+});
+
 // The same countries over three years, and products over four quarters: data states for transitions.
 const yearsByCountry = [2024, 2025, 2026].map((year, k) => ({
   label: String(year),
@@ -553,6 +575,139 @@ export type Entry = {
   states?: { label: string; data: ChartSpec['data'] }[];
 };
 export const entries: Entry[] = [
+  {
+    title: 'Jauge à zones',
+    caption: 'gauge · style.zones (couleurs par seuil), aiguille, graduations, ouverture de 240°',
+    spec: {
+      title: 'Indice de satisfaction',
+      data: [{ score: 72 }],
+      fields: { score: { label: 'Satisfaction', format: { decimals: 0 } } },
+      layers: [{ mark: 'gauge', encode: { value: 'score' }, style: { sweep: 240, ticks: 5, thickness: 0.14, zones: [{ to: 40, color: '#e34948' }, { to: 70, color: '#eda100' }, { to: 100, color: '#1baf7a' }] } }],
+    },
+  },
+  {
+    title: 'Compteur',
+    caption: 'gauge · style.needle, ticks et rounded : aiguille, graduations, extrémités arrondies',
+    spec: {
+      title: 'Requêtes par seconde',
+      data: [{ rps: 1340 }],
+      fields: { rps: { label: 'Requêtes / s', format: { decimals: 0 } } },
+      layers: [{ mark: 'gauge', encode: { value: 'rps' }, style: { min: 0, max: 2000, sweep: 260, ticks: 4, needle: true, rounded: true, thickness: 0.12 } }],
+    },
+  },
+  {
+    title: 'Anneau aux coins arrondis',
+    caption: 'donut · style.cornerRadius et gap : des parts arrondies et espacées',
+    spec: {
+      title: 'Visites par canal',
+      data: channels,
+      fields: { visits: { label: 'Visites' } },
+      layers: [{ mark: 'donut', encode: { key: 'channel', value: 'visits' }, style: { cornerRadius: 8, gap: 5, innerRadius: 0.6 } }],
+    },
+  },
+  {
+    title: 'Carte de chaleur polaire',
+    caption: 'polarHeatmap · les heures autour du cercle, les jours en anneaux',
+    spec: {
+      title: 'Tickets de support par heure',
+      data: weekHours,
+      fields: { tickets: { label: 'Tickets' } },
+      layers: [{ mark: 'polarHeatmap', encode: { x: 'hour', y: 'day', value: 'tickets' } }],
+    },
+  },
+  {
+    title: 'Punch card',
+    caption: 'heatmap · style.circles : un cercle par case, aire selon la valeur',
+    wide: true,
+    spec: {
+      title: 'Tickets de support par jour et par heure',
+      data: weekHours,
+      fields: { tickets: { label: 'Tickets' } },
+      layers: [{ mark: 'heatmap', encode: { x: 'hour', y: 'day', value: 'tickets' }, style: { circles: true } }],
+    },
+  },
+  {
+    title: 'Matrice de corrélation',
+    caption: 'transform correlation + heatmap · style.diverging : négatif en rouge, positif en bleu, zéro neutre',
+    spec: {
+      title: 'Corrélations entre indicateurs des magasins',
+      subtitle: 'Coefficient de Pearson, 160 magasins',
+      data: storeKpis,
+      fields: { value: { label: 'Corrélation', format: { decimals: 2 } } },
+      layers: [{ mark: 'heatmap', encode: { x: 'x', y: 'y', value: 'value' }, transform: [{ type: 'correlation', fields: ['size', 'staff', 'visits', 'basket', 'revenue', 'satisfaction'], labels: ['Surface', 'Effectif', 'Visites', 'Panier', 'CA', 'Satisfaction'] }], style: { diverging: true } }],
+    },
+  },
+  {
+    title: 'Matrice de nuages (SPLOM)',
+    caption: 'splom · chaque paire de champs en nuage, la distribution de chacun sur la diagonale',
+    wide: true,
+    spec: {
+      title: 'Indicateurs des magasins, deux à deux',
+      data: storeKpis,
+      fields: kpiLabels,
+      layers: [{ mark: 'splom', encode: { path: ['size', 'visits', 'basket', 'satisfaction'], color: 'region' } }],
+    },
+  },
+  {
+    title: 'Points pulsants',
+    caption: 'point · style.pulse : des ondes autour des points mis en avant (effect scatter)',
+    wide: true,
+    spec: {
+      title: 'Sites en alerte',
+      subtitle: 'Les ondes signalent Londres, New York et Tokyo',
+      projection: { type: 'mercator' },
+      data: worldCities.map(([city, lon, lat, region]) => ({ city, lon, lat, region })),
+      layers: [
+        { mark: 'geoshape', geo: countriesGeo, encode: {} },
+        { mark: 'point', encode: { x: 'lon', y: 'lat', color: 'region' }, style: { size: 9, pulse: true }, highlight: { field: 'city', values: ['Londres', 'New York', 'Tokyo'], dim: 0.55 } },
+      ],
+    },
+  },
+  {
+    title: 'Barres sur piste',
+    caption: 'bar · style.track : une piste pleine longueur derrière chaque barre',
+    spec: {
+      title: 'Avancement des objectifs',
+      data: objectives,
+      fields: { done: { label: 'Atteint', format: { style: 'percent', decimals: 0 } } },
+      scales: { x: { domain: [0, 1] } },
+      layers: [{ mark: 'bar', encode: { x: 'done', y: 'axis' }, style: { track: 'auto', radius: 8, thickness: 16, labels: true } }],
+    },
+  },
+  {
+    title: 'Courbe colorée par la valeur',
+    caption: 'line · style.colorByValue : la couleur suit la hauteur de la courbe',
+    wide: true,
+    spec: {
+      title: 'Température journalière',
+      subtitle: '2025, en °C',
+      data: yearTemps,
+      fields: { temp: { label: 'Température', format: { suffix: ' °C', decimals: 1 } }, day: { type: 'time' } },
+      layers: [{ mark: 'line', encode: { x: 'day', y: 'temp' }, style: { colorByValue: true, width: 2.5, curve: 'smooth' } }],
+    },
+  },
+  {
+    title: 'Arbre de bas en haut',
+    caption: 'tree · style.reverse avec direction TB : la racine en bas',
+    spec: {
+      title: 'Organisation',
+      data: org,
+      fields: { people: { label: 'Personnes' } },
+      layers: [{ mark: 'tree', encode: { path: ['ceo', 'dept', 'team'], value: 'people' }, style: { direction: 'TB', reverse: true } }],
+    },
+  },
+  {
+    title: 'Nuage de points 3D',
+    caption: 'scatter3d · glisser pour tourner (il tourne seul jusque-là), perspective, profondeur',
+    wide: true,
+    spec: {
+      title: 'Segments de clients',
+      subtitle: 'Fréquence, panier et ancienneté (centrés réduits)',
+      data: cloud3d,
+      fields: { x: { label: 'Fréquence' }, y: { label: 'Panier' }, z: { label: 'Ancienneté' } },
+      layers: [{ mark: 'scatter3d', encode: { x: 'x', y: 'y', z: 'z', color: 'segment' } }],
+    },
+  },
   {
     title: 'Transition entre deux états (barres)',
     caption: 'mêmes barres, nouvelles données : chaque barre glisse vers sa valeur et son rang, interpolée sur le GPU',
@@ -1780,18 +1935,18 @@ export const GROUPS: [string, string[]][] = [
   ['Transitions', ['Transition entre deux états (barres)', 'Transition entre deux états (anneau)', 'Transition entre deux états (nuage)']],
   ['Combinaisons', ['Graphiques synchronisés', 'Navigateur de plage', 'Tableau croisé']],
   ['Bourse', ['Chandeliers (candlestick)', 'Barres OHLC']],
-  ['Évolution', ['Course de barres', 'Course par famille', 'Prévision avec intervalle', 'Courbe en escalier', 'Streamgraph', 'Classement (bump chart)', 'Graphique de pente', 'Chandeliers']],
+  ['Évolution', ['Courbe colorée par la valeur', 'Course de barres', 'Course par famille', 'Prévision avec intervalle', 'Courbe en escalier', 'Streamgraph', 'Classement (bump chart)', 'Graphique de pente', 'Chandeliers']],
   ['Temps et planning', ['Diagramme de Gantt', 'Calendrier']],
   ['Distribution', ['Ridgeline', 'Essaim (beeswarm)', 'Courbe en cloche', 'Nuage avec dispersion (jitter)', 'Histogramme', 'Boîte à moustaches', 'Violon', 'Distribution en traits']],
   ['Petits multiples', ['Petits multiples de courbes', 'Petits multiples de barres']],
-  ['Corrélation', ['Nuage animé (Gapminder)', 'Champ de vecteurs', 'Nuage de points et régression', 'Bulles', 'Densité hexagonale', 'Coordonnées parallèles']],
-  ['Parts et hiérarchies', ['Camembert', 'Anneau', 'Demi-anneau', 'Hémicycle', 'Camembert à rayon variable', 'Treemap', 'Sunburst', 'Cercles imbriqués', 'Marimekko', 'Gaufre']],
+  ['Corrélation', ['Nuage de points 3D', 'Matrice de nuages (SPLOM)', 'Nuage animé (Gapminder)', 'Champ de vecteurs', 'Nuage de points et régression', 'Bulles', 'Densité hexagonale', 'Coordonnées parallèles']],
+  ['Parts et hiérarchies', ['Camembert', 'Anneau', 'Anneau aux coins arrondis', 'Demi-anneau', 'Hémicycle', 'Camembert à rayon variable', 'Treemap', 'Sunburst', 'Cercles imbriqués', 'Marimekko', 'Gaufre']],
   ['Flux', ['Pipeline de données', 'Diagramme de flux', 'Processus avec volumes', 'Chemin mis en avant', 'Sankey', 'Diagramme en cordes', 'Réseau', 'Entonnoir', 'Cascade']],
-  ['Matrices et polaires', ['Surface et courbes de niveau', 'Horizon', 'Carte de chaleur', 'Radar', 'Rose polaire', 'Barres radiales']],
-  ['Arbres et ensembles', ['Bulles groupées', 'Diagramme en arcs', 'Dendrogramme', 'Arbre radial', 'Organigramme', 'Icicle', 'Flame chart', 'Diagramme de Venn']],
+  ['Matrices et polaires', ['Matrice de corrélation', 'Carte de chaleur polaire', 'Punch card', 'Surface et courbes de niveau', 'Horizon', 'Carte de chaleur', 'Radar', 'Rose polaire', 'Barres radiales']],
+  ['Arbres et ensembles', ['Bulles groupées', 'Diagramme en arcs', 'Dendrogramme', 'Arbre radial', 'Arbre de bas en haut', 'Organigramme', 'Icicle', 'Flame chart', 'Diagramme de Venn']],
   ['Texte et chronologie', ['Nuage de mots', 'Frise chronologique']],
-  ['Indicateurs', ['Tuiles KPI', 'Jauge', 'Pyramide', 'Graphique pictographique']],
-  ['Cartes', ['Carte en tuiles hexagonales', 'Routes aériennes', 'Points sur une carte du monde', 'Choroplèthe mondiale', 'Bulles sur une carte', 'Zoom sur l’Europe et mise en avant']],
+  ['Indicateurs', ['Tuiles KPI', 'Jauge', 'Jauge à zones', 'Compteur', 'Barres sur piste', 'Pyramide', 'Graphique pictographique']],
+  ['Cartes', ['Points pulsants', 'Carte en tuiles hexagonales', 'Routes aériennes', 'Points sur une carte du monde', 'Choroplèthe mondiale', 'Bulles sur une carte', 'Zoom sur l’Europe et mise en avant']],
   ['Mise en avant', ['Mise en avant dans un camembert', 'Mise en avant dans un treemap', 'Mise en avant d’une série', 'Mise en avant sur une carte de chaleur']],
 ];
 

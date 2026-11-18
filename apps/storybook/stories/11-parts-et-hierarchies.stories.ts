@@ -10,6 +10,7 @@ export default meta;
 
 export const Camembert: StoryObj = { name: "Camembert", ...entryStory("Camembert") };
 export const Anneau: StoryObj = { name: "Anneau", ...entryStory("Anneau") };
+export const AnneauAuxCoinsArrondis: StoryObj = { name: "Anneau aux coins arrondis", ...entryStory("Anneau aux coins arrondis") };
 export const DemiAnneau: StoryObj = { name: "Demi-anneau", ...entryStory("Demi-anneau") };
 export const Hemicycle: StoryObj = { name: "Hémicycle", ...entryStory("Hémicycle") };
 export const CamembertARayonVariable: StoryObj = { name: "Camembert à rayon variable", ...entryStory("Camembert à rayon variable") };

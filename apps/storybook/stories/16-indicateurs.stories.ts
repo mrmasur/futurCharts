@@ -10,5 +10,8 @@ export default meta;
 
 export const TuilesKPI: StoryObj = { name: "Tuiles KPI", ...entryStory("Tuiles KPI") };
 export const Jauge: StoryObj = { name: "Jauge", ...entryStory("Jauge") };
+export const JaugeAZones: StoryObj = { name: "Jauge à zones", ...entryStory("Jauge à zones") };
+export const Compteur: StoryObj = { name: "Compteur", ...entryStory("Compteur") };
+export const BarresSurPiste: StoryObj = { name: "Barres sur piste", ...entryStory("Barres sur piste") };
 export const Pyramide: StoryObj = { name: "Pyramide", ...entryStory("Pyramide") };
 export const GraphiquePictographique: StoryObj = { name: "Graphique pictographique", ...entryStory("Graphique pictographique") };
