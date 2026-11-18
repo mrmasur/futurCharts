@@ -41,6 +41,8 @@ export interface Theme {
     title: TextStyle & { padding: number };
   };
   grid: { x: LineStyle; y: LineStyle };
+  /** Default style of the labels drawn by the marks (each layer's `labels` wins over it). */
+  labels: { color?: string; scale?: number; weight?: number; background?: string };
   legend: {
     visible: boolean;
     label: TextStyle;
@@ -298,6 +300,7 @@ export const lightTheme: Theme = {
     x: { visible: false, color: '#e1e0d9', width: 1 },
     y: { visible: true, color: '#e1e0d9', width: 1 },
   },
+  labels: {},
   legend: {
     visible: true,
     label: { color: '#52514e', size: 12, weight: 400 },

@@ -127,7 +127,7 @@ function sweep(): void {
   }
 }
 
-const CHART_ARGS = ['hauteur', 'animation', 'état'];
+const CHART_ARGS = ['hauteur', 'animation', 'état', 'labelColor_', 'labelScale_', 'labelWeight_', 'labelBackground_'];
 
 export function entryStory(title: string): StoryObj {
   const e = find(title);
@@ -144,6 +144,10 @@ export function entryStory(title: string): StoryObj {
     ...argTypesFor(styleArgs, category, key),
     hauteur: { control: { type: 'range', min: 160, max: 900, step: 10 }, table: { category: 'graphique' }, description: 'Hauteur du graphique, px' },
     animation: { control: 'boolean', table: { category: 'graphique' }, description: 'Animations d’entrée et de transition' },
+    labelColor_: { name: 'couleur', control: 'color', table: { category: 'étiquettes (layer.labels)' }, description: 'Encre de toutes les étiquettes de la marque' },
+    labelScale_: { name: 'taille', control: { type: 'range', min: 0.6, max: 2, step: 0.05 }, table: { category: 'étiquettes (layer.labels)' }, description: 'Facteur de taille' },
+    labelWeight_: { name: 'graisse', control: { type: 'range', min: 300, max: 900, step: 50 }, table: { category: 'étiquettes (layer.labels)' } },
+    labelBackground_: { name: 'fond', control: 'color', table: { category: 'étiquettes (layer.labels)' }, description: 'Pastille derrière chaque étiquette' },
   };
   const args: Record<string, unknown> = { ...styleArgs, hauteur: e.tiles && !e.stack ? 176 : 420, animation: true };
   if (e.states) {
@@ -159,11 +163,17 @@ export function entryStory(title: string): StoryObj {
       sweep();
       const theme = context.globals.theme === 'dark' ? 'dark' : 'light';
       const style = Object.fromEntries(Object.entries(a).filter(([k]) => !CHART_ARGS.includes(k)));
+      const labels = {
+        ...(a.labelColor_ ? { color: a.labelColor_ as string } : {}),
+        ...(a.labelScale_ && a.labelScale_ !== 1 ? { scale: a.labelScale_ as number } : {}),
+        ...(a.labelWeight_ ? { weight: a.labelWeight_ as number } : {}),
+        ...(a.labelBackground_ ? { background: a.labelBackground_ as string } : {}),
+      };
       const state = e.states?.find((s) => s.label === a['état']);
       const specs = specsOf(e).map((spec, i) => ({
         ...spec,
         ...(i === 0 && state ? { data: state.data } : {}),
-        layers: i === 0 ? spec.layers.map((l, k) => (k === li ? { ...l, style } : l)) : spec.layers,
+        layers: i === 0 ? spec.layers.map((l, k) => (k === li ? { ...l, style, labels: { ...l.labels, ...labels } } : l)) : spec.layers,
         theme,
         animation: a.animation ? spec.animation : false,
       })) as ChartSpec[];

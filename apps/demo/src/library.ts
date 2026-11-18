@@ -576,6 +576,44 @@ export type Entry = {
 };
 export const entries: Entry[] = [
   {
+    title: 'Une courbe mise en avant',
+    caption: 'layer.series : une série par son nom, dans sa couleur, plus épaisse, avec ses points et ses étiquettes ; les autres en gris (style.color)',
+    wide: true,
+    spec: {
+      title: 'Chiffre d’affaires mensuel par pays',
+      subtitle: 'L’Italie dépasse l’Espagne en juillet',
+      data: monthlyByCountry.filter((d) => ['France', 'Allemagne', 'Espagne', 'Italie', 'Belgique'].includes(d.country)),
+      fields: { revenue: { label: 'CA', format: { suffix: ' k€', decimals: 0 } }, month: { type: 'time' } },
+      legend: false,
+      layers: [
+        {
+          mark: 'line',
+          encode: { x: 'month', y: 'revenue', color: 'country' },
+          style: { color: '$muted', opacity: 0.55, endLabels: true, curve: 'smooth' },
+          series: { Italie: { color: '#e34948', width: 4, opacity: 1, markers: true, labelColor: '#e34948' } },
+        },
+      ],
+    },
+  },
+  {
+    title: 'Étiquettes personnalisées',
+    caption: 'layer.labels : couleur, taille (facteur), graisse et fond des étiquettes, quelle que soit la marque ; series.labelColor par part',
+    spec: {
+      title: 'Visites par canal',
+      data: channels,
+      fields: { visits: { label: 'Visites' } },
+      layers: [
+        {
+          mark: 'donut',
+          encode: { key: 'channel', value: 'visits' },
+          style: { cornerRadius: 6, gap: 4 },
+          labels: { color: '#1d2433', scale: 1.15, weight: 750, background: '#ffffffd9' },
+          series: { Organique: { labelColor: '#0b5cd5' } },
+        },
+      ],
+    },
+  },
+  {
     title: 'Globe et routes aériennes',
     caption: 'globe · projection orthographique, routes en grands cercles ; glisser pour le tourner (il tourne seul jusque-là)',
     spec: {
@@ -1957,7 +1995,7 @@ export const GROUPS: [string, string[]][] = [
   ['Texte et chronologie', ['Nuage de mots', 'Frise chronologique']],
   ['Indicateurs', ['Tuiles KPI', 'Jauge', 'Jauge à zones', 'Compteur', 'Barres sur piste', 'Pyramide', 'Graphique pictographique']],
   ['Cartes', ['Globe et routes aériennes', 'Points pulsants', 'Carte en tuiles hexagonales', 'Routes aériennes', 'Points sur une carte du monde', 'Choroplèthe mondiale', 'Bulles sur une carte', 'Zoom sur l’Europe et mise en avant']],
-  ['Mise en avant', ['Mise en avant dans un camembert', 'Mise en avant dans un treemap', 'Mise en avant d’une série', 'Mise en avant sur une carte de chaleur']],
+  ['Mise en avant', ['Une courbe mise en avant', 'Étiquettes personnalisées', 'Mise en avant dans un camembert', 'Mise en avant dans un treemap', 'Mise en avant d’une série', 'Mise en avant sur une carte de chaleur']],
 ];
 
 // ----------------------------------------------------------- color themes

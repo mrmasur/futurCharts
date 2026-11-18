@@ -168,6 +168,22 @@ par défaut la catégorie du calque (`x`, `y` à l'horizontale, `key`, premier n
 C'est la forme la plus simple à produire pour une IA ; `overrides` reste disponible pour des règles plus fines
 (seuils, plusieurs couleurs).
 
+### Une série, une part, des étiquettes à son goût
+
+```json
+{ "mark": "line", "encode": { "x": "month", "y": "revenue", "color": "country" },
+  "style": { "color": "$muted", "opacity": 0.55, "endLabels": true },
+  "series": { "Italie": { "color": "#e34948", "width": 4, "opacity": 1, "markers": true, "labelColor": "#e34948" } },
+  "labels": { "color": "$ink", "scale": 1.15, "weight": 700, "background": "$surface" } }
+```
+
+- `series` : le style d'une série par son nom (ligne, aire, barres, parts, nœuds : la couleur vaut partout,
+  légende comprise) ; `width`, `dash`, `opacity`, `markers` pour les lignes et les aires ; `labelColor` pour ses étiquettes.
+- `labels` : l'encre, la taille (facteur), la graisse et un fond pour **toutes** les étiquettes du calque, quelle que
+  soit la marque (valeurs des barres, parts, centre d'un anneau, noms en bout de ligne, notes…). Par défaut pour tous
+  les graphiques : `theme.labels`. Les jetons de thème (`$ink`, `$1`, `$surface`) sont acceptés.
+- Storybook : un groupe *étiquettes* dans les contrôles de chaque graphique.
+
 ### Exploration animée
 
 Un clic sur une part du `pie` ou du `donut` la fait sortir et atténue les autres (l'anneau affiche sa valeur au

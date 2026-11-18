@@ -287,7 +287,7 @@ function arcMark(defaultInner: number): MarkDefinition {
           const px = Math.sin(mid) * (rm + off);
           const py = Math.cos(mid) * (rm + off);
           labels.push({
-            tx: ctx.x.norm(px), ty: ctx.y.norm(py), text: share(d.value, total), on: colors[i], align: 'center', baseline: 'middle', weight: 600,
+            tx: ctx.x.norm(px), ty: ctx.y.norm(py), text: share(d.value, total), on: colors[i], align: 'center', baseline: 'middle', weight: 600, series: d.key,
             box: [ctx.x.norm(px - half), ctx.y.norm(py - half), ctx.x.norm(px + half), ctx.y.norm(py + half)],
           });
         });

@@ -12,7 +12,7 @@ import { LAYOUTS } from '../render/layouts';
 import type { Batch, ClipRect, DrawCall, Renderer, RGBA, ViewTransform } from '../render/types';
 import { BandScale, LinearScale, LogScale, MercatorScale, TimeScale, niceDomain, type Scale, type Tick } from '../scale/scales';
 import type { AxisSpec, ChartSpec, LayerSpec, ProjectionSpec, ScaleSpec, StyleOverride } from '../spec/types';
-import { resolveTheme, resolveThemeColors, type Theme } from '../theme/theme';
+import { resolveTheme, resolveThemeColors, themeColor, type Theme } from '../theme/theme';
 import { parseColor, sampleRamp, toCss } from '../util/color';
 import { numberFormatter } from '../util/format';
 import { deepMerge } from '../util/merge';
@@ -465,6 +465,8 @@ export class Chart implements SyncMember {
         style: resolveThemeColors(theme, l.style),
         overrides: resolveThemeColors(theme, l.overrides),
         highlight: resolveThemeColors(theme, l.highlight),
+        series: resolveThemeColors(theme, l.series),
+        labels: resolveThemeColors(theme, l.labels),
       })),
       scales: this.spec.scales && { ...this.spec.scales, color: resolveThemeColors(theme, this.spec.scales.color) },
     };
@@ -533,14 +535,19 @@ export class Chart implements SyncMember {
     }
     const palette = theme.palette.categorical.map(parseColor);
     const ramp = theme.palette.sequential.map(parseColor);
-    const explicit = spec.scales?.color?.colors ?? {};
+    const explicit: Record<string, string> = { ...(spec.scales?.color?.colors ?? {}) };
     const categorical = (key: string): RGBA => {
       if (explicit[key]) return parseColor(explicit[key]);
       if (!slots.has(key)) slots.set(key, slots.size);
       return palette[slots.get(key)! % palette.length];
     };
-    const seriesColor = (data: LayerData, s: SeriesData): RGBA =>
-      data.layer.style?.color ? parseColor(data.layer.style.color) : categorical(s.key);
+    // A color set by name (`layer.series`) wins over the layer's color and the palette.
+    for (const l of spec.layers) for (const [k, v] of Object.entries(l.series ?? {})) if (v.color && !explicit[k]) explicit[k] = v.color;
+    const seriesColor = (data: LayerData, s: SeriesData): RGBA => {
+      const own = data.layer.series?.[s.key]?.color;
+      if (own) return parseColor(own);
+      return data.layer.style?.color ? parseColor(data.layer.style.color) : categorical(s.key);
+    };
 
     // 3. Scales: from a projection, from a standalone mark, or from the data.
     let xStep = 0;
@@ -1437,7 +1444,9 @@ export class Chart implements SyncMember {
     ctx.globalAlpha = Math.min(1, (this.enterProgress - 0.75) / 0.25);
     const avoid: { l: MarkLabel; ax: number; ay: number; y: number }[] = [];
     for (const b of this.built) {
-      for (const l of b.mark.labels ?? []) {
+      const style = this.labelStyler(b.data.layer);
+      for (const l0 of b.mark.labels ?? []) {
+        const l = style(l0);
         if (!l.avoid) {
           this.drawLabel(l, L);
           continue;
@@ -1483,6 +1492,30 @@ export class Chart implements SyncMember {
       }
     }
     ctx.restore();
+  }
+
+  /** Theme labels, then the layer's `labels`, then the series' `labelColor`, applied to a mark's label. */
+  private labelStyler(layer: LayerSpec): (l: MarkLabel) => MarkLabel {
+    const t = this.theme.labels ?? {};
+    const own = layer.labels ?? {};
+    const color = own.color ?? (t.color ? themeColor(this.theme, t.color) : undefined);
+    const scale = own.scale ?? t.scale ?? 1;
+    const weight = own.weight ?? t.weight;
+    const background = own.background ?? (t.background ? themeColor(this.theme, t.background) : undefined);
+    const series = layer.series;
+    if (!color && scale === 1 && weight === undefined && !background && !series) return (l) => l;
+    return (l) => {
+      const ink = (l.series && series?.[l.series]?.labelColor) || color;
+      const out: MarkLabel = { ...l };
+      if (ink) {
+        out.color = ink;
+        out.on = undefined;
+      }
+      if (scale !== 1) out.size = (l.size ?? 11) * scale;
+      if (weight !== undefined) out.weight = weight;
+      if (background) out.background = background;
+      return out;
+    };
   }
 
   private drawLabel(l: MarkLabel, L: Layout): void {

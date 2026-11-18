@@ -69,41 +69,46 @@ const line: MarkDefinition = {
     for (const s of ctx.data.series) {
       if (s.hidden || s.x.length === 0) continue;
       const p = normalized(ctx, s, s.y1);
-      const color = withAlpha(ctx.color(s, 0), style.opacity ?? 1);
+      // Per-series style (`layer.series`): width, dash, opacity, markers.
+      const own = ctx.data.layer.series?.[s.key];
+      const width = own?.width ?? style.width;
+      const dash = own?.dash ?? style.dash;
+      const markers = own?.markers ?? style.markers;
+      const color = withAlpha(ctx.color(s, 0), own?.opacity ?? style.opacity ?? 1);
       for (const run of runs(s)) {
         if (run[1] - run[0] === 1) {
           // A lone datum (or one between two gaps) still has to be visible: draw a dot-sized segment.
           const [x, y] = ctx.pos(p.x[run[0]], p.y[run[0]]);
-          pushSegment(data, x, y, x, y, color, Math.max(style.width, 4));
+          pushSegment(data, x, y, x, y, color, Math.max(width, 4));
           continue;
         }
         const r = slice(p, run);
         const curve = curvePoints(r.x, r.y, style.curve);
-        if (style.colorByValue && !style.dash?.length) {
+        if (style.colorByValue && !dash?.length) {
           // Each stretch takes the ramp's color at its height (positions are already 0–1 along y).
           for (let k = 0; k < curve.x.length - 1; k++) {
             const [ax, ay] = ctx.pos(curve.x[k], curve.y[k]);
             const [bx, by] = ctx.pos(curve.x[k + 1], curve.y[k + 1]);
             const t = Math.max(0, Math.min(1, (curve.y[k] + curve.y[k + 1]) / 2));
-            pushSegment(data, ax, ay, bx, by, withAlpha(ctx.ramp(0.15 + 0.85 * t), style.opacity ?? 1), style.width);
+            pushSegment(data, ax, ay, bx, by, withAlpha(ctx.ramp(0.15 + 0.85 * t), style.opacity ?? 1), width);
           }
-        } else pushPolyline(ctx, data, curve, color, style.width, style.dash);
+        } else pushPolyline(ctx, data, curve, color, width, dash);
       }
       for (let i = 0; i < s.x.length; i++) {
         const [x, y] = ctx.pos(p.x[i], p.y[i]);
         // Highlighted or overridden points keep their own color.
         const c = ctx.color(s, i);
-        if (style.markers) {
-          dots.push(x, y, Math.max(6, style.width * 3.5), 0, c[0], c[1], c[2], c[3], ctx.surface[0], ctx.surface[1], ctx.surface[2], 1, 2);
+        if (markers) {
+          dots.push(x, y, Math.max(6, width * 3.5), 0, c[0], c[1], c[2], c[3], ctx.surface[0], ctx.surface[1], ctx.surface[2], 1, 2);
         }
         if (style.labels) {
-          labels.push({ tx: x, ty: y, text: ctx.format(s.value[i]), align: 'center', baseline: 'bottom', dy: -8, size: 11, color: ctx.theme.text.secondary });
+          labels.push({ tx: x, ty: y, text: ctx.format(s.value[i]), align: 'center', baseline: 'bottom', dy: -8, size: 11, color: ctx.theme.text.secondary, series: s.key });
         }
       }
       if (style.endLabels) {
         const last = s.x.length - 1;
         const [lx, ly] = ctx.pos(p.x[last], p.y[last]);
-        labels.push({ tx: lx, ty: ly, text: s.key, align: 'left', baseline: 'middle', dx: 12, color: ctx.theme.text.secondary, avoid: true });
+        labels.push({ tx: lx, ty: ly, text: s.key, align: 'left', baseline: 'middle', dx: 12, color: ctx.theme.text.secondary, avoid: true, series: s.key });
       }
     }
     const batch = ctx.renderer.createBatch('line');
@@ -137,8 +142,9 @@ const area: MarkDefinition = {
       const t = curvePoints(top.x, top.y, style.curve);
       const b = curvePoints(bottom.x, bottom.y, style.curve);
       const base = ctx.color(s, 0);
-      const ct = withAlpha(base, opacity);
-      const cb = withAlpha(base, style.gradient ? opacity * 0.04 : opacity);
+      const own = ctx.data.layer.series?.[s.key];
+      const ct = withAlpha(base, own?.opacity ?? opacity);
+      const cb = withAlpha(base, style.gradient ? (own?.opacity ?? opacity) * 0.04 : (own?.opacity ?? opacity));
       const v = (c: number, val: number, color: RGBA) => {
         const [x, y] = ctx.pos(c, val);
         pushVertex(mesh, x, y, color);
@@ -151,7 +157,7 @@ const area: MarkDefinition = {
         v(b.x[i + 1], b.y[i + 1], cb);
         v(b.x[i], b.y[i], cb);
       }
-      if (style.line) pushPolyline(ctx, lines, t, base, style.lineWidth);
+      if (style.line) pushPolyline(ctx, lines, t, base, own?.width ?? style.lineWidth, own?.dash);
       }
     }
     const fill = ctx.renderer.createBatch('mesh');
@@ -212,7 +218,7 @@ const bar: MarkDefinition = {
         const v0 = ctx.y.norm(s.y0[i]);
         const v1 = ctx.y.norm(s.y1[i]);
         const up = s.y1[i] >= s.y0[i];
-        const fill = withAlpha(ctx.color(s, i), style.opacity ?? 1);
+        const fill = withAlpha(ctx.color(s, i), ctx.data.layer.series?.[s.key]?.opacity ?? style.opacity ?? 1);
         // Round the data end only (both ends of a range); in a stack, only the outermost segment.
         const o = outer.get(s.x[i]);
         const outermost = !o || (s.value[i] >= 0 ? o.pos === vi : o.neg === vi);
@@ -250,15 +256,15 @@ const bar: MarkDefinition = {
         if (data.stacked) {
           // Inside the segment, only when it fits: an interior segment has no free end.
           const [mx, my] = ctx.pos(c, (v0 + v1) / 2);
-          labels.push({ tx: mx, ty: my, text, on: fill, align: 'center', baseline: 'middle', box: [ax, ay, bx, by] });
+          labels.push({ tx: mx, ty: my, text, on: fill, align: 'center', baseline: 'middle', box: [ax, ay, bx, by], series: s.key });
         } else {
           const end = data.ranged ? Math.max(v0, v1) : v1;
           const forward = data.ranged || up;
           const [lx, ly] = ctx.pos(c, end);
           labels.push(
             H
-              ? { tx: lx, ty: ly, text, align: forward ? 'left' : 'right', baseline: 'middle', dx: forward ? 6 : -6 }
-              : { tx: lx, ty: ly, text, align: 'center', baseline: forward ? 'bottom' : 'top', dy: forward ? -5 : 5 },
+              ? { tx: lx, ty: ly, text, align: forward ? 'left' : 'right', baseline: 'middle', dx: forward ? 6 : -6, series: s.key }
+              : { tx: lx, ty: ly, text, align: 'center', baseline: forward ? 'bottom' : 'top', dy: forward ? -5 : 5, series: s.key },
           );
         }
       }

@@ -8,6 +8,8 @@ const meta: Meta = {
 };
 export default meta;
 
+export const UneCourbeMiseEnAvant: StoryObj = { name: "Une courbe mise en avant", ...entryStory("Une courbe mise en avant") };
+export const EtiquettesPersonnalisees: StoryObj = { name: "Étiquettes personnalisées", ...entryStory("Étiquettes personnalisées") };
 export const MiseEnAvantDansUnCamembert: StoryObj = { name: "Mise en avant dans un camembert", ...entryStory("Mise en avant dans un camembert") };
 export const MiseEnAvantDansUnTreemap: StoryObj = { name: "Mise en avant dans un treemap", ...entryStory("Mise en avant dans un treemap") };
 export const MiseEnAvantDUneSerie: StoryObj = { name: "Mise en avant d’une série", ...entryStory("Mise en avant d’une série") };

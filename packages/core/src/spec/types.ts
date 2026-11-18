@@ -156,6 +156,37 @@ export interface LayerSpec {
    * `{ "values": ["France"], "color": "#e34948" }`
    */
   highlight?: Highlight;
+  /**
+   * Style of one series (or one slice, one node…) by its name: a line in another
+   * color, thicker, dashed; its labels in their own ink.
+   * `{ "France": { "color": "#e34948", "width": 4, "labelColor": "#e34948" } }`
+   */
+  series?: Record<string, SeriesStyle>;
+  /** Labels of this layer, whatever the mark: ink, size (as a factor), weight, a background pill. */
+  labels?: LabelStyle;
+}
+
+export interface SeriesStyle {
+  color?: string;
+  /** Line width, px (lines, areas). */
+  width?: number;
+  /** Dash pattern, px (lines). */
+  dash?: number[];
+  opacity?: number;
+  /** Dots on the line's points. */
+  markers?: boolean;
+  /** Ink of this series' labels. */
+  labelColor?: string;
+}
+
+export interface LabelStyle {
+  /** Ink of every label (theme tokens allowed: `$ink`, `$1`…). Replaces the automatic contrast on colored fills. */
+  color?: string;
+  /** Size factor (1.2 = 20 % larger), so big center values stay bigger than the rest. */
+  scale?: number;
+  weight?: number;
+  /** A rounded pill behind each label (`$surface` for the background color). */
+  background?: string;
 }
 
 export type MarkStyle = { color?: string } & DeepPartial<
