@@ -77,8 +77,14 @@ export class LogScale implements Scale {
   readonly band = 0;
   private l0: number;
   private l1: number;
-  constructor(d0: number, d1: number, private fmt?: FormatSpec) {
+  /** `exact`: keep the domain as given (an explicit one); otherwise it widens to whole powers of ten. */
+  constructor(d0: number, d1: number, private fmt?: FormatSpec, exact = false) {
     const lo = Math.max(d0, Number.MIN_VALUE);
+    if (exact && d1 > lo) {
+      this.l0 = Math.log10(lo);
+      this.l1 = Math.log10(d1);
+      return;
+    }
     this.l0 = Math.floor(Math.log10(lo) + 1e-9);
     this.l1 = Math.ceil(Math.log10(Math.max(d1, lo * 10)) - 1e-9);
     if (this.l1 === this.l0) this.l1 = this.l0 + 1;
@@ -92,9 +98,14 @@ export class LogScale implements Scale {
   ticks(t0: number, t1: number): Tick[] {
     const f = numberFormatter(this.fmt ?? { style: 'compact' });
     const out: Tick[] = [];
-    for (let e = this.l0; e <= this.l1; e++) {
-      const t = (e - this.l0) / (this.l1 - this.l0);
-      if (t >= t0 - 1e-9 && t <= t1 + 1e-9) out.push({ t, label: f(Math.pow(10, e)) });
+    // Over a short span (or zoomed in), 2 and 5 times each power of ten as well.
+    const span = (this.l1 - this.l0) * (t1 - t0);
+    const steps = span <= 1.2 ? [1, 2, 5] : span <= 2.5 ? [1, 3] : [1];
+    for (let e = Math.floor(this.l0); e <= Math.ceil(this.l1); e++) {
+      for (const m of steps) {
+        const t = (Math.log10(m) + e - this.l0) / (this.l1 - this.l0);
+        if (t >= t0 - 1e-9 && t <= t1 + 1e-9) out.push({ t, label: f(m * Math.pow(10, e)) });
+      }
     }
     return out;
   }

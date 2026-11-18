@@ -78,6 +78,8 @@ Démo : `http://localhost:5273/gallery.html`, une application de tableau de bord
 | Relations (suite) | `arcDiagram` (`source`, `target`, `value` : nœuds alignés, liens en demi-cercles), `bubbles` (bulles groupées, une grappe par `color`) |
 | Champs | `vector` (flèches : `x`, `y`, `angle` en degrés depuis le haut, `size` pour la longueur) |
 | Parts (pyramide) | `pyramid` (étages empilés depuis la pointe, hauteur selon la valeur) |
+| Animation | `motion` (nuage animé façon Gapminder : `key`, `time`, `x`, `y`, `size`, `color` ; barre de lecture, traînée sur les points de `highlight`) |
+| Tableaux | `pivot` (tableau croisé : `key` en lignes, `x` en colonnes, `value` ; cellules teintées, total et tendance par ligne) |
 | Bourse | `candlestick` (`y` haut, `y2` bas, `open`, `close` ; `style.ohlc` pour des barres OHLC) |
 | Cartes (suite) | `route` (de `x`, `y` à `x2`, `y2`, courbée ; épaisseur avec `size`) |
 | Arbres | `tree` (`path` ; dendrogramme, ou organigramme avec `boxes` et `direction: "TB"`), `icicle` (partition en lignes, zoom au clic ; `orientation: "BT"` pour un flame chart) |
@@ -239,8 +241,9 @@ données élargit l'axe pour rester visible. Les annotations suivent le zoom.
 
 `"interactions": { "sync": "ventes" }` sur plusieurs graphiques : survol à la même date et même plage visible
 (zoomer l'un zoome les autres). Un graphique avec `"navigator": true` dans le même groupe devient un sélecteur de
-plage : on y glisse une fenêtre (bords redimensionnables), un clic remet tout. L'axe des valeurs du graphique
-principal ne se réajuste pas encore à la plage visible.
+plage : on y glisse une fenêtre (bords redimensionnables), un clic remet tout. Zoomé en x, l'axe des valeurs suit
+ce qui est visible (seule la transformation de vue change) ; `interactions.zoom.fitY: false` pour l'en empêcher.
+Une échelle log avec un `domain` explicite le garde tel quel, avec des graduations 1-2-5 sur un court intervalle.
 
 ## Course de barres
 

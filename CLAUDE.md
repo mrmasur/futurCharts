@@ -27,7 +27,8 @@ Librairie de graphiques GPU pour une future app de BI (sources : Elasticsearch, 
 - **Galerie** (demandée le 2026-11-17, modèle : la page de démos Highcharts, sans en reprendre ni la marque ni les
   textes) : `#/galerie` en vignettes vivantes par famille avec recherche, `#/demo/<nom>` en page détail. Chaque
   nouveau type de graphique y reçoit un exemple (`library.ts` : `entries` et `GROUPS`). Pistes restantes du
-  catalogue : faits. Restent possibles : axe des valeurs recalé sur la plage visible, Gapminder, tableau croisé.
+  catalogue : faits (axe recalé sur la plage visible, Gapminder `motion`, tableau croisé `pivot` compris).
+- Les marques animées dans le temps (`race`, `motion`) exposent un `Timeline` ; le graphique ajoute la barre de lecture.
 - Le texte posé sur une couleur prend `on: fill` (encre contrastée) ; posé sur un fond clair (piste, surface),
   il prend l'encre du thème. Ne jamais laisser du texte blanc déborder d'une marque sur le fond.
 - Les échelles produisent des positions normalisées ; le zoom ne modifie que la transformation de vue, jamais les batches.

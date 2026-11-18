@@ -462,8 +462,61 @@ const routes = worldCities
   )
   .filter((_, i) => i % 3 !== 2);
 
+// Stores over twelve years: revenue per m², margin, staff (fictional).
+const storeYears: { year: Date; store: string; region: string; perM2: number; margin: number; staff: number }[] = [];
+worldCities.forEach(([store, , , region], k) => {
+  let perM2 = 2200 + ((k * 977) % 2600);
+  let margin = 6 + ((k * 7) % 9);
+  let staff = 20 + ((k * 53) % 140);
+  const drift = ((k * 37) % 11) / 10 - 0.35;
+  for (let y = 2015; y <= 2026; y++) {
+    perM2 *= 1 + 0.03 + drift * 0.06 + gauss(r) * 0.03 + (y === 2020 ? -0.22 : y === 2021 ? 0.14 : 0);
+    margin = Math.max(-4, Math.min(24, margin + drift * 0.9 + gauss(r) * 0.6 + (y === 2020 ? -4 : y === 2021 ? 3 : 0)));
+    staff = Math.max(8, staff * (1 + drift * 0.05 + gauss(r) * 0.02));
+    storeYears.push({ year: new Date(y, 0, 1), store, region, perM2: Math.round(perM2), margin: Math.round(margin * 10) / 10, staff: Math.round(staff) });
+  }
+});
+const monthlyByCountry = countries.slice(0, 8).flatMap((country, k) =>
+  Array.from({ length: 12 }, (_, m) => ({
+    country,
+    month: new Date(2026, m, 1),
+    revenue: Math.round((60 + k * 9) * (1 + 0.25 * Math.sin(((m - 2 + k) / 12) * 2 * Math.PI)) * (1 + (k % 3 === 0 ? m * 0.03 : -m * 0.01)) + r() * 8),
+  })),
+);
+
 export type Entry = { title: string; caption: string; wide?: boolean; spec?: ChartSpec; tiles?: ChartSpec[]; stack?: number[]; showLayout?: boolean };
 export const entries: Entry[] = [
+  {
+    title: 'Nuage animé (Gapminder)',
+    caption: 'motion · un point par magasin qui se déplace d’une année à l’autre, axes fixes, traînée sur les points mis en avant',
+    wide: true,
+    spec: {
+      title: 'Magasins : rendement et marge, 2015 – 2026',
+      subtitle: 'Taille : effectif · Paris et Tokyo laissent une traînée',
+      data: storeYears,
+      fields: {
+        perM2: { label: 'CA par m²', format: { suffix: ' €', decimals: 0 } },
+        margin: { label: 'Marge', format: { suffix: ' %', decimals: 1 } },
+        staff: { label: 'Effectif' },
+        year: { label: 'Année' },
+      },
+      axes: { x: { title: 'Chiffre d’affaires par m² (échelle log)' }, y: { title: 'Marge (%)' } },
+      scales: { x: { type: 'log', domain: [1500, 30000] } },
+      layers: [{ mark: 'motion', encode: { x: 'perM2', y: 'margin', key: 'store', time: 'year', size: 'staff', color: 'region' }, style: { sizeRange: [6, 30] }, highlight: { field: 'store', values: ['Paris', 'Tokyo'] } }],
+    },
+  },
+  {
+    title: 'Tableau croisé',
+    caption: 'pivot · cellules teintées selon la valeur, total et courbe de tendance par ligne',
+    wide: true,
+    spec: {
+      title: 'Chiffre d’affaires mensuel par pays',
+      subtitle: '2026, en milliers d’euros',
+      data: monthlyByCountry,
+      fields: { revenue: { label: 'CA', format: { decimals: 0 } } },
+      layers: [{ mark: 'pivot', encode: { key: 'country', x: 'month', value: 'revenue' } }],
+    },
+  },
   {
     title: 'Graphiques synchronisés',
     caption: 'interactions.sync · même survol et même zoom (molette, glisser) sur les trois graphiques',
@@ -1542,13 +1595,13 @@ export const entries: Entry[] = [
 export const GROUPS: [string, string[]][] = [
   ['Lignes et annotations', ['Lignes de référence et zones', 'Réel et prévision en pointillés', 'Valeurs manquantes', 'Étiquettes sur les points', 'Barres et objectif']],
   ['Comparaison', ['Pyramide des âges', 'Barres horizontales triées', 'Barres horizontales empilées', 'Barres empilées à 100 %', 'Épaisseur et couleur par barre', 'Barres fines et mise en avant', 'Sucettes', 'Haltères (dumbbell)', 'Graphique à puces (bullet)']],
-  ['Combinaisons', ['Graphiques synchronisés', 'Navigateur de plage']],
+  ['Combinaisons', ['Graphiques synchronisés', 'Navigateur de plage', 'Tableau croisé']],
   ['Bourse', ['Chandeliers (candlestick)', 'Barres OHLC']],
   ['Évolution', ['Course de barres', 'Course par famille', 'Prévision avec intervalle', 'Courbe en escalier', 'Streamgraph', 'Classement (bump chart)', 'Graphique de pente', 'Chandeliers']],
   ['Temps et planning', ['Diagramme de Gantt', 'Calendrier']],
   ['Distribution', ['Courbe en cloche', 'Nuage avec dispersion (jitter)', 'Histogramme', 'Boîte à moustaches', 'Violon', 'Distribution en traits']],
   ['Petits multiples', ['Petits multiples de courbes', 'Petits multiples de barres']],
-  ['Corrélation', ['Champ de vecteurs', 'Nuage de points et régression', 'Bulles', 'Densité hexagonale', 'Coordonnées parallèles']],
+  ['Corrélation', ['Nuage animé (Gapminder)', 'Champ de vecteurs', 'Nuage de points et régression', 'Bulles', 'Densité hexagonale', 'Coordonnées parallèles']],
   ['Parts et hiérarchies', ['Camembert', 'Anneau', 'Demi-anneau', 'Hémicycle', 'Camembert à rayon variable', 'Treemap', 'Sunburst', 'Cercles imbriqués', 'Marimekko', 'Gaufre']],
   ['Flux', ['Pipeline de données', 'Diagramme de flux', 'Processus avec volumes', 'Chemin mis en avant', 'Sankey', 'Diagramme en cordes', 'Réseau', 'Entonnoir', 'Cascade']],
   ['Matrices et polaires', ['Carte de chaleur', 'Radar', 'Rose polaire', 'Barres radiales']],

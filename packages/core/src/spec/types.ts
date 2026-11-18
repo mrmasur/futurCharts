@@ -191,7 +191,9 @@ export type MarkStyle = { color?: string } & DeepPartial<
     Theme['marks']['arcDiagram'] &
     Theme['marks']['pyramid'] &
     Theme['marks']['candlestick'] &
-    Theme['marks']['route']
+    Theme['marks']['route'] &
+    Theme['marks']['motion'] &
+    Theme['marks']['pivot']
 >;
 
 /** A condition on one field of a row. Several conditions in an array must all hold. */
@@ -292,7 +294,12 @@ export interface InteractionSpec {
   tooltip?: boolean | { mode?: 'x' | 'nearest' };
   crosshair?: boolean;
   /** Wheel to zoom, drag to pan, double-click to reset. */
-  zoom?: boolean | { axes?: 'x' | 'y' | 'xy'; max?: number };
+  zoom?: boolean | {
+    axes?: 'x' | 'y' | 'xy';
+    max?: number;
+    /** Zoomed along x, the value axis fits what is visible. Default true. */
+    fitY?: boolean;
+  };
   /**
    * Drag to select marks: freehand `lasso` (default) or `rect`. Hold Shift to
    * pan instead, Cmd/Ctrl to add to the selection; click empty space to clear.

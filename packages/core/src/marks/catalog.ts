@@ -9,8 +9,9 @@ import { batches, need, share, totals } from './charts';
 import { packCircles } from './more';
 import { pushArc, pushRect, pushSegment, pushVertex } from './primitives';
 import { slotWidth } from './builtin';
+import { textWidth } from './shapes';
 import { parseColor } from '../util/color';
-import { buildHit, emptyHit, type BuildContext, type MarkDefinition, type MarkLabel, type ShapeHit } from './registry';
+import { buildHit, emptyHit, type BuildContext, type MarkDefinition, type MarkLabel, type ShapeHit, type Timeline } from './registry';
 
 const TAU = Math.PI * 2;
 const fieldLabel = (ctx: BuildContext, f: string) => ctx.fields[f]?.label ?? f;
@@ -414,4 +415,334 @@ export const route: MarkDefinition = {
   },
 };
 
-export const CATALOG_MARKS: Record<string, MarkDefinition> = { bubbles, arcDiagram, pyramid, vector, candlestick, route };
+// ------------------------------------------------------------------- motion
+
+/**
+ * `motion`: an animated scatter (Gapminder). One point per `key`, moving
+ * through the frames of `encode.time`; `size` and `color` as on `point`. The
+ * axes cover every frame, so they stay still while the points move. The chart
+ * adds a play bar; highlighted points leave a trail.
+ */
+export const motion: MarkDefinition = {
+  symbol: 'circle',
+  build(ctx) {
+    const { style, data, theme } = ctx;
+    const { layer, table } = data;
+    const kf = need(layer, 'key', 'motion');
+    const tf = need(layer, 'time', 'motion');
+    const keys = table.column(kf).values;
+    const tcol = table.column(tf);
+    const frameKeys = [...new Set(Array.from(tcol.values as ArrayLike<number | string>))];
+    if (tcol.type !== 'string') (frameKeys as number[]).sort((a, b) => a - b);
+    const fmt =
+      tcol.type === 'time'
+        ? (() => {
+            const ds = (frameKeys as number[]).map((v) => new Date(v));
+            const yearly = ds.every((d) => d.getMonth() === 0 && d.getDate() === 1);
+            const f = new Intl.DateTimeFormat(undefined, yearly ? { year: 'numeric' } : { month: 'short', year: 'numeric' });
+            return (v: number | string) => f.format(v as number);
+          })()
+        : (v: number | string) => String(v);
+    const frames = frameKeys.map(fmt);
+    const frameOf = new Map(frameKeys.map((k, i) => [String(k), i]));
+    const F = frames.length;
+    // Entities and, per frame, their position (scale space), size (px) and color.
+    const names: string[] = [];
+    const index = new Map<string, number>();
+    const cells: { f: number; e: number; x: number; y: number; r: number; c: RGBA; row: number; s: (typeof data.series)[number]; i: number }[] = [];
+    for (const s of data.series) {
+      if (s.hidden) continue;
+      for (let i = 0; i < s.x.length; i++) {
+        const row = s.rows[i];
+        const name = String(keys[row]);
+        if (!index.has(name)) {
+          index.set(name, names.length);
+          names.push(name);
+        }
+        const [x, y] = ctx.pos(ctx.x.norm(s.x[i]), ctx.y.norm(s.y1[i]));
+        cells.push({ f: frameOf.get(String(tcol.values[row]))!, e: index.get(name)!, x, y, r: ctx.size(s, i), c: ctx.color(s, i), row, s, i });
+      }
+    }
+    const E = names.length;
+    const at: (typeof cells)[number][] = new Array(F * E);
+    for (const c of cells) at[c.f * E + c.e] = c;
+    // A missing frame keeps the last known state.
+    for (let e = 0; e < E; e++) for (let f = 1; f < F; f++) at[f * E + e] ??= at[(f - 1) * E + e];
+    const trailed = new Set((layer.highlight?.values ?? []).map(String));
+    let t = Math.min(F - 1, Math.max(0, (ctx.state.t as number | undefined) ?? (style.autoplay ? 0 : F - 1)));
+    let playing = (ctx.state.playing as boolean | undefined) ?? (style.autoplay && F > 1);
+    let last = 0;
+    const points = ctx.renderer.createBatch('point');
+    const lines = ctx.renderer.createBatch('line');
+    const labels: MarkLabel[] = [];
+    let shown: { e: number; x: number; y: number; r: number; a: (typeof cells)[number]; b: (typeof cells)[number]; k: number }[] = [];
+    const surface = ctx.surface;
+
+    const render = () => {
+      const k0 = Math.min(F - 1, Math.floor(t));
+      const k1 = Math.min(F - 1, k0 + 1);
+      const k = t - k0;
+      shown = [];
+      for (let e = 0; e < E; e++) {
+        const a = at[k0 * E + e];
+        if (!a) continue;
+        const b = at[k1 * E + e] ?? a;
+        shown.push({ e, x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, r: a.r + (b.r - a.r) * k, a, b, k });
+      }
+      // Big ones first, so that small ones stay visible on top.
+      shown.sort((p, q) => q.r - p.r);
+      const out: number[] = [];
+      for (const p of shown) {
+        const c = p.k < 0.5 ? p.a.c : p.b.c;
+        out.push(p.x, p.y, p.r, 0, c[0], c[1], c[2], c[3] * style.opacity, surface[0], surface[1], surface[2], 1, 1);
+      }
+      points.update(new Float32Array(out), shown.length);
+      // Trails: where the highlighted ones have been.
+      const trail: number[] = [];
+      labels.length = 0;
+      if (style.trails) {
+        for (const p of shown) {
+          if (!trailed.has(names[p.e])) continue;
+          let prev: [number, number] | undefined;
+          for (let f = 0; f <= k0; f++) {
+            const c = at[f * E + p.e];
+            if (!c) continue;
+            if (prev) pushSegment(trail, prev[0], prev[1], c.x, c.y, withAlpha(c.c, 0.45), 1.5);
+            prev = [c.x, c.y];
+          }
+          if (prev) pushSegment(trail, prev[0], prev[1], p.x, p.y, withAlpha(p.a.c, 0.45), 1.5);
+          labels.push({ tx: p.x, ty: p.y, text: names[p.e], color: theme.text.primary, size: 11, weight: 650, align: 'left', baseline: 'middle', dx: p.r / 2 + 5, background: theme.background });
+        }
+      }
+      lines.update(new Float32Array(trail), trail.length / LAYOUTS.line.stride);
+      // The current frame, large, behind the points' labels at the bottom right.
+      labels.unshift({ tx: 1, ty: 0, text: frames[Math.min(F - 1, Math.round(t))], color: theme.grid.y.color, size: 56, weight: 750, align: 'right', baseline: 'bottom', dx: -10, dy: -6 });
+    };
+    render();
+
+    const end = F - 1;
+    const timeline: Timeline = {
+      frames,
+      get: () => t,
+      set(v) {
+        t = Math.min(end, Math.max(0, v));
+        ctx.state.t = t;
+        render();
+      },
+      play() {
+        if (t >= end) t = 0;
+        playing = F > 1;
+        ctx.state.playing = playing;
+        last = 0;
+      },
+      pause() {
+        playing = false;
+        ctx.state.playing = false;
+      },
+      get playing() {
+        return playing;
+      },
+    };
+    return {
+      draws: [{ batch: lines }, { batch: points, enter: 'fade' }],
+      hit: emptyHit(),
+      labels,
+      timeline,
+      animate(now) {
+        if (!playing) return false;
+        if (!last) last = now;
+        t += (now - last) / style.duration;
+        last = now;
+        if (t >= end) {
+          if (style.loop) t = 0;
+          else {
+            t = end;
+            playing = false;
+          }
+        }
+        ctx.state.t = t;
+        ctx.state.playing = playing;
+        render();
+        return true;
+      },
+      pick(tx, ty): ShapeHit | null {
+        // The smallest point under the pointer (they are drawn on top).
+        let best: (typeof shown)[number] | undefined;
+        for (const p of shown) {
+          const d = Math.hypot((tx - p.x) / ctx.pixel[0], (ty - p.y) / ctx.pixel[1]);
+          if (d <= p.r / 2 + 3 && (!best || p.r < best.r)) best = p;
+        }
+        if (!best) return null;
+        const c = best.k < 0.5 ? best.a : best.b;
+        const enc = layer.encode;
+        const rows = [
+          { label: ctx.fields[enc.x!]?.label ?? enc.x!, value: ctx.format(c.s.x[c.i], enc.x) },
+          { label: ctx.fields[enc.y!]?.label ?? enc.y!, value: ctx.format(c.s.y1[c.i], enc.y) },
+        ];
+        if (enc.size && c.s.sizeValue) rows.push({ label: ctx.fields[enc.size]?.label ?? enc.size, value: ctx.format(c.s.sizeValue[c.i], enc.size) });
+        rows.push({ label: ctx.fields[tf]?.label ?? tf, value: frames[Math.min(F - 1, Math.round(t))] });
+        return { title: names[best.e], rows };
+      },
+    };
+  },
+};
+
+// -------------------------------------------------------------------- pivot
+
+/**
+ * `pivot`: a cross table. One row per `key`, one column per value of `x`, cells
+ * summing `value`, shaded by magnitude (`style.heat`), with a total and a
+ * sparkline per row.
+ */
+export const pivot: MarkDefinition = {
+  standalone: true,
+  // Laid out in px.
+  sizeDependent: true,
+  symbol: 'square',
+  scales: () => ({ x: new LinearScale(0, 1), y: new LinearScale(0, 1) }),
+  build(ctx) {
+    const { layer, table } = ctx.data;
+    const { style, theme } = ctx;
+    const kf = need(layer, 'key', 'pivot');
+    const cf = need(layer, 'x', 'pivot');
+    const vf = layer.encode.value ?? need(layer, 'y', 'pivot');
+    const keys = table.column(kf).values;
+    const ccol = table.column(cf);
+    const vals = table.column(vf).values as Float64Array;
+    const colKeys = [...new Set(Array.from(ccol.values as ArrayLike<number | string>))];
+    if (ccol.type !== 'string') (colKeys as number[]).sort((a, b) => a - b);
+    const colLabel =
+      ccol.type === 'time'
+        ? (() => {
+            const ds = (colKeys as number[]).map((v) => new Date(v));
+            const oneYear = ds.every((d) => d.getFullYear() === ds[0].getFullYear());
+            const f = new Intl.DateTimeFormat(undefined, oneYear ? { month: 'short' } : { month: 'short', year: '2-digit' });
+            return (v: number | string) => f.format(v as number);
+          })()
+        : (v: number | string) => String(v);
+    const colIndex = new Map(colKeys.map((k, i) => [String(k), i]));
+    const rows: string[] = [];
+    const rowIndex = new Map<string, number>();
+    const firstRow: number[] = [];
+    for (let i = 0; i < table.length; i++) {
+      const k = String(keys[i]);
+      if (!rowIndex.has(k)) {
+        rowIndex.set(k, rows.length);
+        rows.push(k);
+        firstRow.push(i);
+      }
+    }
+    const C = colKeys.length;
+    const R = rows.length;
+    const cell = new Float64Array(R * C).fill(NaN);
+    for (let i = 0; i < table.length; i++) {
+      if (Number.isNaN(vals[i])) continue;
+      const j = rowIndex.get(String(keys[i]))! * C + colIndex.get(String(ccol.values[i]))!;
+      cell[j] = (Number.isNaN(cell[j]) ? 0 : cell[j]) + vals[i];
+    }
+    const totals = rows.map((_, r) => {
+      let s = 0;
+      for (let c = 0; c < C; c++) if (!Number.isNaN(cell[r * C + c])) s += cell[r * C + c];
+      return s;
+    });
+    let lo = Infinity, hi = -Infinity;
+    for (const v of cell) if (!Number.isNaN(v)) [lo, hi] = [Math.min(lo, v), Math.max(hi, v)];
+
+    // Layout in px, then scale space.
+    const [px, py] = ctx.pixel;
+    const W = 1 / px;
+    const H = 1 / py;
+    const font = `12px ${theme.font.family}`;
+    const nameW = Math.min(W * 0.3, Math.max(...rows.map((r) => textWidth(r, `600 ${font}`))) + 20);
+    const totalW = style.totals ? 78 : 0;
+    const sparkW = style.sparkline ? Math.min(110, W * 0.16) : 0;
+    const headH = 28;
+    const rowH = Math.min(34, (H - headH) / Math.max(1, R));
+    const cellW = Math.max(8, (W - nameW - totalW - sparkW) / Math.max(1, C));
+    const X = (v: number) => v * px;
+    const Y = (v: number) => 1 - v * py;
+    const rects: number[] = [];
+    const lines: number[] = [];
+    const labels: MarkLabel[] = [];
+    const grid = parseColor(theme.grid.y.color);
+    const zebra = withAlpha(parseColor(theme.text.muted), 0.05);
+    const ink = theme.text.primary;
+    // Header.
+    // Every column label when they fit, otherwise one in n.
+    const headW = Math.max(...colKeys.map((k) => textWidth(colLabel(k), `600 11px ${theme.font.family}`))) + 6;
+    const every = Math.max(1, Math.ceil(headW / cellW));
+    colKeys.forEach((k, c) => {
+      const cx = nameW + (c + 0.5) * cellW;
+      if (c % every === 0) labels.push({ tx: X(cx), ty: Y(headH / 2), text: colLabel(k), color: theme.text.muted, size: 11, weight: 600, align: 'center', baseline: 'middle' });
+    });
+    if (style.totals) labels.push({ tx: X(nameW + C * cellW + totalW - 8), ty: Y(headH / 2), text: 'Total', color: theme.text.muted, size: 11, weight: 600, align: 'right', baseline: 'middle' });
+    if (style.sparkline) labels.push({ tx: X(W - sparkW / 2), ty: Y(headH / 2), text: 'Tendance', color: theme.text.muted, size: 11, weight: 600, align: 'center', baseline: 'middle' });
+    pushSegment(lines, 0, Y(headH), 1, Y(headH), grid, 1);
+    const bodyH = headH + R * rowH;
+    rows.forEach((name, r) => {
+      const y0 = headH + r * rowH;
+      const ym = y0 + rowH / 2;
+      if (r % 2 === 1) pushRect(rects, { x0: 0, y0: Y(y0 + rowH), x1: 1, y1: Y(y0), fill: zebra });
+      labels.push({ tx: X(10), ty: Y(ym), text: name, color: ink, size: 12, weight: 600, align: 'left', baseline: 'middle', box: [0, Y(y0 + rowH), X(nameW - 4), Y(y0)] });
+      for (let c = 0; c < C; c++) {
+        const v = cell[r * C + c];
+        if (Number.isNaN(v)) continue;
+        const x0 = nameW + c * cellW;
+        const t = hi > lo ? (v - lo) / (hi - lo) : 0.5;
+        const fill = ctx.paint(style.heat ? ctx.ramp(0.08 + 0.85 * t) : withAlpha(ctx.surface, 0), firstRow[r]);
+        if (style.heat) pushRect(rects, { x0: X(x0), y0: Y(y0 + rowH), x1: X(x0 + cellW), y1: Y(y0), fill, gap: 2, radii: [3, 3, 3, 3] });
+        const box: [number, number, number, number] = [X(x0), Y(y0 + rowH), X(x0 + cellW), Y(y0)];
+        labels.push({ tx: X(x0 + cellW / 2), ty: Y(ym), text: ctx.format(v, vf), ...(style.heat ? { on: fill } : { color: ink }), size: cellW < 40 ? 10 : 11, align: 'center', baseline: 'middle', box });
+      }
+      if (style.totals) labels.push({ tx: X(nameW + C * cellW + totalW - 8), ty: Y(ym), text: ctx.format(totals[r], vf), color: ink, size: 12, weight: 650, align: 'right', baseline: 'middle' });
+      if (style.sparkline && C > 1) {
+        // Each row on its own scale: the shape of the trend, not its level.
+        let a = Infinity, b = -Infinity;
+        for (let c = 0; c < C; c++) {
+          const v = cell[r * C + c];
+          if (!Number.isNaN(v)) [a, b] = [Math.min(a, v), Math.max(b, v)];
+        }
+        const sx0 = W - sparkW + 10, sx1 = W - 10;
+        const sy = (v: number) => y0 + rowH - 6 - ((b > a ? (v - a) / (b - a) : 0.5) * (rowH - 12));
+        const col = ctx.paint(ctx.categorical(ctx.fields[vf]?.label ?? vf), firstRow[r]);
+        let prev: [number, number] | undefined;
+        let lastPt: [number, number] | undefined;
+        for (let c = 0; c < C; c++) {
+          const v = cell[r * C + c];
+          if (Number.isNaN(v)) { prev = undefined; continue; }
+          const p: [number, number] = [X(sx0 + ((sx1 - sx0) * c) / (C - 1)), Y(sy(v))];
+          if (prev) pushSegment(lines, prev[0], prev[1], p[0], p[1], col, 1.5);
+          prev = p;
+          lastPt = p;
+        }
+        if (lastPt) pushSegment(lines, lastPt[0], lastPt[1], lastPt[0], lastPt[1], col, 5);
+      }
+    });
+    pushSegment(lines, 0, Y(bodyH), 1, Y(bodyH), grid, 1);
+    const draws = batches(ctx, rects, [], [], false);
+    draws.push({ batch: batch(ctx, 'line', lines) });
+    return {
+      draws,
+      hit: emptyHit(),
+      labels,
+      pick(tx, ty): ShapeHit | null {
+        const x = tx / px;
+        const y = (1 - ty) / py;
+        const r = Math.floor((y - headH) / rowH);
+        const c = Math.floor((x - nameW) / cellW);
+        if (r < 0 || r >= R) return null;
+        if (c < 0 || c >= C) return { title: rows[r], rows: [{ label: 'Total', value: ctx.format(totals[r], vf) }] };
+        const v = cell[r * C + c];
+        return {
+          title: `${rows[r]} · ${colLabel(colKeys[c])}`,
+          rows: [
+            { label: ctx.fields[vf]?.label ?? vf, value: Number.isNaN(v) ? '–' : ctx.format(v, vf) },
+            { label: 'Part de la ligne', value: Number.isNaN(v) ? '–' : share(v, totals[r]) },
+          ],
+        };
+      },
+    };
+  },
+};
+
+export const CATALOG_MARKS: Record<string, MarkDefinition> = { motion, pivot, bubbles, arcDiagram, pyramid, vector, candlestick, route };

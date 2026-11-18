@@ -138,6 +138,10 @@ export interface Theme {
      */
     /** Bar chart race: `top` bars shown, `duration` ms per frame, start on its own, start over at the end. */
     race: { top: number; duration: number; autoplay: boolean; loop: boolean };
+    /** Animated scatter (one frame per `time`): ms per frame, trails behind highlighted points. */
+    motion: { duration: number; autoplay: boolean; loop: boolean; opacity: number; trails: boolean };
+    /** Cross table: cells shaded by magnitude, a total and a sparkline per row. */
+    pivot: { heat: boolean; totals: boolean; sparkline: boolean };
     /** Concentric bars around a center: `endAngle` degrees for the longest, `gap` share of a ring left empty. */
     /** `labelColor`: ink of the values, `auto` for the primary text color (they sit on the track, past the bar). */
     radialBar: { innerRadius: number; gap: number; endAngle: number; track: string; labels: boolean; labelColor: string };
@@ -274,6 +278,8 @@ export const lightTheme: Theme = {
     rose: { levels: 3, gap: 2, innerRadius: 0.08, labels: true },
     violin: { width: 0.8, fillOpacity: 0.28, strokeWidth: 1.5, box: true, samples: 64, scale: 'width' },
     race: { top: 10, duration: 900, autoplay: true, loop: false },
+    motion: { duration: 1000, autoplay: true, loop: false, opacity: 0.82, trails: true },
+    pivot: { heat: true, totals: true, sparkline: true },
     radialBar: { innerRadius: 0.3, gap: 0.28, endAngle: 270, track: 'auto', labels: true, labelColor: 'auto' },
     icicle: { orientation: 'TB', gap: 1.5, radius: 3, labels: true },
     parliament: { innerRadius: 0.38, center: true },

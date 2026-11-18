@@ -103,3 +103,16 @@ describe('sync groups', () => {
     expect(got).toEqual(['c:null']);
   });
 });
+
+describe('log scale', () => {
+  it('keeps an explicit domain and adds 2 and 5 ticks over a short span', async () => {
+    const { LogScale } = await import('../src/scale/scales');
+    const s = new LogScale(1500, 30000, undefined, true);
+    expect(s.norm(1500)).toBeCloseTo(0, 9);
+    expect(s.norm(30000)).toBeCloseTo(1, 9);
+    expect(s.ticks(0, 1).map((t) => Math.round(s.invert(t.t)))).toEqual([3000, 10000, 30000]);
+    // Without exact, it widens to whole decades.
+    const w = new LogScale(1500, 30000);
+    expect(w.invert(0)).toBeCloseTo(1000, 6);
+  });
+});

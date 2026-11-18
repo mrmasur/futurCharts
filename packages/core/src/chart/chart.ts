@@ -618,7 +618,7 @@ export class Chart implements SyncMember {
         c1 = catSpec.domain?.[1] ?? c1;
         const fmt = fields[catField ?? '']?.format;
         if (catSpec.reverse) [c0, c1] = [c1, c0];
-        cat = catType === 'time' ? new TimeScale(c0, c1) : catType === 'log' ? new LogScale(c0, c1, fmt) : new LinearScale(c0, c1, fmt);
+        cat = catType === 'time' ? new TimeScale(c0, c1) : catType === 'log' ? new LogScale(c0, c1, fmt, !!catSpec.domain) : new LinearScale(c0, c1, fmt);
         xStep = Math.abs(cat.norm(c0 + step) - cat.norm(c0));
       }
 
@@ -631,7 +631,7 @@ export class Chart implements SyncMember {
       if (valType === 'time') {
         val = new TimeScale(valSpec.domain?.[0] ?? v0, valSpec.domain?.[1] ?? v1);
       } else if (valType === 'log') {
-        val = new LogScale(valSpec.domain?.[0] ?? v0, valSpec.domain?.[1] ?? v1, valFormat);
+        val = new LogScale(valSpec.domain?.[0] ?? v0, valSpec.domain?.[1] ?? v1, valFormat, !!valSpec.domain);
       } else {
         if (valSpec.zero ?? baseline) [v0, v1] = [Math.min(0, v0), Math.max(0, v1)];
         // Value labels outside the bar ends need room past the longest bar.
@@ -1298,7 +1298,8 @@ export class Chart implements SyncMember {
         ctx.fillStyle = ttl.color;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
-        ctx.fillText(xAxis.title, plot.x + plot.width / 2, this.height - pad);
+        // Above the play bar when there is one.
+        ctx.fillText(xAxis.title, plot.x + plot.width / 2, this.height - pad - (this.timeline ? 40 : 0));
       }
     }
 
@@ -1978,6 +1979,51 @@ export class Chart implements SyncMember {
     const z = this.zoom;
     z.tx = Math.min(0, Math.max(1 - z.kx, z.tx));
     z.ty = Math.min(0, Math.max(1 - z.ky, z.ty));
+    this.fitY();
+  }
+
+  /**
+   * Zoomed along x only, the value axis follows what is visible (as a stock chart
+   * does): it is only the view transform that changes, never the batches.
+   * Off with `interactions.zoom.fitY: false`.
+   */
+  private fitY(): void {
+    const z = this.zoom;
+    const cfg = this.spec.interactions?.zoom;
+    const axes = typeof cfg === 'object' ? (cfg.axes ?? 'x') : 'x';
+    const want = typeof cfg === 'object' ? cfg.fitY !== false : true;
+    if (!want || axes !== 'x' || this.horizontal || this.markScales || this.geo) return;
+    if (z.kx <= 1 + 1e-6) {
+      z.ky = 1;
+      z.ty = 0;
+      return;
+    }
+    const v0 = -z.tx / z.kx;
+    const v1 = (1 - z.tx) / z.kx;
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const b of this.built) {
+      if (b.def.standalone) continue;
+      // Bars, areas, stacks and ranges span from y0; lines and points are just y1.
+      const spans = b.data.stacked || b.data.ranged || !!b.def.baseline;
+      for (const s of b.data.series) {
+        if (s.hidden) continue;
+        for (let i = 0; i < s.x.length; i++) {
+          const x = this.cat.norm(s.x[i]);
+          if (x < v0 || x > v1) continue;
+          const y1 = this.val.norm(s.y1[i]);
+          const y0 = spans ? this.val.norm(s.y0[i]) : y1;
+          lo = Math.min(lo, y0, y1);
+          hi = Math.max(hi, y0, y1);
+        }
+      }
+    }
+    if (!(hi > lo)) return;
+    const pad = (hi - lo) * 0.08;
+    lo = Math.max(0, lo - pad);
+    hi = Math.min(1, hi + pad);
+    z.ky = 1 / (hi - lo);
+    z.ty = -lo * z.ky;
   }
 
   private setPicked(picked: Picked[]): void {
