@@ -179,10 +179,23 @@ const bar: MarkDefinition = {
     const center = new Map<SeriesData, number>();
     // Identity of each bar (series and category), for transitions between data states.
     const keys: string[] = [];
+    // In a stack, the outer end of each side: the last series with a positive value at that
+    // category, and the last with a negative one (a population pyramid has one of each).
+    const outer = new Map<number, { pos: number; neg: number }>();
+    if (data.stacked) {
+      visible.forEach((s, vi) => {
+        for (let i = 0; i < s.x.length; i++) {
+          if (s.value[i] === 0) continue;
+          const o = outer.get(s.x[i]) ?? { pos: -1, neg: -1 };
+          if (s.value[i] > 0) o.pos = vi;
+          else o.neg = vi;
+          outer.set(s.x[i], o);
+        }
+      });
+    }
     visible.forEach((s, vi) => {
       const offset = groups === 1 ? 0 : (vi - (groups - 1) / 2) * sub;
       center.set(s, offset);
-      const lastInStack = vi === visible.length - 1;
       for (let i = 0; i < s.x.length; i++) {
         const c = ctx.x.norm(s.x[i]) + offset;
         const v0 = ctx.y.norm(s.y0[i]);
@@ -190,7 +203,9 @@ const bar: MarkDefinition = {
         const up = s.y1[i] >= s.y0[i];
         const fill = withAlpha(ctx.color(s, i), style.opacity ?? 1);
         // Round the data end only (both ends of a range); in a stack, only the outermost segment.
-        const r = data.ranged || !data.stacked || lastInStack ? style.radius : 0;
+        const o = outer.get(s.x[i]);
+        const outermost = !o || (s.value[i] >= 0 ? o.pos === vi : o.neg === vi);
+        const r = data.ranged || !data.stacked || outermost ? style.radius : 0;
         const radii: [number, number, number, number] = data.ranged
           ? [r, r, r, r]
           : H
@@ -205,7 +220,7 @@ const bar: MarkDefinition = {
           strokeWidth: style.strokeWidth,
           // The width cap is dropped for grouped bars: it would pull them apart inside the band.
           gap: groups > 1 || ctx.x.band === 0 ? style.gap : 0,
-          stackGap: data.stacked && !lastInStack ? (up ? style.gap : -style.gap) : 0,
+          stackGap: data.stacked && !outermost ? (up ? style.gap : -style.gap) : 0,
           maxWidth: groups > 1 ? 0 : style.thickness > 0 ? style.thickness : style.maxWidth,
           axis: H ? 1 : 0,
         });
