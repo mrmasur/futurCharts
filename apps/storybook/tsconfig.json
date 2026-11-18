@@ -1,0 +1,1 @@
+{ "extends": "../../tsconfig.base.json", "compilerOptions": { "noEmit": true, "resolveJsonModule": true, "types": ["node", "vite/client"] }, "include": ["story.ts", "stories", "scripts", ".storybook"] }

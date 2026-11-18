@@ -1,0 +1,16 @@
+import { Meta } from '@storybook/blocks';
+
+<Meta title="Introduction" />
+
+# futurCharts
+
+Chaque famille de la galerie a sa page, chaque exemple sa story. Dans l’onglet **Controls**, une ligne par option
+de style de la marque principale, lue dans les valeurs par défaut du thème : modifier une valeur met le graphique
+à jour sur place (avec sa transition). Le panneau **Spec JSON** sous le graphique montre la spec exacte, à copier.
+
+- **Thème** clair ou sombre : bouton de la barre d’outils.
+- **hauteur** et **animation** : réglages du graphique, en bas des controls.
+- **état** (familles *Transitions*) : change les données, pour voir la transition.
+
+Les stories sont générées à partir de `apps/demo/src/library.ts` :
+après l’ajout d’un exemple, `npm run stories` les régénère.

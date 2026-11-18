@@ -9,8 +9,10 @@
   "scripts": {
     "dev": "npm run dev -w @futurcharts/demo",
     "build": "node scripts/build.mjs",
-    "typecheck": "tsc -p packages/core && tsc -p packages/adapters && tsc -p packages/geo && tsc -p packages/element && tsc -p packages/react && tsc -p packages/vue && tsc -p packages/ember && tsc -p apps/demo --noEmit",
-    "test": "vitest run"
+    "typecheck": "tsc -p packages/core && tsc -p packages/adapters && tsc -p packages/geo && tsc -p packages/element && tsc -p packages/react && tsc -p packages/vue && tsc -p packages/ember && tsc -p apps/demo --noEmit && tsc -p apps/storybook",
+    "test": "vitest run",
+    "storybook": "npm run storybook -w @futurcharts/storybook",
+    "stories": "npm run stories -w @futurcharts/storybook"
   },
   "devDependencies": {
     "typescript": "^5.6.0",
