@@ -2,6 +2,7 @@
 
 Librairie de graphiques GPU pour une future app de BI (sources : Elasticsearch, ClickHouse, dbt). Voir README.md.
 
+- Démo et Storybook écoutent sur le réseau local (`--host`) : accessibles depuis un autre poste par l'IP du Mac.
 - `npm run dev` (démo, port 5273 ; `/wrappers.html` pour React, Vue, Web Component), `npm test`, `npm run typecheck`, `npm run build`.
 - `npm run storybook` (port 6006, `apps/storybook`) : stories générées depuis les exemples de la galerie par
   `npm run stories` ; à relancer après chaque nouvel exemple. Les contrôles et leurs descriptions viennent du thème
