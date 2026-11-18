@@ -1,6 +1,11 @@
 import { registerDestructor } from '@ember/destroyable';
 import {
   mountChart,
+  mountSpreadsheet,
+  type SheetHandle,
+  type SheetHandlers,
+  type SheetSpec,
+  type WorkbookSpec,
   type ChartHandle,
   type ChartHandlers,
   type ChartOptions,
@@ -55,3 +60,31 @@ export default class FuturChartModifier extends Modifier<FuturChartSignature> {
 }
 
 export { FuturChartModifier };
+
+export interface FuturSheetSignature {
+  Element: HTMLElement;
+  Args: { Positional: [spec: SheetSpec | WorkbookSpec]; Named: SheetHandlers };
+}
+
+/**
+ * Element modifier for an editable spreadsheet:
+ *   <div class="sheet" {{futur-sheet this.spec onChange=this.save}}></div>
+ * Re-export it from `app/modifiers/futur-sheet.js` for classic templates.
+ */
+export class FuturSheetModifier extends Modifier<FuturSheetSignature> {
+  private handle?: SheetHandle;
+
+  constructor(owner: ConstructorParameters<typeof Modifier>[0], args: ArgsFor<FuturSheetSignature>) {
+    super(owner, args);
+    registerDestructor(this, () => this.handle?.destroy());
+  }
+
+  modify(element: HTMLElement, [spec]: FuturSheetSignature['Args']['Positional'], handlers: FuturSheetSignature['Args']['Named']): void {
+    if (!this.handle) {
+      this.handle = mountSpreadsheet(element, spec, handlers);
+      return;
+    }
+    this.handle.setHandlers(handlers);
+    this.handle.update(spec);
+  }
+}

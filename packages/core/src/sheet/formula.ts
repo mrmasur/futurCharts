@@ -3,6 +3,8 @@
  * Columns are letters (A = first column), rows are 1-based. Function names are
  * accepted in English and in French (SOMME, MOYENNE, SI…); `;` and `,` both
  * separate arguments, and a decimal comma is read as a decimal point.
+ * Another sheet of a workbook: `Budget!B2`, `'Ventes 2026'!A1:A12`.
+ * Dates are day numbers (as in spreadsheets: 1 = 31/12/1899), so `=B2-A2` counts days.
  */
 
 export type CellValue = number | string | boolean | null;
@@ -15,13 +17,29 @@ export interface FormulaContext {
   get(col: number, row: number): CellValue;
   cols: number;
   rows: number;
+  /** Another sheet of the workbook, by name. */
+  sheet?(name: string): FormulaContext | undefined;
+}
+
+const DAY = 86400000;
+const EPOCH = Date.UTC(1899, 11, 30);
+/** Day number of a date (UTC calendar day), as spreadsheets count them. */
+export const toSerial = (y: number, m: number, d: number): number => Math.round((Date.UTC(y, m, d) - EPOCH) / DAY);
+export const fromSerial = (n: number): Date => new Date(EPOCH + Math.round(n) * DAY);
+/** `2026-11-18` (or a full ISO date-time) → day number; undefined when it is not a date. */
+export function isoToSerial(v: string): number | undefined {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
+  return m ? toSerial(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : undefined;
+}
+export function serialToIso(n: number): string {
+  return fromSerial(n).toISOString().slice(0, 10);
 }
 
 type Token =
   | { t: 'num'; v: number }
   | { t: 'str'; v: string }
-  | { t: 'ref'; col: number; row: number }
-  | { t: 'range'; c0: number; r0: number; c1: number; r1: number }
+  | { t: 'ref'; col: number; row: number; sheet?: string }
+  | { t: 'range'; c0: number; r0: number; c1: number; r1: number; sheet?: string }
   | { t: 'name'; v: string }
   | { t: 'op'; v: string };
 
@@ -67,18 +85,23 @@ function tokenize(src: string): Token[] {
       i += num[0].length;
       continue;
     }
-    const r = ref.exec(src.slice(i));
-    if (r && !/^[A-Za-z(]/.test(src.slice(i + r[0].length))) {
+    // An optional sheet name in front of a reference: `Budget!` or `'Ventes 2026'!`.
+    const prefix = /^(?:'([^']+)'|([A-Za-zÀ-ÿ_][\wÀ-ÿ.]*))!/.exec(src.slice(i));
+    const at = prefix ? i + prefix[0].length : i;
+    const r = ref.exec(src.slice(at));
+    if (r && !/^[A-Za-z(]/.test(src.slice(at + r[0].length))) {
+      const sheet = prefix ? (prefix[1] ?? prefix[2]) : undefined;
       const col = columnIndex(r[1]);
       const row = Number(r[2]) - 1;
-      i += r[0].length;
+      i = at + r[0].length;
       const r2 = src[i] === ':' ? ref.exec(src.slice(i + 1)) : null;
       if (r2) {
-        out.push({ t: 'range', c0: col, r0: row, c1: columnIndex(r2[1]), r1: Number(r2[2]) - 1 });
+        out.push({ t: 'range', c0: col, r0: row, c1: columnIndex(r2[1]), r1: Number(r2[2]) - 1, sheet });
         i += 1 + r2[0].length;
-      } else out.push({ t: 'ref', col, row });
+      } else out.push({ t: 'ref', col, row, sheet });
       continue;
     }
+    if (prefix) throw new FormulaError('#REF!');
     const name = /^[A-Za-zÀ-ÿ_][A-Za-zÀ-ÿ_0-9.]*/.exec(src.slice(i));
     if (name) {
       out.push({ t: 'name', v: name[0].toUpperCase() });
@@ -135,10 +158,21 @@ const FUNCTIONS: Record<string, (args: CellValue[][]) => CellValue> = {
   OR: (a) => a.flat().some(truthy),
   NOT: (a) => !truthy(a[0][0]),
   CONCAT: (a) => a.flat().map((v) => (v === null ? '' : String(v))).join(''),
+  TODAY: () => {
+    const d = new Date();
+    return toSerial(d.getFullYear(), d.getMonth(), d.getDate());
+  },
+  DATE: (a) => toSerial(num(a[0][0]), num(a[1][0]) - 1, num(a[2][0])),
+  YEAR: (a) => fromSerial(num(a[0][0])).getUTCFullYear(),
+  MONTH: (a) => fromSerial(num(a[0][0])).getUTCMonth() + 1,
+  DAY: (a) => fromSerial(num(a[0][0])).getUTCDate(),
+  WEEKDAY: (a) => fromSerial(num(a[0][0])).getUTCDay() + 1,
+  DAYS: (a) => Math.round(num(a[0][0]) - num(a[1][0])),
 };
 const ALIASES: Record<string, string> = {
   SOMME: 'SUM', MOYENNE: 'AVERAGE', AVG: 'AVERAGE', NB: 'COUNT', NBVAL: 'COUNTA', ARRONDI: 'ROUND', SI: 'IF', ET: 'AND', OU: 'OR', NON: 'NOT',
   RACINE: 'SQRT', CONCATENER: 'CONCAT', 'CONCATÉNER': 'CONCAT',
+  AUJOURDHUI: 'TODAY', "AUJOURD'HUI": 'TODAY', ANNEE: 'YEAR', 'ANNÉE': 'YEAR', MOIS: 'MONTH', JOUR: 'DAY', JOURSEM: 'WEEKDAY', JOURS: 'DAYS',
 };
 
 function truthy(v: CellValue): boolean {
@@ -152,13 +186,20 @@ export function evaluate(src: string, ctx: FormulaContext): CellValue {
   let p = 0;
   const peek = () => tokens[p];
   const isOp = (v: string) => peek()?.t === 'op' && (peek() as { v: string }).v === v;
-  const cell = (col: number, row: number): CellValue => {
-    if (col < 0 || row < 0 || col >= ctx.cols || row >= ctx.rows) throw new FormulaError('#REF!');
-    return ctx.get(col, row);
+  const target = (sheet?: string): FormulaContext => {
+    if (!sheet) return ctx;
+    const other = ctx.sheet?.(sheet);
+    if (!other) throw new FormulaError('#REF!');
+    return other;
+  };
+  const cell = (col: number, row: number, sheet?: string): CellValue => {
+    const c = target(sheet);
+    if (col < 0 || row < 0 || col >= c.cols || row >= c.rows) throw new FormulaError('#REF!');
+    return c.get(col, row);
   };
   const rangeValues = (t: Extract<Token, { t: 'range' }>): CellValue[] => {
     const out: CellValue[] = [];
-    for (let r = Math.min(t.r0, t.r1); r <= Math.max(t.r0, t.r1); r++) for (let c = Math.min(t.c0, t.c1); c <= Math.max(t.c0, t.c1); c++) out.push(cell(c, r));
+    for (let r = Math.min(t.r0, t.r1); r <= Math.max(t.r0, t.r1); r++) for (let c = Math.min(t.c0, t.c1); c <= Math.max(t.c0, t.c1); c++) out.push(cell(c, r, t.sheet));
     return out;
   };
 
@@ -245,7 +286,7 @@ export function evaluate(src: string, ctx: FormulaContext): CellValue {
     const t = tokens[p++];
     if (!t) throw new FormulaError('#ERREUR');
     if (t.t === 'num' || t.t === 'str') return t.v;
-    if (t.t === 'ref') return cell(t.col, t.row);
+    if (t.t === 'ref') return cell(t.col, t.row, t.sheet);
     if (t.t === 'range') throw new FormulaError('#VALEUR!');
     if (t.t === 'name') {
       if (t.v === 'TRUE' || t.v === 'VRAI') return true;

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/html';
-import { createSheet, type Sheet, type SheetSpec } from '@futurcharts/core';
-import { budgetSheet, ordersSheet } from '../../demo/src/sheets';
+import { createSpreadsheet, type SheetSpec, type Spreadsheet, type WorkbookSpec } from '@futurcharts/core';
+import { budgetSheet, ordersSheet, planningSheet, projectWorkbook } from '../../demo/src/sheets';
 
 /** Options of the whole sheet, as controls. */
 interface Args {
@@ -16,9 +16,14 @@ interface Args {
   hauteur: number;
 }
 
-const sheets = new Map<HTMLElement, { el: HTMLElement; sheet?: Sheet }>();
+const sheets = new Map<HTMLElement, { el: HTMLElement; sheet?: Spreadsheet }>();
 
-function story(base: () => SheetSpec, defaults: Partial<Args> = {}): StoryObj<Args> {
+/** The options on one sheet, or on every sheet of a workbook. */
+function withOptions(spec: SheetSpec | WorkbookSpec, options: Partial<SheetSpec>, theme: string): SheetSpec | WorkbookSpec {
+  return 'sheets' in spec ? { ...spec, theme, sheets: spec.sheets.map((s) => ({ ...s, ...options, theme: undefined })) } : { ...spec, ...options, theme };
+}
+
+function story(base: () => SheetSpec | WorkbookSpec, defaults: Partial<Args> = {}): StoryObj<Args> {
   return {
     args: { rowHeight: 30, fontSize: 13, frozenColumns: 1, headers: true, editable: true, totals: true, zebra: true, formulaBar: true, statusBar: true, hauteur: 420, ...defaults },
     argTypes: {
@@ -37,19 +42,19 @@ function story(base: () => SheetSpec, defaults: Partial<Args> = {}): StoryObj<Ar
       const theme = context.globals.theme === 'dark' ? 'dark' : 'light';
       const { hauteur, ...options } = a;
       const key = (context as { canvasElement?: HTMLElement }).canvasElement ?? document.body;
-      const spec = { ...base(), ...options, theme } as SheetSpec;
+      const spec = withOptions(base(), options as Partial<SheetSpec>, theme);
       let m = sheets.get(key);
       if (m?.el.isConnected && m.sheet) {
         m.el.style.height = `${hauteur}px`;
         // Keep what was typed: options change, the cells stay.
-        m.sheet.update({ ...m.sheet.getSpec(), ...options, theme });
+        m.sheet.update(withOptions(m.sheet.getSpec(), options as Partial<SheetSpec>, theme));
         return m.el;
       }
       const el = document.createElement('div');
       el.style.height = `${hauteur}px`;
       m = { el };
       sheets.set(key, m);
-      createSheet(el, spec).then((s) => (m!.sheet = s));
+      createSpreadsheet(el, spec).then((s) => (m!.sheet = s));
       return el;
     },
   };
@@ -62,7 +67,7 @@ const meta: Meta<Args> = {
     docs: {
       description: {
         component:
-          'Une grille éditable, configurable en JSON comme les graphiques. Double-clic ou saisie pour modifier, formules (`=SOMME(B1:E1)`, `=SI(…)`), bord d’un en-tête pour élargir (double-clic : ajuster), bas d’un numéro de ligne pour la hauteur, clic sur un en-tête pour trier, Ctrl+C / Ctrl+V avec Excel, Ctrl+Z.',
+          'Une grille éditable, configurable en JSON comme les graphiques. Double-clic ou saisie pour modifier, formules (`=SOMME(B1:E1)`, `=SI(…)`, `=Budget!F1`), dates, cellules fusionnées et mise en forme depuis la barre (⊞, G, I, alignement, couleurs), plusieurs feuilles avec onglets, bord d’un en-tête pour élargir (double-clic : ajuster), bas d’un numéro de ligne pour la hauteur, clic sur un en-tête pour trier, Ctrl+C / Ctrl+V avec Excel, Ctrl+Z.',
       },
     },
   },
@@ -70,4 +75,6 @@ const meta: Meta<Args> = {
 export default meta;
 
 export const Budget: StoryObj<Args> = { name: 'Budget avec formules', ...story(budgetSheet) };
+export const Classeur: StoryObj<Args> = { name: 'Classeur de trois feuilles', ...story(projectWorkbook) };
+export const Planning: StoryObj<Args> = { name: 'Dates et cellules fusionnées', ...story(planningSheet, { frozenColumns: 2 }) };
 export const Commandes: StoryObj<Args> = { name: '10 000 commandes', ...story(ordersSheet, { rowHeight: 28 }) };

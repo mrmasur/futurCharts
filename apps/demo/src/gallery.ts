@@ -1,5 +1,5 @@
-import { createChart, createSheet, type Chart, type ChartSpec, type ChartView, type Sheet } from '@futurcharts/core';
-import { budgetSheet, ordersSheet } from './sheets';
+import { createChart, createSpreadsheet, type Chart, type ChartSpec, type ChartView, type Spreadsheet, type WorkbookSpec } from '@futurcharts/core';
+import { ordersSheet, projectWorkbook } from './sheets';
 import { CATEGORIES, CHANNELS, COUNTRIES, DASHBOARDS, type Card, type Dashboard, type Filters } from './dashboards';
 import { entries, GROUPS, PALETTES, type Entry } from './library';
 
@@ -183,7 +183,10 @@ function refresh() {
       m.charts.forEach((c, i) => c.update(m.card.tiles ? tileSpec(specs[i]) : withTheme(specs[i])));
     }
     for (const c of thumbCharts) c.update({ ...c.getSpec(), theme: thumbTheme() });
-    for (const s of sheets) s.update({ ...s.getSpec(), theme: themeFor() });
+    for (const s of sheets) {
+      const cur = s.getSpec();
+      s.update('sheets' in cur ? ({ ...cur, theme: themeFor(), sheets: cur.sheets.map((x) => ({ ...x, theme: undefined })) } as WorkbookSpec) : { ...cur, theme: themeFor() });
+    }
   }
 }
 
@@ -371,17 +374,17 @@ async function renderDemo(board: HTMLElement, e: Entry) {
   board.appendChild(info);
 }
 
-let sheets: Sheet[] = [];
+let sheets: Spreadsheet[] = [];
 
 /** The spreadsheet page: a budget with formulas, and 10 000 orders to scroll. */
 async function renderSheets(board: HTMLElement) {
   const help = document.createElement('p');
   help.className = 'sheet-help';
   help.textContent =
-    'Double-clic ou saisie pour modifier · formules (=SOMME(B1:E1), =SI(…)) · glisser le bord d’un en-tête pour élargir (double-clic : ajuster), le bas d’un numéro de ligne pour la hauteur · clic sur un en-tête pour trier · Ctrl+C / Ctrl+V avec Excel · Ctrl+Z pour annuler.';
+    'Double-clic ou saisie pour modifier · formules (=SOMME(B1:E1), =SI(…), =Budget!F1) · sélection puis ⊞ pour fusionner, G / I / alignement / couleurs dans la barre · onglets en bas (double-clic pour renommer, + pour ajouter) · bord d’un en-tête pour élargir, bas d’un numéro de ligne pour la hauteur · clic sur un en-tête pour trier · Ctrl+C / Ctrl+V avec Excel · Ctrl+Z.';
   board.appendChild(help);
   for (const [title, spec, height] of [
-    ['Budget marketing 2026', budgetSheet, 330],
+    ['Projet 2026 · classeur de trois feuilles', projectWorkbook, 420],
     ['Commandes · 10 000 lignes', ordersSheet, 460],
   ] as const) {
     const card = document.createElement('section');
@@ -392,8 +395,11 @@ async function renderSheets(board: HTMLElement) {
     body.style.cssText = `height:${height}px;padding:0 12px 12px;`;
     card.appendChild(body);
     board.appendChild(card);
-    const sheet = await createSheet(body, { ...spec(), theme: themeFor() });
+    const made = spec();
+    const sheet = await createSpreadsheet(body, 'sheets' in made ? { ...made, theme: themeFor() } : { ...made, theme: themeFor() });
     const sub = card.querySelector('header p')!;
+    // The last edit shows here; the line is there from the start, so nothing moves on the first one.
+    sub.textContent = 'Aucune modification';
     sheet.on('change', ({ row, column, value }) => (sub.textContent = `Ligne ${row + 1}, ${column} : ${value ?? 'vide'}`));
     sheets.push(sheet);
   }

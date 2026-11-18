@@ -1,5 +1,11 @@
 import {
   mountChart,
+  mountSpreadsheet,
+  type SheetHandle,
+  type SheetHandlers,
+  type SheetSpec,
+  type Spreadsheet,
+  type WorkbookSpec,
   type ChartView,
   type ChartHandle,
   type ChartHandlers,
@@ -70,6 +76,53 @@ export const FuturChart = forwardRef<FuturChartRef, FuturChartProps>(function Fu
     }),
     [],
   );
+
+  return createElement('div', { ref: container, className, style: { width: '100%', height: '100%', ...style } });
+});
+
+export interface FuturSheetProps extends SheetHandlers {
+  /** A sheet (`rows`) or a workbook (`sheets`). Replacing the object reloads it: keep it stable (`useMemo`, state). */
+  spec: SheetSpec | WorkbookSpec;
+  className?: string;
+  /** The container fills its parent by default; give the parent a height. */
+  style?: CSSProperties;
+}
+
+export interface FuturSheetRef {
+  /** The sheet or workbook, once ready (`getSpec()` gives the edited cells back). */
+  readonly sheet: Spreadsheet | undefined;
+}
+
+/** An editable spreadsheet: `<FuturSheet spec={spec} onChange={save} />`. */
+export const FuturSheet = forwardRef<FuturSheetRef, FuturSheetProps>(function FuturSheet(props, ref) {
+  const { spec, className, style, ...handlers } = props;
+  const container = useRef<HTMLDivElement>(null);
+  const handle = useRef<SheetHandle>();
+  const latest = useRef<SheetHandlers>(handlers);
+  latest.current = handlers;
+
+  useEffect(() => {
+    const h = mountSpreadsheet(container.current!, spec, {
+      onReady: (s) => latest.current.onReady?.(s),
+      onError: (e) => (latest.current.onError ? latest.current.onError(e) : console.error(e)),
+      onChange: (p) => latest.current.onChange?.(p),
+      onResize: (p) => latest.current.onResize?.(p),
+      onSelect: (p) => latest.current.onSelect?.(p),
+      onFormat: (p) => latest.current.onFormat?.(p),
+    });
+    handle.current = h;
+    return () => {
+      h.destroy();
+      handle.current = undefined;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    handle.current?.update(spec);
+  }, [spec]);
+
+  useImperativeHandle(ref, () => ({ get sheet() { return handle.current?.sheet; } }), []);
 
   return createElement('div', { ref: container, className, style: { width: '100%', height: '100%', ...style } });
 });

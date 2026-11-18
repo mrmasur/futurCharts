@@ -1,5 +1,11 @@
 import {
   mountChart,
+  mountSpreadsheet,
+  type SheetEvents,
+  type SheetHandle,
+  type SheetSpec,
+  type Spreadsheet,
+  type WorkbookSpec,
   type ChartView,
   type ChartEvents,
   type ChartHandle,
@@ -65,6 +71,51 @@ export const FuturChart = defineComponent({
     });
     expose({ getChart: (): ChartView | undefined => handle?.chart });
 
+    return () => h('div', { ref: container, style: { width: '100%', height: '100%' } });
+  },
+});
+
+/**
+ * `<FuturSheet :spec="spec" @change="save" />`: an editable spreadsheet (a sheet
+ * with `rows`, or a workbook with `sheets`). Replacing `spec` reloads it; hold it
+ * in a `shallowRef`. Events: `ready`, `change`, `resize`, `select`, `format`, `error`.
+ * `getSheet()` through a template ref gives `getSpec()` (the edited cells).
+ */
+export const FuturSheet = defineComponent({
+  name: 'FuturSheet',
+  props: {
+    spec: { type: Object as PropType<SheetSpec | WorkbookSpec>, required: true },
+  },
+  emits: {
+    ready: (_sheet: Spreadsheet) => true,
+    error: (_error: unknown) => true,
+    change: (_payload: SheetEvents['change']) => true,
+    resize: (_payload: SheetEvents['resize']) => true,
+    select: (_payload: SheetEvents['select']) => true,
+    format: (_payload: SheetEvents['format']) => true,
+  },
+  setup(props, { emit, expose }) {
+    const container = ref<HTMLDivElement>();
+    let handle: SheetHandle | undefined;
+    onMounted(() => {
+      handle = mountSpreadsheet(container.value!, toRaw(props.spec), {
+        onReady: (s) => emit('ready', s),
+        onError: (e) => emit('error', e),
+        onChange: (p) => emit('change', p),
+        onResize: (p) => emit('resize', p),
+        onSelect: (p) => emit('select', p),
+        onFormat: (p) => emit('format', p),
+      });
+    });
+    watch(
+      () => props.spec,
+      (spec) => handle?.update(toRaw(spec)),
+    );
+    onBeforeUnmount(() => {
+      handle?.destroy();
+      handle = undefined;
+    });
+    expose({ getSheet: (): Spreadsheet | undefined => handle?.sheet });
     return () => h('div', { ref: container, style: { width: '100%', height: '100%' } });
   },
 });

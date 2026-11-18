@@ -48,6 +48,16 @@ Une grille éditable, en JSON comme les graphiques, avec les mêmes thèmes et f
   copier-coller d'un bloc avec Excel ou Google Sheets (« 1 234,5 » et « 15 % » compris).
 - **Mise en forme** : formats par colonne, cellules teintées (`heat`), barres dans les cellules (`bar`),
   règles conditionnelles, colonnes figées, ligne de totaux, zébrage, barre de formule, somme de la sélection.
+- **Dates** : colonnes `type: 'date'` (valeurs `YYYY-MM-DD` dans la spec), saisies en `18/11/2026` ou `18/11`,
+  affichées selon `dateFormat` ; dans les formules ce sont des numéros de jour, donc `=B1-A1` compte les jours
+  (`AUJOURDHUI`, `DATE`, `ANNEE`, `MOIS`, `JOUR`…).
+- **Fusion et mise en forme** : `merges: ['A1:A3']`, `cells: { B2: { bold: true, background: '#fde' } }`, ou depuis
+  la barre (⊞ fusionner / défusionner, G, I, alignement, couleur de fond et de texte, effacer ; Ctrl+B, Ctrl+I).
+- **Classeur** : `createWorkbook(el, { sheets: [...] })` ou `createSpreadsheet` (qui choisit selon la spec) ; onglets
+  pour changer, ajouter, renommer (double-clic) ou supprimer une feuille ; formules entre feuilles (`=Budget!F1`,
+  `=SOMME('Ventes 2026'!B1:B12)`).
+- **Frameworks** : `<FuturSheet spec={spec} onChange={…} />` (React), `<FuturSheet :spec @change />` (Vue),
+  `<futur-sheet>` (`defineFuturSheet()`), `{{futur-sheet this.spec onChange=…}}` (Ember, `FuturSheetModifier`).
 - Seules les lignes visibles sont dans le DOM : 10 000 lignes défilent sans à-coup. C'est du DOM, pas du GPU :
   la saisie, la sélection de texte et le presse-papiers le demandent.
 

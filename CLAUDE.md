@@ -37,6 +37,7 @@ Librairie de graphiques GPU pour une future app de BI (sources : Elasticsearch, 
 - Le texte posé sur une couleur prend `on: fill` (encre contrastée) ; posé sur un fond clair (piste, surface),
   il prend l'encre du thème. Ne jamais laisser du texte blanc déborder d'une marque sur le fond.
 - **Tableur** (`packages/core/src/sheet/`, demandé le 2026-11-18) : grille éditable en DOM (seule exception au rendu
-  GPU : saisie, sélection et presse-papiers l'exigent), formules maison (`formula.ts`), lignes virtualisées. Pas encore :
-  fusion de cellules, plusieurs feuilles, formats de date, wrappers React / Vue / Web Component.
+  GPU : saisie, sélection et presse-papiers l'exigent), formules maison (`formula.ts`), lignes virtualisées. Les données
+  vivent dans `SheetModel` (sans DOM) : un classeur garde un modèle par feuille et une seule vue. Dates, fusions, mise en
+  forme, classeur et wrappers faits. Les fusions sont ignorées pendant un tri. Pas encore : lien avec le catalogue dbt.
 - Les échelles produisent des positions normalisées ; le zoom ne modifie que la transformation de vue, jamais les batches.

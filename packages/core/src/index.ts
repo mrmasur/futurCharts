@@ -49,6 +49,11 @@ export { parseColor, withAlpha, sampleRamp, toCss } from './util/color';
 export { numberFormatter } from './util/format';
 export type { FormatSpec } from './util/format';
 
-export { Sheet, createSheet, parseInput } from './sheet/sheet';
-export type { SheetSpec, SheetColumn, SheetRule, SheetEvents, CellValue } from './sheet/sheet';
-export { evaluate as evaluateFormula, columnName, columnIndex, FormulaError } from './sheet/formula';
+export { Sheet, createSheet, parseInput, parseDate } from './sheet/sheet';
+export type { SheetSpec, SheetColumn, SheetRule, SheetEvents, CellValue, CellStyle } from './sheet/sheet';
+export { SheetModel } from './sheet/model';
+export { Workbook, createWorkbook, createSpreadsheet } from './sheet/workbook';
+export type { WorkbookSpec, Spreadsheet } from './sheet/workbook';
+export { evaluate as evaluateFormula, columnName, columnIndex, FormulaError, toSerial, fromSerial } from './sheet/formula';
+export { mountSpreadsheet } from './sheet/mount';
+export type { SheetHandle, SheetHandlers } from './sheet/mount';

@@ -1,4 +1,4 @@
-import type { SheetSpec } from '@futurcharts/core';
+import type { SheetSpec, WorkbookSpec } from '@futurcharts/core';
 
 const euro = { style: 'currency', currency: 'EUR', decimals: 0 } as const;
 
@@ -14,6 +14,7 @@ export function budgetSheet(): SheetSpec {
   ];
   const n = lines.length;
   return {
+    name: 'Budget',
     rows: lines.map(([poste, t1, t2, t3, t4], i) => ({
       poste,
       t1,
@@ -76,4 +77,63 @@ export function ordersSheet(): SheetSpec {
     rowHeight: 28,
     rules: [{ column: 'statut', when: { equals: 'En retard' }, style: { color: '#d03b3b', bold: true } }],
   };
+}
+
+/** A project plan: dates, durations computed from them, phases merged down the first column. */
+export function planningSheet(): SheetSpec {
+  const tasks: [string, string, string, string, string][] = [
+    ['Conception', 'Ateliers métiers', '2026-01-12', '2026-01-23', 'Claire'],
+    ['Conception', 'Maquettes', '2026-01-26', '2026-02-13', 'Hugo'],
+    ['Conception', 'Validation', '2026-02-16', '2026-02-20', 'Claire'],
+    ['Réalisation', 'Connecteurs ClickHouse', '2026-02-23', '2026-03-27', 'Inès'],
+    ['Réalisation', 'Graphiques', '2026-03-02', '2026-04-24', 'Hugo'],
+    ['Réalisation', 'Tableur', '2026-03-30', '2026-04-30', 'Malik'],
+    ['Lancement', 'Bêta privée', '2026-05-04', '2026-05-29', 'Inès'],
+    ['Lancement', 'Ouverture', '2026-06-01', '2026-06-05', 'Claire'],
+  ];
+  return {
+    name: 'Planning',
+    rows: tasks.map(([phase, tache, debut, fin, qui], i) => ({ phase, tache, debut, fin, duree: `=D${i + 1}-C${i + 1}+1`, qui })),
+    columns: [
+      { key: 'phase', label: 'Phase', width: 120 },
+      { key: 'tache', label: 'Tâche', width: 190 },
+      { key: 'debut', label: 'Début', type: 'date' },
+      { key: 'fin', label: 'Fin', type: 'date', dateFormat: { day: 'numeric', month: 'short', year: 'numeric' } },
+      { key: 'duree', label: 'Jours', type: 'number', editable: false, bar: true },
+      { key: 'qui', label: 'Responsable', width: 120 },
+    ],
+    merges: ['A1:A3', 'A4:A6', 'A7:A8'],
+    cells: {
+      A1: { bold: true, align: 'center', background: '#e8f0fd' },
+      A4: { bold: true, align: 'center', background: '#fdf1e3' },
+      A7: { bold: true, align: 'center', background: '#e6f6ee' },
+    },
+    totals: true,
+    frozenColumns: 2,
+  };
+}
+
+/** Figures read from the two other sheets. */
+export function summarySheet(): SheetSpec {
+  return {
+    name: 'Synthèse',
+    rows: [
+      { indicateur: 'Budget total', valeur: '=SOMME(Budget!F1:F6)' },
+      { indicateur: 'Poste le plus coûteux', valeur: '=MAX(Budget!F1:F6)' },
+      { indicateur: 'Durée du projet (jours)', valeur: '=MAX(Planning!D1:D8)-MIN(Planning!C1:C8)+1' },
+      { indicateur: 'Tâche la plus longue (jours)', valeur: '=MAX(Planning!E1:E8)' },
+      { indicateur: 'Coût par jour de projet', valeur: '=ARRONDI(B1/B3; 0)' },
+      { indicateur: 'Jours restants avant l’ouverture', valeur: '=MAX(0; Planning!C8-AUJOURDHUI())' },
+    ],
+    columns: [
+      { key: 'indicateur', label: 'Indicateur', width: 260 },
+      { key: 'valeur', label: 'Valeur', type: 'number', width: 160, format: { decimals: 0 } },
+    ],
+    cells: { A1: { bold: true }, B1: { bold: true, color: '#2f6fd6' } },
+    totals: false,
+  };
+}
+
+export function projectWorkbook(): WorkbookSpec {
+  return { sheets: [budgetSheet(), planningSheet(), summarySheet()] };
 }
