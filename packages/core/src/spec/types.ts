@@ -198,6 +198,7 @@ export type MarkStyle = { color?: string } & DeepPartial<
     Theme['marks']['pivot'] &
     Theme['marks']['polarHeatmap'] &
     Theme['marks']['splom'] &
+    Theme['marks']['globe'] &
     Theme['marks']['scatter3d'] &
     Theme['marks']['ridgeline'] &
     Theme['marks']['beeswarm'] &

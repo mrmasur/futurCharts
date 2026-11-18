@@ -140,6 +140,7 @@ Démo : `http://localhost:5273/gallery.html`, une application de tableau de bord
 | Jauges (suite) | `gauge` avec `zones` (seuils colorés), `needle`, `ticks`, `sweep` (ouverture en degrés), `rounded` |
 | Matrices (suite) | `heatmap` avec `circles` (punch card) ou `diverging` (corrélations, transform `correlation`), `polarHeatmap` (cases en anneaux) |
 | Multivarié (suite) | `splom` (matrice de nuages, `path` = champs), `scatter3d` (`x`, `y`, `z`, à tourner à la souris) |
+| Globe | `globe` (projection orthographique, `geo` pour les contours, points `x`/`y`, routes en grands cercles vers `x2`/`y2`, à tourner à la souris) |
 | Effets | `point` avec `pulse` (ondes), `bar` avec `track` (piste), `line` avec `colorByValue`, parts avec `cornerRadius`, `tree` avec `reverse` |
 | Bourse | `candlestick` (`y` haut, `y2` bas, `open`, `close` ; `style.ohlc` pour des barres OHLC) |
 | Cartes (suite) | `route` (de `x`, `y` à `x2`, `y2`, courbée ; épaisseur avec `size`) |

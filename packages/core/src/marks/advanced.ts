@@ -962,4 +962,165 @@ export const scatter3d: MarkDefinition = {
   },
 };
 
-export const ADVANCED_MARKS: Record<string, MarkDefinition> = { ridgeline, beeswarm, tilemap, pictorial, surface, horizon, polarHeatmap, splom, scatter3d };
+// -------------------------------------------------------------------- globe
+
+type Ring = [number, number][];
+function ringsOf(geo: unknown): Ring[] {
+  const out: Ring[] = [];
+  const walk = (g: any) => {
+    if (!g) return;
+    if (g.type === 'FeatureCollection') g.features.forEach((f: any) => walk(f.geometry));
+    else if (g.type === 'Feature') walk(g.geometry);
+    else if (g.type === 'Polygon') g.coordinates.forEach((r: Ring) => out.push(r));
+    else if (g.type === 'MultiPolygon') g.coordinates.forEach((p: Ring[]) => p.forEach((r) => out.push(r)));
+  };
+  walk(geo);
+  return out;
+}
+
+/**
+ * `globe`: the Earth in orthographic projection: country outlines from
+ * `layer.geo`, points at (`x` longitude, `y` latitude), and great-circle routes
+ * to (`x2`, `y2`). Drag to turn it; it spins on its own until then.
+ */
+export const globe: MarkDefinition = {
+  standalone: true,
+  symbol: 'circle',
+  scales: () => ({ x: new LinearScale(-1.06, 1.06), y: new LinearScale(-1.06, 1.06), aspect: 1 }),
+  build(ctx) {
+    const { layer, table } = ctx.data;
+    const { style, theme } = ctx;
+    const rings = ringsOf(layer.geo);
+    const xf = layer.encode.x, yf = layer.encode.y;
+    const lon = xf ? numbers(table, xf) : undefined;
+    const lat = yf ? numbers(table, yf) : undefined;
+    const lon2 = layer.encode.x2 ? numbers(table, layer.encode.x2) : undefined;
+    const lat2 = layer.encode.y2 ? numbers(table, layer.encode.y2) : undefined;
+    const gf = layer.encode.color;
+    const legendKeys: string[] = [];
+    const colors = Array.from({ length: table.length }, (_, i) => {
+      if (!gf) return ctx.paint(ctx.categorical(fieldLabel(ctx, xf ?? 'globe')), i);
+      const g = String(table.column(gf).values[i]);
+      if (!legendKeys.includes(g)) legendKeys.push(g);
+      return ctx.paint(ctx.categorical(g), i);
+    });
+    const D = Math.PI / 180;
+    let lambda = (ctx.state.lambda as number | undefined) ?? -10;
+    let phi = (ctx.state.phi as number | undefined) ?? 25;
+    let spinning = style.spin && ctx.state.lambda === undefined;
+    let last = 0;
+    const R = 1;
+    /** Orthographic projection; `v` > 0 on the visible hemisphere. */
+    const project = (lo: number, la: number) => {
+      const l = (lo - lambda) * D, p = la * D, p0 = phi * D;
+      const cp = Math.cos(p);
+      const v = Math.sin(p0) * Math.sin(p) + Math.cos(p0) * cp * Math.cos(l);
+      return { x: ctx.x.norm(R * cp * Math.sin(l)), y: ctx.y.norm(R * (Math.cos(p0) * Math.sin(p) - Math.sin(p0) * cp * Math.cos(l))), v };
+    };
+    const unit = ctx.x.norm(1) - ctx.x.norm(0);
+    // The sea: a hint of the first palette color over the surface.
+    const ocean = style.ocean === 'auto' ? mix(ctx.surface, parseColor(theme.palette.categorical[0]), 0.08) : parseColor(style.ocean);
+    const landInk = parseColor(style.land === 'auto' ? theme.axis.line.color : style.land);
+    const disc = ctx.renderer.createBatch('arc');
+    disc.update(new Float32Array([ctx.x.norm(0), ctx.y.norm(0), 0, R * unit, 0, Math.PI * 2, 0, 0, ocean[0], ocean[1], ocean[2], 1]), 1);
+    const lines = ctx.renderer.createBatch('line');
+    const dots = ctx.renderer.createBatch('point');
+    let shown: { x: number; y: number; i: number }[] = [];
+    const render = () => {
+      const seg: number[] = [];
+      // A polyline on the sphere: only the stretches on the visible side.
+      const path = (pts: Ring, c: RGBA, w: number) => {
+        let prev = project(pts[0][0], pts[0][1]);
+        for (let k = 1; k < pts.length; k++) {
+          const cur = project(pts[k][0], pts[k][1]);
+          if (prev.v > 0 && cur.v > 0) pushSegment(seg, prev.x, prev.y, cur.x, cur.y, c, w);
+          prev = cur;
+        }
+      };
+      if (style.graticule) {
+        const g = withAlpha(parseColor(theme.grid.y.color), 0.9);
+        for (let lo = -180; lo < 180; lo += 30) path(Array.from({ length: 37 }, (_, k) => [lo, -90 + k * 5] as [number, number]), g, 0.75);
+        for (let la = -60; la <= 60; la += 30) path(Array.from({ length: 73 }, (_, k) => [-180 + k * 5, la] as [number, number]), g, 0.75);
+      }
+      for (const ring of rings) path(ring, landInk, 0.9);
+      // Routes: great circles (spherical interpolation), on the visible side.
+      if (lon && lat && lon2 && lat2) {
+        for (let i = 0; i < table.length; i++) {
+          const a = [lon[i] * D, lat[i] * D], b = [lon2[i] * D, lat2[i] * D];
+          if (a.some(Number.isNaN) || b.some(Number.isNaN)) continue;
+          const va = [Math.cos(a[1]) * Math.cos(a[0]), Math.cos(a[1]) * Math.sin(a[0]), Math.sin(a[1])];
+          const vb = [Math.cos(b[1]) * Math.cos(b[0]), Math.cos(b[1]) * Math.sin(b[0]), Math.sin(b[1])];
+          const w = Math.acos(Math.max(-1, Math.min(1, va[0] * vb[0] + va[1] * vb[1] + va[2] * vb[2])));
+          const steps = Math.max(8, Math.round(w * 30));
+          const pts: Ring = [];
+          for (let k = 0; k <= steps; k++) {
+            const t = k / steps;
+            const s0 = w > 1e-6 ? Math.sin((1 - t) * w) / Math.sin(w) : 1 - t;
+            const s1 = w > 1e-6 ? Math.sin(t * w) / Math.sin(w) : t;
+            const v = va.map((q, j) => q * s0 + vb[j] * s1);
+            pts.push([Math.atan2(v[1], v[0]) / D, Math.atan2(v[2], Math.hypot(v[0], v[1])) / D]);
+          }
+          path(pts, withAlpha(colors[i], 0.75), 1.6);
+        }
+      }
+      lines.update(new Float32Array(seg), seg.length / LAYOUTS.line.stride);
+      const out: number[] = [];
+      shown = [];
+      const sf = ctx.surface;
+      if (lon && lat) {
+        for (let i = 0; i < table.length; i++) {
+          const p = project(lon[i], lat[i]);
+          if (!(p.v > 0)) continue;
+          const c = colors[i];
+          out.push(p.x, p.y, style.size, 0, c[0], c[1], c[2], c[3], sf[0], sf[1], sf[2], 1, 1.5);
+          shown.push({ x: p.x, y: p.y, i });
+        }
+      }
+      dots.update(new Float32Array(out), shown.length);
+    };
+    render();
+    let from: { tx: number; ty: number; lambda: number; phi: number } | undefined;
+    return {
+      draws: [{ batch: disc, enter: 'fade' }, { batch: lines, enter: 'fade' }, { batch: dots, enter: 'fade' }],
+      hit: emptyHit(),
+      labels: [],
+      legend: legendKeys.map((k) => ({ key: k, color: ctx.categorical(k) })),
+      animate(now) {
+        if (!spinning) return false;
+        if (last) lambda -= (now - last) * 0.006;
+        last = now;
+        render();
+        return true;
+      },
+      drag: {
+        start(tx, ty) {
+          if (Math.hypot(ctx.x.invert(tx), ctx.y.invert(ty)) > R) return false;
+          spinning = false;
+          from = { tx, ty, lambda, phi };
+          return true;
+        },
+        move(tx, ty) {
+          if (!from) return;
+          lambda = from.lambda - (tx - from.tx) * 180;
+          phi = Math.max(-80, Math.min(80, from.phi - (ty - from.ty) * 180));
+          ctx.state.lambda = lambda;
+          ctx.state.phi = phi;
+          render();
+        },
+        end() {
+          from = undefined;
+          return {};
+        },
+      },
+      pick(tx, ty): ShapeHit | null {
+        const hit = shown.find((p) => Math.hypot((p.x - tx) / ctx.pixel[0], (p.y - ty) / ctx.pixel[1]) <= style.size / 2 + 3);
+        if (!hit) return null;
+        const row = table.row(hit.i);
+        const title = layer.encode.key ? String(row[layer.encode.key]) : gf ? String(row[gf]) : `${row[xf!]}, ${row[yf!]}`;
+        return { title, rows: gf ? [{ label: fieldLabel(ctx, gf), value: String(row[gf]) }] : [] };
+      },
+    };
+  },
+};
+
+export const ADVANCED_MARKS: Record<string, MarkDefinition> = { ridgeline, beeswarm, tilemap, pictorial, surface, horizon, polarHeatmap, splom, scatter3d, globe };

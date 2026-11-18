@@ -576,6 +576,16 @@ export type Entry = {
 };
 export const entries: Entry[] = [
   {
+    title: 'Globe et routes aériennes',
+    caption: 'globe · projection orthographique, routes en grands cercles ; glisser pour le tourner (il tourne seul jusque-là)',
+    spec: {
+      title: 'Vols depuis Paris et Dubaï',
+      data: routes,
+      fields: { hub: { label: 'Départ' } },
+      layers: [{ mark: 'globe', geo: countriesGeo, encode: { x: 'lon2', y: 'lat2', x2: 'lon', y2: 'lat', color: 'hub', key: 'city' } }],
+    },
+  },
+  {
     title: 'Jauge à zones',
     caption: 'gauge · style.zones (couleurs par seuil), aiguille, graduations, ouverture de 240°',
     spec: {
@@ -1946,7 +1956,7 @@ export const GROUPS: [string, string[]][] = [
   ['Arbres et ensembles', ['Bulles groupées', 'Diagramme en arcs', 'Dendrogramme', 'Arbre radial', 'Arbre de bas en haut', 'Organigramme', 'Icicle', 'Flame chart', 'Diagramme de Venn']],
   ['Texte et chronologie', ['Nuage de mots', 'Frise chronologique']],
   ['Indicateurs', ['Tuiles KPI', 'Jauge', 'Jauge à zones', 'Compteur', 'Barres sur piste', 'Pyramide', 'Graphique pictographique']],
-  ['Cartes', ['Points pulsants', 'Carte en tuiles hexagonales', 'Routes aériennes', 'Points sur une carte du monde', 'Choroplèthe mondiale', 'Bulles sur une carte', 'Zoom sur l’Europe et mise en avant']],
+  ['Cartes', ['Globe et routes aériennes', 'Points pulsants', 'Carte en tuiles hexagonales', 'Routes aériennes', 'Points sur une carte du monde', 'Choroplèthe mondiale', 'Bulles sur une carte', 'Zoom sur l’Europe et mise en avant']],
   ['Mise en avant', ['Mise en avant dans un camembert', 'Mise en avant dans un treemap', 'Mise en avant d’une série', 'Mise en avant sur une carte de chaleur']],
 ];
 

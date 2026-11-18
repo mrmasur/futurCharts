@@ -109,6 +109,8 @@ export interface Theme {
      * `diverging`: colors from one hue (negative) through neutral (0) to another (positive), symmetric around zero (correlations).
      */
     heatmap: { radius: number; labels: boolean; gap: number; circles: boolean; diverging: boolean };
+    /** Globe: `layer.geo` outlines, points (`x` lon, `y` lat) and routes (to `x2`, `y2`). Drag to turn; `spin` until then. */
+    globe: { spin: boolean; size: number; graticule: boolean; ocean: string; land: string };
     /** Scatter plot matrix: every pair of `path` fields, histograms on the diagonal. `size`: dot px. */
     splom: { size: number; opacity: number; bins: number };
     /** 3D scatter (`x`, `y`, `z`): drag to turn it; `spin` turns it on its own until then. `size`: dot px. */
@@ -314,6 +316,7 @@ export const lightTheme: Theme = {
     heatmap: { radius: 3, labels: true, gap: 2, circles: false, diverging: false },
     polarHeatmap: { innerRadius: 0.22, gap: 1.5, labels: true },
     splom: { size: 4, opacity: 0.7, bins: 14 },
+    globe: { spin: true, size: 6, graticule: true, ocean: 'auto', land: 'auto' },
     scatter3d: { size: 7, opacity: 0.85, spin: true, perspective: 4 },
     arc: { innerRadius: 0, gap: 2, labels: true, center: true, startAngle: 0, endAngle: 360, cornerRadius: 0 },
     treemap: { gap: 2, radius: 4, labels: true, header: 22 },
