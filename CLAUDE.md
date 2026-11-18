@@ -36,4 +36,7 @@ Librairie de graphiques GPU pour une future app de BI (sources : Elasticsearch, 
 - Les marques animées dans le temps (`race`, `motion`) exposent un `Timeline` ; le graphique ajoute la barre de lecture.
 - Le texte posé sur une couleur prend `on: fill` (encre contrastée) ; posé sur un fond clair (piste, surface),
   il prend l'encre du thème. Ne jamais laisser du texte blanc déborder d'une marque sur le fond.
+- **Tableur** (`packages/core/src/sheet/`, demandé le 2026-11-18) : grille éditable en DOM (seule exception au rendu
+  GPU : saisie, sélection et presse-papiers l'exigent), formules maison (`formula.ts`), lignes virtualisées. Pas encore :
+  fusion de cellules, plusieurs feuilles, formats de date, wrappers React / Vue / Web Component.
 - Les échelles produisent des positions normalisées ; le zoom ne modifie que la transformation de vue, jamais les batches.

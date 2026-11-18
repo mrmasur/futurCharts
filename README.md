@@ -19,6 +19,40 @@ dans la barre d'outils, hauteur et animation en contrôles, spec JSON exacte sou
 d'état sur les exemples de transitions. Les stories sont générées depuis `apps/demo/src/library.ts` :
 `npm run stories` après l'ajout d'un exemple.
 
+## Tableur
+
+```ts
+import { createSheet } from '@futurcharts/core';
+
+const sheet = await createSheet(element, {
+  rows: [{ poste: 'Salons', t1: 42000, t2: 18000, total: '=SOMME(B1:C1)' }],
+  columns: [
+    { key: 'poste', label: 'Poste', width: 180 },
+    { key: 't1', label: 'T1', format: { style: 'currency', currency: 'EUR', decimals: 0 } },
+    { key: 'total', label: 'Total', type: 'number', editable: false, bar: true },
+  ],
+  totals: true,
+  rules: [{ column: 'total', when: { gt: 50000 }, style: { color: '#1f8a4c', bold: true } }],
+});
+sheet.on('change', ({ row, column, value }) => save(row, column, value));
+sheet.getSpec(); // cellules, largeurs, hauteurs et tri tels que l'utilisateur les a laissés
+```
+
+Une grille éditable, en JSON comme les graphiques, avec les mêmes thèmes et formats :
+- **Formules** : références A1 et plages, `+ - * / ^ %`, comparaisons, `&`, fonctions en anglais ou en français
+  (`SUM`/`SOMME`, `AVERAGE`/`MOYENNE`, `MIN`, `MAX`, `COUNT`/`NB`, `ROUND`/`ARRONDI`, `IF`/`SI`, `AND`/`ET`…),
+  erreurs à la manière d'un tableur (`#DIV/0!`, `#REF!`, `#CYCLE!`).
+- **À la main** : largeur des colonnes (double-clic : ajustée au contenu), hauteur des lignes, tri par clic sur
+  l'en-tête ; tout est restitué par `getSpec()` et l'événement `resize`.
+- **Au clavier** : flèches, Maj pour étendre, Entrée / F2 / saisie pour éditer, Tab, Suppr, Ctrl+Z ;
+  copier-coller d'un bloc avec Excel ou Google Sheets (« 1 234,5 » et « 15 % » compris).
+- **Mise en forme** : formats par colonne, cellules teintées (`heat`), barres dans les cellules (`bar`),
+  règles conditionnelles, colonnes figées, ligne de totaux, zébrage, barre de formule, somme de la sélection.
+- Seules les lignes visibles sont dans le DOM : 10 000 lignes défilent sans à-coup. C'est du DOM, pas du GPU :
+  la saisie, la sélection de texte et le presse-papiers le demandent.
+
+Démo : `gallery.html#/tableur` ; Storybook : page *Tableur*.
+
 ## Utilisation
 
 ```ts

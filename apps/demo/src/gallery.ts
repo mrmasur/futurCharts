@@ -1,4 +1,5 @@
-import { createChart, type Chart, type ChartSpec, type ChartView } from '@futurcharts/core';
+import { createChart, createSheet, type Chart, type ChartSpec, type ChartView, type Sheet } from '@futurcharts/core';
+import { budgetSheet, ordersSheet } from './sheets';
 import { CATEGORIES, CHANNELS, COUNTRIES, DASHBOARDS, type Card, type Dashboard, type Filters } from './dashboards';
 import { entries, GROUPS, PALETTES, type Entry } from './library';
 
@@ -56,6 +57,7 @@ function buildNav() {
     <h3>Tableaux de bord</h3>
     ${DASHBOARDS.map((d) => `<a href="#/${d.id}" data-route="${d.id}">${icon(d.id)}${d.title}</a>`).join('')}
     <h3 style="margin-top:18px">Galerie</h3>
+    <a href="#/tableur" data-route="tableur">${icon('lib')}Tableur</a>
     <a href="#/galerie" data-route="galerie">${icon('lib')}Tous les graphiques<span class="count">${entries.length}</span></a>
     ${families.map((f) => `<a href="#/galerie/${f.id}" data-route="galerie/${f.id}" class="sub">${f.name}<span class="count">${f.entries.length}</span></a>`).join('')}`;
 }
@@ -181,6 +183,7 @@ function refresh() {
       m.charts.forEach((c, i) => c.update(m.card.tiles ? tileSpec(specs[i]) : withTheme(specs[i])));
     }
     for (const c of thumbCharts) c.update({ ...c.getSpec(), theme: thumbTheme() });
+    for (const s of sheets) s.update({ ...s.getSpec(), theme: themeFor() });
   }
 }
 
@@ -368,8 +371,38 @@ async function renderDemo(board: HTMLElement, e: Entry) {
   board.appendChild(info);
 }
 
+let sheets: Sheet[] = [];
+
+/** The spreadsheet page: a budget with formulas, and 10 000 orders to scroll. */
+async function renderSheets(board: HTMLElement) {
+  const help = document.createElement('p');
+  help.className = 'sheet-help';
+  help.textContent =
+    'Double-clic ou saisie pour modifier · formules (=SOMME(B1:E1), =SI(…)) · glisser le bord d’un en-tête pour élargir (double-clic : ajuster), le bas d’un numéro de ligne pour la hauteur · clic sur un en-tête pour trier · Ctrl+C / Ctrl+V avec Excel · Ctrl+Z pour annuler.';
+  board.appendChild(help);
+  for (const [title, spec, height] of [
+    ['Budget marketing 2026', budgetSheet, 330],
+    ['Commandes · 10 000 lignes', ordersSheet, 460],
+  ] as const) {
+    const card = document.createElement('section');
+    card.className = 'card span-12';
+    card.innerHTML = '<header><div><h2></h2><p></p></div></header>';
+    card.querySelector('h2')!.textContent = title;
+    const body = document.createElement('div');
+    body.style.cssText = `height:${height}px;padding:0 12px 12px;`;
+    card.appendChild(body);
+    board.appendChild(card);
+    const sheet = await createSheet(body, { ...spec(), theme: themeFor() });
+    const sub = card.querySelector('header p')!;
+    sheet.on('change', ({ row, column, value }) => (sub.textContent = `Ligne ${row + 1}, ${column} : ${value ?? 'vide'}`));
+    sheets.push(sheet);
+  }
+}
+
 async function render() {
   closeMenu();
+  for (const s of sheets) s.destroy();
+  sheets = [];
   for (const m of mounted) for (const c of m.charts) c.destroy();
   mounted = [];
   thumbObserver?.disconnect();
@@ -394,6 +427,10 @@ async function render() {
     title.textContent = dashboard.title;
     subtitle.textContent = dashboard.subtitle;
     for (const card of dashboard.cards(filters)) mounted.push(await mountCard(board, card));
+  } else if (route === 'tableur') {
+    title.textContent = 'Tableur';
+    subtitle.textContent = 'Une grille éditable, pour qui veut les chiffres eux-mêmes';
+    await renderSheets(board);
   } else if (route.startsWith('demo/')) {
     const e = entries.find((x) => slug(x.title) === route.slice(5)) ?? entries[0];
     title.textContent = e.title;

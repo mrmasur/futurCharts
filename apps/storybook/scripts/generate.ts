@@ -10,7 +10,8 @@ import { GROUPS, entries } from '../../demo/src/library';
 
 const dir = fileURLToPath(new URL('../stories/', import.meta.url));
 mkdirSync(dir, { recursive: true });
-for (const f of readdirSync(dir)) if (f.endsWith('.stories.ts')) rmSync(dir + f);
+// Only the generated files (numbered); hand-written stories stay.
+for (const f of readdirSync(dir)) if (/^\d\d-.*\.stories\.ts$/.test(f)) rmSync(dir + f);
 
 const ascii = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[’']/g, ' ');
 const slug = (s: string) => ascii(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');

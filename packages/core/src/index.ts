@@ -48,3 +48,7 @@ export type { Scale, Tick } from './scale/scales';
 export { parseColor, withAlpha, sampleRamp, toCss } from './util/color';
 export { numberFormatter } from './util/format';
 export type { FormatSpec } from './util/format';
+
+export { Sheet, createSheet, parseInput } from './sheet/sheet';
+export type { SheetSpec, SheetColumn, SheetRule, SheetEvents, CellValue } from './sheet/sheet';
+export { evaluate as evaluateFormula, columnName, columnIndex, FormulaError } from './sheet/formula';
