@@ -140,6 +140,12 @@ export interface MarkDraw {
   data?: Float32Array;
   /** How this draw enters: grow / reveal (default), `fade`, or `none`. */
   enter?: 'fade' | 'none';
+  /**
+   * Identity of each instance (with `data`): after a data change, an instance
+   * moves from the one with the same key in the previous state, and a new key
+   * grows from nothing. Rect and point batches only.
+   */
+  keys?: string[];
 }
 
 /** What a shape mark reports under the pointer (tooltip content). */

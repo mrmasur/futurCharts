@@ -76,7 +76,7 @@ const tileSpec = (spec: ChartSpec): ChartSpec => ({ ...spec, theme: themeFor() }
 function cardsForFamily(f: (typeof families)[number]): Card[] {
   return f.entries.map((e) => {
     const spec = e.spec ?? { layers: [] };
-    const isFlow = spec.layers.some((l) => ['flow', 'network', 'chord', 'pack', 'race', 'tree', 'icicle', 'venn', 'wordcloud', 'timeline'].includes(l.mark));
+    const isFlow = spec.layers.some((l) => ['flow', 'network', 'chord', 'pack', 'race', 'tree', 'icicle', 'venn', 'wordcloud', 'timeline', 'ridgeline', 'horizon'].includes(l.mark));
     return {
       id: slug(e.title),
       title: spec.title ?? e.title,
@@ -324,6 +324,23 @@ async function renderDemo(board: HTMLElement, e: Entry) {
   back.href = f ? `#/galerie/${f.id}` : '#/galerie';
   back.textContent = `← ${f?.name ?? 'Galerie'}`;
   nav.append(back, link(list[i - 1], '‹ Précédent'), link(list[i + 1], 'Suivant ›'));
+  // Data states: switching one is a transition (the chart keeps each datum's identity).
+  if (e.states) {
+    const seg = document.createElement('div');
+    seg.className = 'seg';
+    e.states.forEach((st, k) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = st.label;
+      b.setAttribute('aria-pressed', String(k === 0));
+      b.addEventListener('click', () => {
+        for (const o of seg.querySelectorAll('button')) o.setAttribute('aria-pressed', String(o === b));
+        for (const c of mounted.flatMap((m) => m.charts)) c.update({ ...c.getSpec(), data: st.data });
+      });
+      seg.appendChild(b);
+    });
+    nav.appendChild(seg);
+  }
   const card = cardsForFamily({ id: 'x', name: '', entries: [e] })[0];
   card.span = 12;
   card.height = card.tiles ? 'xs' : 'l';

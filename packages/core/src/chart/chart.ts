@@ -441,6 +441,8 @@ export class Chart implements SyncMember {
   // ------------------------------------------------------------------ compile
 
   private disposeMarks(): void {
+    // Their batches go: a running transition has nothing left to blend.
+    this.morph = undefined;
     for (const b of this.built) {
       for (const d of b.mark.draws) d.batch.destroy();
       for (const d of b.sel?.draws ?? []) d.batch.destroy();
@@ -449,6 +451,8 @@ export class Chart implements SyncMember {
   }
 
   private compile(): void {
+    // What is on screen now: the state a transition starts from.
+    const before = this.snapshot();
     this.disposeMarks();
     this.picked = [];
     this.shape = undefined;
@@ -759,7 +763,71 @@ export class Chart implements SyncMember {
       }
     }
     this.joinSync();
+    this.startMorph(before);
     this.requestRender();
+  }
+
+  // -------------------------------------------------------------- transitions
+
+  private morph?: { start: number; duration: number; batches: Batch[] };
+  private morphProgress = 1;
+
+  /** Instances with an identity, per layer and draw, as they are now. */
+  private snapshot(): Map<number, ({ keys: string[]; data: Float32Array; kind: string } | null)[]> {
+    const out = new Map<number, ({ keys: string[]; data: Float32Array; kind: string } | null)[]>();
+    for (const b of this.built) {
+      out.set(b.data.index, b.mark.draws.map((d) => (d.keys && d.data ? { keys: d.keys, data: d.data, kind: d.batch.kind } : null)));
+    }
+    return out;
+  }
+
+  /**
+   * After a data change, every keyed instance moves from where it was (same
+   * key) and new ones grow from nothing. The GPU blends the two states.
+   */
+  private startMorph(before: ReturnType<Chart['snapshot']>): void {
+    this.endMorph();
+    const anim = this.spec.animation;
+    if (!before.size || anim === false || prefersReducedMotion()) return;
+    const batches: Batch[] = [];
+    for (const b of this.built) {
+      const old = before.get(b.data.index);
+      if (!old) continue;
+      b.mark.draws.forEach((d, di) => {
+        const o = old[di];
+        if (!d.keys || !d.data || !o || o.kind !== d.batch.kind || !d.batch.setPrevious) return;
+        const stride = LAYOUTS[d.batch.kind].stride;
+        const at = new Map(o.keys.map((k, i) => [k, i]));
+        const prev = new Float32Array(d.keys.length * stride);
+        let moved = false;
+        d.keys.forEach((k, i) => {
+          const j = at.get(k);
+          if (j !== undefined) {
+            prev.set(o.data.subarray(j * stride, (j + 1) * stride), i * stride);
+            for (let q = 0; q < stride; q++) if (prev[i * stride + q] !== d.data![i * stride + q]) moved = true;
+            return;
+          }
+          // New: from nothing. A bar from its baseline, a point from size zero.
+          prev.set(d.data!.subarray(i * stride, (i + 1) * stride), i * stride);
+          if (d.batch.kind === 'rect') {
+            const horizontal = prev[i * stride + 20] > 0.5;
+            if (horizontal) prev[i * stride + 2] = prev[i * stride];
+            else prev[i * stride + 3] = prev[i * stride + 1];
+          } else if (d.batch.kind === 'arc') prev[i * stride + 5] = prev[i * stride + 4];
+          else prev[i * stride + 2] = 0;
+          moved = true;
+        });
+        if (!moved) return;
+        d.batch.setPrevious(prev);
+        batches.push(d.batch);
+      });
+    }
+    if (batches.length) this.morph = { start: NaN, duration: typeof anim === 'number' ? anim : 650, batches };
+  }
+
+  private endMorph(): void {
+    for (const b of this.morph?.batches ?? []) b.setPrevious?.(null);
+    this.morph = undefined;
   }
 
   // --------------------------------------------------------------------- sync
@@ -1173,6 +1241,15 @@ export class Chart implements SyncMember {
     this.enterProgress = enterT;
     // Lines and fills are revealed left to right through their clip.
     const reveal = enterT < 1 ? 1 - Math.pow(1 - enterT, 3) : 1;
+    // Transition between two data states: starts with its first frame.
+    let morphT = 1;
+    if (this.morph) {
+      if (Number.isNaN(this.morph.start)) this.morph.start = now;
+      morphT = Math.min(1, (now - this.morph.start) / this.morph.duration);
+      if (morphT < 1) animating = true;
+    }
+    const morphing = morphT < 1 ? new Set(this.morph!.batches) : undefined;
+    this.morphProgress = morphT;
     for (const b of this.built) if (b.mark.animate?.(now)) animating = true;
 
     // With a selection, selectable marks are dimmed and the selected ones redrawn on top.
@@ -1189,11 +1266,12 @@ export class Chart implements SyncMember {
         }
         const grows = kind === 'rect' || kind === 'arc' || kind === 'point';
         const c = !grows && reveal < 1 ? { ...clip, width: clip.width * reveal } : clip;
-        calls.push({ batch: d.batch, transform: T, clip: c, pixelSnap: d.pixelSnap, opacity, progress: grows ? enterT : 1 });
+        calls.push({ batch: d.batch, transform: T, clip: c, pixelSnap: d.pixelSnap, opacity, progress: grows ? enterT : 1, morph: morphing?.has(d.batch) ? morphT : 1 });
       }
       for (const d of b.sel?.draws ?? []) calls.push({ batch: d.batch, transform: T, clip, pixelSnap: d.pixelSnap });
     }
     this.renderer.render({ clearColor: parseColor(theme.background), calls });
+    if (this.morph && morphT >= 1) this.endMorph();
     this.drawOverlay(L);
     this.drawNavigator(L);
     this.updateControls();
@@ -1348,8 +1426,9 @@ export class Chart implements SyncMember {
   private drawLabels(L: Layout): void {
     const { ctx, theme } = this;
     const T = L.transform;
-    // Labels fade in at the end of the entry animation.
-    if (this.enterProgress < 0.75) return;
+    // Labels fade in at the end of the entry animation, and come back after a transition
+    // (they are placed for the new state: drawn while bars move, they would point at nothing).
+    if (this.enterProgress < 0.75 || this.morphProgress < 1) return;
     ctx.save();
     ctx.globalAlpha = Math.min(1, (this.enterProgress - 0.75) / 0.25);
     const avoid: { l: MarkLabel; ax: number; ay: number; y: number }[] = [];

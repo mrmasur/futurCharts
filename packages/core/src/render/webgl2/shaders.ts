@@ -7,7 +7,10 @@ uniform vec4 u_t;        // sx, sy, ox, oy
 uniform float u_dpr;
 uniform float u_snap;
 uniform float u_progress;
+uniform float u_morph;
 vec2 toPx(vec2 p) { return p * u_t.xy + u_t.zw; }
+// Transition between two data states, eased in and out.
+float morphK() { float t = clamp(u_morph, 0.0, 1.0); return t * t * (3.0 - 2.0 * t); }
 // Entry animation for one instance: \`stagger\` in [0, 1] delays it (a wave across the chart), eased out.
 float enterK(float stagger) {
   float k = clamp(u_progress * 1.4 - clamp(stagger, 0.0, 1.0) * 0.4, 0.0, 1.0);
@@ -32,6 +35,8 @@ layout(location=2) in vec4 a_stroke;
 layout(location=3) in vec4 a_radii;
 layout(location=4) in vec4 a_params;
 layout(location=5) in float a_axis;
+layout(location=6) in vec4 a_prect;
+layout(location=7) in vec4 a_pfill;
 out vec2 v_p;
 flat out vec2 v_half;
 flat out vec4 v_fill;
@@ -40,6 +45,12 @@ flat out vec4 v_radii;
 flat out float v_sw;
 void main() {
   vec4 r = a_rect;
+  vec4 fill = a_fill;
+  if (u_morph < 1.0) {
+    float m = morphK();
+    r = mix(a_prect, a_rect, m);
+    fill = mix(a_pfill, a_fill, m);
+  }
   if (u_progress < 1.0) {
     // Grow from the start corner along the value axis, in a wave along the categories.
     vec2 c = (r.xy + r.zw) * 0.5;
@@ -77,7 +88,7 @@ void main() {
   vec2 pos = mix(mn - 1.0, mx + 1.0, corner());
   v_p = pos - center;
   v_half = half_;
-  v_fill = a_fill; v_stroke = a_stroke;
+  v_fill = fill; v_stroke = a_stroke;
   v_radii = min(a_radii, vec4(min(half_.x, half_.y)));
   v_sw = a_params.x;
   gl_Position = toClip(pos);
@@ -111,6 +122,8 @@ layout(location=0) in vec4 a_point;
 layout(location=1) in vec4 a_fill;
 layout(location=2) in vec4 a_stroke;
 layout(location=3) in float a_sw;
+layout(location=4) in vec4 a_ppoint;
+layout(location=5) in vec4 a_pfill;
 out vec2 v_p;
 flat out float v_r;
 flat out float v_shape;
@@ -118,12 +131,19 @@ flat out vec4 v_fill;
 flat out vec4 v_stroke;
 flat out float v_sw;
 void main() {
-  vec2 center = toPx(a_point.xy);
-  float r = a_point.z * 0.5 * (u_progress < 1.0 ? enterK(a_point.x) : 1.0);
+  vec4 pt = a_point;
+  vec4 fill = a_fill;
+  if (u_morph < 1.0) {
+    float m = morphK();
+    pt.xyz = mix(a_ppoint.xyz, a_point.xyz, m);
+    fill = mix(a_pfill, a_fill, m);
+  }
+  vec2 center = toPx(pt.xy);
+  float r = pt.z * 0.5 * (u_progress < 1.0 ? enterK(pt.x) : 1.0);
   float ext = r + a_sw + 1.0;
   vec2 off = (corner() * 2.0 - 1.0) * ext;
   v_p = off; v_r = r; v_shape = a_point.w;
-  v_fill = a_fill; v_stroke = a_stroke; v_sw = a_sw;
+  v_fill = fill; v_stroke = a_stroke; v_sw = a_sw;
   gl_Position = toClip(center + off);
 }`;
 
@@ -220,6 +240,9 @@ const ARC_VS = VS_COMMON + /* glsl */ `
 layout(location=0) in vec4 a_arc;
 layout(location=1) in vec4 a_angles;
 layout(location=2) in vec4 a_fill;
+layout(location=3) in vec4 a_parc;
+layout(location=4) in vec4 a_pangles;
+layout(location=5) in vec4 a_pfill;
 out vec2 v_p;
 flat out vec4 v_geo;   // r0, r1 (px), a0, a1
 flat out float v_gap;
@@ -227,14 +250,24 @@ flat out vec4 v_fill;
 // Direction of a clockwise angle from 12 o'clock, in screen space (y down).
 vec2 dirOf(float a) { return vec2(sin(a), -cos(a)); }
 void main() {
-  vec2 center = toPx(a_arc.xy);
+  vec4 arc = a_arc;
+  vec4 ang = a_angles;
+  vec4 fill = a_fill;
+  if (u_morph < 1.0) {
+    // A slice moves to its new angles, radii and color.
+    float m = morphK();
+    arc = mix(a_parc, a_arc, m);
+    ang.xy = mix(a_pangles.xy, a_angles.xy, m);
+    fill = mix(a_pfill, a_fill, m);
+  }
+  vec2 center = toPx(arc.xy);
   float scale = abs(u_t.x);
-  float r0 = a_arc.z * scale;
-  float r1 = a_arc.w * scale;
+  float r0 = arc.z * scale;
+  float r1 = arc.w * scale;
   // Entry: the whole circle sweeps open clockwise.
   float k = u_progress < 1.0 ? enterK(0.0) : 1.0;
-  float a0 = a_angles.x * k;
-  float a1 = a_angles.y * k;
+  float a0 = ang.x * k;
+  float a1 = ang.y * k;
   float sweep = a1 - a0;
   // Bounding box of the sector only: the arc ends, plus every quarter turn it passes.
   // A slice of a pie then shades its own pixels instead of the whole disc.
@@ -257,7 +290,7 @@ void main() {
   v_p = off;
   v_geo = vec4(r0, r1, a0, a1);
   v_gap = a_angles.z;
-  v_fill = a_fill;
+  v_fill = fill;
   gl_Position = toClip(center + off);
 }`;
 

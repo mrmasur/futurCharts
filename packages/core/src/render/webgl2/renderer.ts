@@ -11,13 +11,19 @@ import { SHADERS } from './shaders';
 
 interface Program {
   program: WebGLProgram;
-  u: Record<'u_res' | 'u_t' | 'u_dpr' | 'u_snap' | 'u_opacity' | 'u_progress', WebGLUniformLocation | null>;
+  u: Record<'u_res' | 'u_t' | 'u_dpr' | 'u_snap' | 'u_opacity' | 'u_progress' | 'u_morph', WebGLUniformLocation | null>;
 }
+
+/** Attributes that a transition blends, per primitive: their index in the layout. */
+const MORPHED: Partial<Record<PrimitiveKind, number[]>> = { rect: [0, 1], point: [0, 1], arc: [0, 1, 2] };
 
 class GLBatch implements Batch {
   count = 0;
   readonly vao: WebGLVertexArrayObject;
   private buffer: WebGLBuffer;
+  private prev?: WebGLBuffer;
+  /** A previous state is bound (attributes after the layout's own locations). */
+  hasPrevious = false;
 
   constructor(private gl: WebGL2RenderingContext, readonly kind: PrimitiveKind) {
     const layout = LAYOUTS[kind];
@@ -43,8 +49,37 @@ class GLBatch implements Batch {
     this.count = count;
   }
 
+  setPrevious(data: Float32Array | null): void {
+    const morphed = MORPHED[this.kind];
+    if (!morphed) return;
+    const gl = this.gl;
+    const layout = LAYOUTS[this.kind];
+    const base = layout.attributes.length;
+    gl.bindVertexArray(this.vao);
+    if (!data) {
+      morphed.forEach((_, k) => gl.disableVertexAttribArray(base + k));
+      gl.bindVertexArray(null);
+      this.hasPrevious = false;
+      return;
+    }
+    if (!this.prev) this.prev = gl.createBuffer()!;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.prev);
+    gl.bufferData(gl.ARRAY_BUFFER, data.subarray(0, this.count * layout.stride), gl.DYNAMIC_DRAW);
+    // The blended attributes again, read from the previous buffer at the next locations.
+    morphed.forEach((index, k) => {
+      let offset = 0;
+      for (let a = 0; a < index; a++) offset += layout.attributes[a].size;
+      gl.enableVertexAttribArray(base + k);
+      gl.vertexAttribPointer(base + k, layout.attributes[index].size, gl.FLOAT, false, layout.stride * 4, offset * 4);
+      gl.vertexAttribDivisor(base + k, 1);
+    });
+    gl.bindVertexArray(null);
+    this.hasPrevious = true;
+  }
+
   destroy(): void {
     this.gl.deleteBuffer(this.buffer);
+    if (this.prev) this.gl.deleteBuffer(this.prev);
     this.gl.deleteVertexArray(this.vao);
     this.count = 0;
   }
@@ -94,6 +129,7 @@ class GLCore {
       gl.uniform1f(prog.u.u_snap, call.pixelSnap ? 1 : 0);
       gl.uniform1f(prog.u.u_opacity, call.opacity ?? 1);
       gl.uniform1f(prog.u.u_progress, call.progress ?? 1);
+      gl.uniform1f(prog.u.u_morph, batch.hasPrevious ? (call.morph ?? 1) : 1);
       if (call.clip) {
         const c = call.clip;
         gl.enable(gl.SCISSOR_TEST);
@@ -153,6 +189,7 @@ class GLCore {
         u_snap: gl.getUniformLocation(program, 'u_snap'),
         u_opacity: gl.getUniformLocation(program, 'u_opacity'),
         u_progress: gl.getUniformLocation(program, 'u_progress'),
+        u_morph: gl.getUniformLocation(program, 'u_morph'),
       },
     };
     this.programs.set(kind, p);

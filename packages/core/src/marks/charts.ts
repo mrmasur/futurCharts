@@ -12,7 +12,7 @@ import type { LayerSpec } from '../spec/types';
 import { parseColor, withAlpha } from '../util/color';
 import { Tween } from './animate';
 import { pushArc, pushRect, pushSegment, pushVertex } from './primitives';
-import { emptyHit, type BuildContext, type BuiltMark, type MarkDefinition, type MarkLabel, type ShapeHit } from './registry';
+import { emptyHit, type BuildContext, type BuiltMark, type MarkDefinition, type MarkDraw, type MarkLabel, type ShapeHit } from './registry';
 
 const TAU = Math.PI * 2;
 
@@ -223,6 +223,8 @@ function arcMark(defaultInner: number): MarkDefinition {
       const unit = ctx.x.norm(1) - ctx.x.norm(0);
       const at = (a: number, r: number): [number, number] => [ctx.x.norm(Math.sin(a) * r), ctx.y.norm(Math.cos(a) * r)];
       const batch = ctx.renderer.createBatch('arc');
+      // Slices keep their identity across data changes: a new share is a transition.
+      const draw: MarkDraw = { batch, keys: slices.map((d) => d.key), data: new Float32Array(0) };
       const write = () => {
         const g = tween.current;
         const out: number[] = [];
@@ -233,7 +235,8 @@ function arcMark(defaultInner: number): MarkDefinition {
           const c = colors[i];
           pushArc(out, cx, cy, r0 * unit, outer[i] * unit, a0, a1, slices.length > 1 ? style.gap : 0, [c[0], c[1], c[2], c[3] * g[i * 2 + 1]]);
         });
-        batch.update(new Float32Array(out), slices.length);
+        draw.data = new Float32Array(out);
+        batch.update(draw.data, slices.length);
       };
       const labels: MarkLabel[] = [];
       const placeLabels = () => {
@@ -288,7 +291,7 @@ function arcMark(defaultInner: number): MarkDefinition {
         return -1;
       };
       return {
-        draws: [{ batch }],
+        draws: [draw],
         hit: emptyHit(),
         labels,
         legend,

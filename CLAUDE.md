@@ -3,6 +3,9 @@
 Librairie de graphiques GPU pour une future app de BI (sources : Elasticsearch, ClickHouse, dbt). Voir README.md.
 
 - `npm run dev` (démo, port 5273 ; `/wrappers.html` pour React, Vue, Web Component), `npm test`, `npm run typecheck`, `npm run build`.
+- `npm run storybook` (port 6006, `apps/storybook`) : stories générées depuis les exemples de la galerie par
+  `npm run stories` ; à relancer après chaque nouvel exemple. Les contrôles et leurs descriptions viennent du thème
+  (valeurs de `lightTheme.marks`, commentaires du type `Theme['marks']`) : documenter chaque option dans ce type.
 - Les paquets sont `sideEffects: false` : aucun import pour effet de bord (`import './x'`), le bundler le supprime.
   Tout enregistrement se fait dans une fonction appelée explicitement (voir `ensureBuiltinMarks`).
 - Pas de mot-clé `ember-addon` dans `@futurcharts/ember` : Ember CLI chargerait le paquet comme un addon v1.
@@ -17,8 +20,9 @@ Librairie de graphiques GPU pour une future app de BI (sources : Elasticsearch, 
   le rendu n'était pas le goulot, c'étaient les calculs de données et la compilation au premier affichage.
 - La spec reste du JSON sérialisable ; ce qui exige une fonction va dans `ChartOptions`.
 - **Animation** (demandée le 2026-11-16) : l'animation d'entrée est faite (`DrawCall.progress`, appliquée dans le
-  vertex shader ; lignes et aplats révélés par le clip). La course de barres (`mark: 'race'`, contrat `Timeline`) est faite. Restent à venir : transitions entre deux états de données,
-  et graphiques qui évoluent dans le temps (« bar chart race »). Ne rien concevoir qui l'empêche : chaque donnée doit
+  vertex shader ; lignes et aplats révélés par le clip). La course de barres (`mark: 'race'`, contrat `Timeline`) et les transitions entre deux états
+  (`Batch.setPrevious` + `DrawCall.morph`, `MarkDraw.keys` ; rect, point et arc) sont faites. Restent : transition des
+  lignes, aires et arcs, et sortie animée des données qui disparaissent. Ne rien concevoir qui l'empêche : chaque donnée doit
   pouvoir garder une identité stable d'un état à l'autre, et l'interpolation doit pouvoir se faire sur GPU
   (deux états de buffer + un uniform de progression), sans reconstruire les batches à chaque image.
 - **Diagrammes de flux** (`mark: 'flow'`, `marks/flow.ts` + `marks/flowLayout.ts`) : placement en couches maison

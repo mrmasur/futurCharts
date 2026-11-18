@@ -484,8 +484,190 @@ const monthlyByCountry = countries.slice(0, 8).flatMap((country, k) =>
   })),
 );
 
-export type Entry = { title: string; caption: string; wide?: boolean; spec?: ChartSpec; tiles?: ChartSpec[]; stack?: number[]; showLayout?: boolean };
+const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+const dailyTemps = monthNames.flatMap((month, m) =>
+  Array.from({ length: 31 }, () => ({ month, temp: Math.round((12 - 9 * Math.cos(((m + 0.3) / 12) * 2 * Math.PI) + gauss(r) * (3.2 - Math.abs(m - 6) * 0.15)) * 10) / 10 })),
+);
+const apiCalls = ['Catalogue', 'Panier', 'Paiement', 'Recherche'].flatMap((service, k) =>
+  Array.from({ length: 70 }, (_, i) => ({ service, ms: Math.round(Math.exp(Math.log([90, 140, 260, 60][k]) + gauss(r) * 0.38)), endpoint: `/${service.toLowerCase()}/${i}` })),
+);
+// Europe as a hexagonal tile grid (column, row): a schematic, not a map.
+const europeTiles: [string, string, number, number][] = [
+  ['IS', 'Islande', 0, 0], ['NO', 'Norvège', 4, 0], ['SE', 'Suède', 5, 0], ['FI', 'Finlande', 6, 0],
+  ['IE', 'Irlande', 1, 1], ['GB', 'Royaume-Uni', 2, 1], ['DK', 'Danemark', 4, 1], ['EE', 'Estonie', 6, 1],
+  ['NL', 'Pays-Bas', 3, 2], ['DE', 'Allemagne', 4, 2], ['PL', 'Pologne', 5, 2], ['LV', 'Lettonie', 6, 2],
+  ['BE', 'Belgique', 2, 3], ['LU', 'Luxembourg', 3, 3], ['CZ', 'Tchéquie', 4, 3], ['SK', 'Slovaquie', 5, 3], ['LT', 'Lituanie', 6, 3],
+  ['FR', 'France', 2, 4], ['CH', 'Suisse', 3, 4], ['AT', 'Autriche', 4, 4], ['HU', 'Hongrie', 5, 4], ['RO', 'Roumanie', 6, 4],
+  ['PT', 'Portugal', 0, 5], ['ES', 'Espagne', 1, 5], ['IT', 'Italie', 3, 5], ['SI', 'Slovénie', 4, 5], ['HR', 'Croatie', 5, 5], ['BG', 'Bulgarie', 6, 5],
+  ['MT', 'Malte', 3, 6], ['GR', 'Grèce', 5, 6], ['CY', 'Chypre', 7, 6],
+];
+const onlineShare = europeTiles.map(([code, name, col, row]) => ({ code, name, col, row, share: Math.round(18 + r() * 30 + (row < 3 ? 10 : 0)) }));
+const teams2 = [['Ingénierie', 47], ['Ventes', 31], ['Support', 22], ['Marketing', 14], ['Finance', 8], ['RH', 5]].map(([team, people]) => ({ team, people }));
+const marginGrid: { price: number; discount: number; margin: number }[] = [];
+for (let i = 0; i <= 40; i++) {
+  for (let j = 0; j <= 30; j++) {
+    const price = 20 + i * 2;
+    const discount = j;
+    const volume = 1000 * Math.exp(-(((price - 45) / 30) ** 2)) * (1 + discount / 25);
+    marginGrid.push({ price, discount, margin: Math.round(((price * (1 - discount / 100) - 22) * volume) / 1000 * 10) / 10 });
+  }
+}
+const servers = ['web-1', 'web-2', 'web-3', 'api-1', 'api-2', 'db-1', 'db-2', 'cache-1'];
+const cpu = servers.flatMap((server, k) =>
+  Array.from({ length: 7 * 24 }, (_, h) => ({
+    server,
+    hour: new Date(2026, 10, 10, h),
+    delta: Math.round((Math.sin(((h % 24) - 8) / 3.8) * (10 + k * 2) + gauss(r) * 4 + (k === 5 && h > 100 && h < 112 ? 35 : 0)) * 10) / 10,
+  })),
+);
+
+// The same countries over three years, and products over four quarters: data states for transitions.
+const yearsByCountry = [2024, 2025, 2026].map((year, k) => ({
+  label: String(year),
+  data: countries.map((country, i) => ({ country, revenue: Math.round(200 + ((i * 131 + k * 257) % 700) + k * 40) })),
+}));
+const channelYears = [2024, 2025, 2026].map((year, k) => ({
+  label: String(year),
+  data: channels.map((c, i) => ({ channel: c.channel, visits: Math.round(c.visits * (1 + ((i * 3 + k * 5) % 7) * 0.12 - (i === 0 ? k * 0.18 : 0))) })),
+}));
+const quarters = ['T1', 'T2', 'T3', 'T4'].map((q, k) => ({
+  label: q,
+  data: catalog.map((d, i) => ({
+    item: d.item,
+    category: d.category,
+    growth: Math.round((Math.sin(i * 1.7 + k * 1.1) * 18 + (i % 5) * 3) * 10) / 10,
+    margin: Math.round((14 + Math.cos(i * 0.9 + k * 0.8) * 9 + (i % 3)) * 10) / 10,
+    sales: Math.round(d.sales * (0.7 + 0.15 * k + ((i * k) % 4) * 0.05)),
+  })),
+}));
+
+export type Entry = {
+  title: string;
+  caption: string;
+  wide?: boolean;
+  spec?: ChartSpec;
+  tiles?: ChartSpec[];
+  stack?: number[];
+  showLayout?: boolean;
+  /** Data states to switch between on the demo page (transitions). */
+  states?: { label: string; data: ChartSpec['data'] }[];
+};
 export const entries: Entry[] = [
+  {
+    title: 'Transition entre deux états (barres)',
+    caption: 'mêmes barres, nouvelles données : chaque barre glisse vers sa valeur et son rang, interpolée sur le GPU',
+    states: yearsByCountry,
+    spec: {
+      title: 'Chiffre d’affaires par pays',
+      subtitle: 'Changez d’année avec les boutons ci-dessus',
+      data: yearsByCountry[0].data,
+      fields: { revenue: { label: 'CA', format: { suffix: ' k€', decimals: 0 } } },
+      layers: [{ mark: 'bar', encode: { x: 'revenue', y: 'country' }, transform: [{ type: 'sort', field: 'revenue', order: 'desc' }], style: { labels: true } }],
+    },
+  },
+  {
+    title: 'Transition entre deux états (anneau)',
+    caption: 'donut · chaque part s’étire vers sa nouvelle part, angles interpolés sur le GPU',
+    states: channelYears,
+    spec: {
+      title: 'Visites par canal',
+      subtitle: 'Changez d’année avec les boutons ci-dessus',
+      data: channelYears[0].data,
+      fields: { visits: { label: 'Visites' } },
+      layers: [{ mark: 'donut', encode: { key: 'channel', value: 'visits' } }],
+    },
+  },
+  {
+    title: 'Transition entre deux états (nuage)',
+    caption: 'point avec encode.key : chaque produit garde son identité et se déplace d’un trimestre à l’autre',
+    states: quarters,
+    spec: {
+      title: 'Croissance et marge par produit',
+      subtitle: 'Taille : ventes · changez de trimestre avec les boutons ci-dessus',
+      data: quarters[0].data,
+      fields: { growth: { label: 'Croissance', format: { suffix: ' %', decimals: 1 } }, margin: { label: 'Marge', format: { suffix: ' %', decimals: 1 } }, sales: { label: 'Ventes', format: { suffix: ' k€' } } },
+      scales: { x: { domain: [-25, 35] }, y: { domain: [0, 30] } },
+      layers: [{ mark: 'point', encode: { x: 'growth', y: 'margin', color: 'category', size: 'sales', key: 'item' }, style: { sizeRange: [6, 26], opacity: 0.85 } }],
+    },
+  },
+  {
+    title: 'Ridgeline',
+    caption: 'ridgeline · une densité par groupe, empilées et superposées, sur un même axe',
+    spec: {
+      title: 'Températures journalières par mois',
+      subtitle: 'En °C',
+      data: dailyTemps,
+      fields: { temp: { label: 'Température', format: { suffix: ' °C', decimals: 1 } } },
+      layers: [{ mark: 'ridgeline', encode: { key: 'month', x: 'temp' } }],
+    },
+  },
+  {
+    title: 'Essaim (beeswarm)',
+    caption: 'beeswarm · un point par appel, écarté juste assez pour ne pas chevaucher les autres',
+    wide: true,
+    spec: {
+      title: 'Temps de réponse par service',
+      subtitle: 'Un point par appel, en millisecondes',
+      data: apiCalls,
+      fields: { ms: { label: 'Temps de réponse', format: { suffix: ' ms', decimals: 0 } } },
+      layers: [{ mark: 'beeswarm', encode: { x: 'ms', key: 'service', color: 'service' }, style: { label: 'endpoint', size: 6 } }],
+    },
+  },
+  {
+    title: 'Carte en tuiles hexagonales',
+    caption: 'tilemap · une tuile par pays sur une grille, couleur selon la valeur (schéma, pas une carte exacte)',
+    spec: {
+      title: 'Part des ventes en ligne',
+      data: onlineShare,
+      fields: { share: { label: 'Part en ligne', format: { suffix: ' %' } } },
+      layers: [{ mark: 'tilemap', encode: { x: 'col', y: 'row', key: 'code', color: 'share' } }],
+    },
+  },
+  {
+    title: 'Graphique pictographique',
+    caption: 'pictorial · une rangée de symboles par catégorie, chacun valant style.unit',
+    spec: {
+      title: 'Effectifs par équipe',
+      data: teams2,
+      fields: { people: { label: 'Personnes' } },
+      layers: [{ mark: 'pictorial', encode: { key: 'team', value: 'people' }, style: { unit: 2 } }],
+    },
+  },
+  {
+    title: 'Surface et courbes de niveau',
+    caption: 'surface · grille interpolée par le GPU et lignes de niveau (marching squares)',
+    wide: true,
+    spec: {
+      title: 'Marge selon le prix et la remise',
+      subtitle: 'En milliers d’euros',
+      data: marginGrid,
+      fields: { price: { label: 'Prix', format: { suffix: ' €' } }, discount: { label: 'Remise', format: { suffix: ' %' } }, margin: { label: 'Marge', format: { suffix: ' k€', decimals: 1 } } },
+      axes: { x: { title: 'Prix (€)' }, y: { title: 'Remise (%)' } },
+      layers: [{ mark: 'surface', encode: { x: 'price', y: 'discount', value: 'margin' } }],
+    },
+  },
+  {
+    title: 'Horizon',
+    caption: 'horizon · chaque série repliée en 3 bandes d’intensité, l’écart négatif dans l’autre teinte',
+    wide: true,
+    spec: {
+      title: 'Charge processeur par serveur',
+      subtitle: 'Écart à la moyenne, en points, sur 7 jours',
+      data: cpu,
+      fields: { delta: { label: 'Écart', format: { suffix: ' pts', decimals: 1 } }, hour: { label: 'Heure' } },
+      layers: [{ mark: 'horizon', encode: { key: 'server', x: 'hour', y: 'delta' } }],
+    },
+  },
+  {
+    title: 'Arbre radial',
+    caption: 'tree · style.radial : la profondeur devient le rayon, les feuilles font le tour',
+    spec: {
+      title: 'Catalogue produits',
+      data: catalog,
+      fields: { sales: { label: 'Ventes', format: { suffix: ' k€' } } },
+      layers: [{ mark: 'tree', encode: { path: ['category', 'item'], value: 'sales' }, style: { radial: true } }],
+    },
+  },
   {
     title: 'Nuage animé (Gapminder)',
     caption: 'motion · un point par magasin qui se déplace d’une année à l’autre, axes fixes, traînée sur les points mis en avant',
@@ -1595,20 +1777,21 @@ export const entries: Entry[] = [
 export const GROUPS: [string, string[]][] = [
   ['Lignes et annotations', ['Lignes de référence et zones', 'Réel et prévision en pointillés', 'Valeurs manquantes', 'Étiquettes sur les points', 'Barres et objectif']],
   ['Comparaison', ['Pyramide des âges', 'Barres horizontales triées', 'Barres horizontales empilées', 'Barres empilées à 100 %', 'Épaisseur et couleur par barre', 'Barres fines et mise en avant', 'Sucettes', 'Haltères (dumbbell)', 'Graphique à puces (bullet)']],
+  ['Transitions', ['Transition entre deux états (barres)', 'Transition entre deux états (anneau)', 'Transition entre deux états (nuage)']],
   ['Combinaisons', ['Graphiques synchronisés', 'Navigateur de plage', 'Tableau croisé']],
   ['Bourse', ['Chandeliers (candlestick)', 'Barres OHLC']],
   ['Évolution', ['Course de barres', 'Course par famille', 'Prévision avec intervalle', 'Courbe en escalier', 'Streamgraph', 'Classement (bump chart)', 'Graphique de pente', 'Chandeliers']],
   ['Temps et planning', ['Diagramme de Gantt', 'Calendrier']],
-  ['Distribution', ['Courbe en cloche', 'Nuage avec dispersion (jitter)', 'Histogramme', 'Boîte à moustaches', 'Violon', 'Distribution en traits']],
+  ['Distribution', ['Ridgeline', 'Essaim (beeswarm)', 'Courbe en cloche', 'Nuage avec dispersion (jitter)', 'Histogramme', 'Boîte à moustaches', 'Violon', 'Distribution en traits']],
   ['Petits multiples', ['Petits multiples de courbes', 'Petits multiples de barres']],
   ['Corrélation', ['Nuage animé (Gapminder)', 'Champ de vecteurs', 'Nuage de points et régression', 'Bulles', 'Densité hexagonale', 'Coordonnées parallèles']],
   ['Parts et hiérarchies', ['Camembert', 'Anneau', 'Demi-anneau', 'Hémicycle', 'Camembert à rayon variable', 'Treemap', 'Sunburst', 'Cercles imbriqués', 'Marimekko', 'Gaufre']],
   ['Flux', ['Pipeline de données', 'Diagramme de flux', 'Processus avec volumes', 'Chemin mis en avant', 'Sankey', 'Diagramme en cordes', 'Réseau', 'Entonnoir', 'Cascade']],
-  ['Matrices et polaires', ['Carte de chaleur', 'Radar', 'Rose polaire', 'Barres radiales']],
-  ['Arbres et ensembles', ['Bulles groupées', 'Diagramme en arcs', 'Dendrogramme', 'Organigramme', 'Icicle', 'Flame chart', 'Diagramme de Venn']],
+  ['Matrices et polaires', ['Surface et courbes de niveau', 'Horizon', 'Carte de chaleur', 'Radar', 'Rose polaire', 'Barres radiales']],
+  ['Arbres et ensembles', ['Bulles groupées', 'Diagramme en arcs', 'Dendrogramme', 'Arbre radial', 'Organigramme', 'Icicle', 'Flame chart', 'Diagramme de Venn']],
   ['Texte et chronologie', ['Nuage de mots', 'Frise chronologique']],
-  ['Indicateurs', ['Tuiles KPI', 'Jauge', 'Pyramide']],
-  ['Cartes', ['Routes aériennes', 'Points sur une carte du monde', 'Choroplèthe mondiale', 'Bulles sur une carte', 'Zoom sur l’Europe et mise en avant']],
+  ['Indicateurs', ['Tuiles KPI', 'Jauge', 'Pyramide', 'Graphique pictographique']],
+  ['Cartes', ['Carte en tuiles hexagonales', 'Routes aériennes', 'Points sur une carte du monde', 'Choroplèthe mondiale', 'Bulles sur une carte', 'Zoom sur l’Europe et mise en avant']],
   ['Mise en avant', ['Mise en avant dans un camembert', 'Mise en avant dans un treemap', 'Mise en avant d’une série', 'Mise en avant sur une carte de chaleur']],
 ];
 

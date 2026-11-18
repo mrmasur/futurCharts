@@ -42,6 +42,13 @@ export interface Batch {
   readonly count: number;
   /** Replace the batch contents. `data` follows `LAYOUTS[kind]`. */
   update(data: Float32Array, count: number): void;
+  /**
+   * The state to move from (same layout and count as the current data), for a
+   * transition between two data states; `null` drops it. Only `rect`, `point`
+   * and `arc` batches morph (position, size, angles, color); others ignore it. The backend blends
+   * the two states itself, driven by `DrawCall.morph`: no upload per frame.
+   */
+  setPrevious?(data: Float32Array | null): void;
   destroy(): void;
 }
 
@@ -60,6 +67,8 @@ export interface DrawCall {
    * vertex stage, so an animated frame costs no buffer upload.
    */
   progress?: number;
+  /** Transition from the batch's previous state, 0 → 1 (default 1: the current state). */
+  morph?: number;
 }
 
 export interface Frame {

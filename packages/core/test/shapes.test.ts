@@ -116,3 +116,16 @@ describe('log scale', () => {
     expect(w.invert(0)).toBeCloseTo(1000, 6);
   });
 });
+
+describe('contours', () => {
+  it('trace a closed ring around a peak, at the right level', async () => {
+    const { contourSegments } = await import('../src/marks/advanced');
+    const n = 21;
+    const g = new Float64Array(n * n);
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) g[j * n + i] = Math.hypot(i - 10, j - 10);
+    const segs = contourSegments(g, n, n, 5);
+    expect(segs.length).toBeGreaterThan(40);
+    // Every crossing point lies on the circle of radius 5 (within interpolation error).
+    for (let k = 0; k < segs.length; k += 2) expect(Math.abs(Math.hypot(segs[k] - 10, segs[k + 1] - 10) - 5)).toBeLessThan(0.1);
+  });
+});

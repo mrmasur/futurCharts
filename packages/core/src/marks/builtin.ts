@@ -8,6 +8,7 @@ import { MORE_MARKS } from './more';
 import { race } from './race';
 import { SHAPE_MARKS } from './shapes';
 import { CATALOG_MARKS } from './catalog';
+import { ADVANCED_MARKS } from './advanced';
 import { flow } from './flow';
 import { FLOW_MARKS } from './flows';
 import type { SeriesData } from './prepare';
@@ -176,6 +177,8 @@ const bar: MarkDefinition = {
     const out: number[] = [];
     const labels: MarkLabel[] = [];
     const center = new Map<SeriesData, number>();
+    // Identity of each bar (series and category), for transitions between data states.
+    const keys: string[] = [];
     visible.forEach((s, vi) => {
       const offset = groups === 1 ? 0 : (vi - (groups - 1) / 2) * sub;
       center.set(s, offset);
@@ -195,6 +198,7 @@ const bar: MarkDefinition = {
             : up ? [r, r, 0, 0] : [0, 0, r, r];
         const [ax, ay] = ctx.pos(c - sub / 2, v0);
         const [bx, by] = ctx.pos(c + sub / 2, v1);
+        keys.push(`${s.key}\u0000${ctx.x.type === 'band' ? ctx.x.format(s.x[i]) : s.x[i]}`);
         pushRect(out, {
           x0: ax, y0: ay, x1: bx, y1: by,
           fill, stroke, radii,
@@ -231,7 +235,7 @@ const bar: MarkDefinition = {
     const instances = new Float32Array(out);
     batch.update(instances, out.length / LAYOUTS.rect.stride);
     const hit = buildHit(ctx, (s, _si, i) => ctx.x.norm(s.x[i]) + (center.get(s) ?? 0));
-    return { draws: [{ batch, pixelSnap: true, perDatum: true, data: instances }], hit, labels };
+    return { draws: [{ batch, pixelSnap: true, perDatum: true, data: instances, keys }], hit, labels };
   },
 };
 
@@ -247,6 +251,9 @@ const point: MarkDefinition = {
     let k = 0;
     // Jitter: a stable offset per row (the same at every rebuild), across the category slot.
     const spread = style.jitter > 0 ? slotWidth(ctx) * Math.min(1, style.jitter) : 0;
+    // Identity of each dot: its series and its `key` field (or its x), for transitions.
+    const keyCol = ctx.data.layer.encode.key ? ctx.data.table.column(ctx.data.layer.encode.key).values : undefined;
+    const keys: string[] = [];
     const offset = (row: number) => {
       if (!spread) return 0;
       const h = Math.sin(row * 12.9898 + 78.233) * 43758.5453;
@@ -256,6 +263,7 @@ const point: MarkDefinition = {
       if (s.hidden) continue;
       for (let i = 0; i < s.x.length; i++) {
         const c = ctx.color(s, i);
+        keys.push(`${s.key}\u0000${keyCol ? keyCol[s.rows[i]] : ctx.x.type === 'band' ? ctx.x.format(s.x[i]) : s.x[i]}`);
         const [x, y] = ctx.pos(ctx.x.norm(s.x[i]) + offset(s.rows[i]), ctx.y.norm(s.y1[i]));
         out[k++] = x;
         out[k++] = y;
@@ -274,7 +282,7 @@ const point: MarkDefinition = {
     }
     const batch = ctx.renderer.createBatch('point');
     batch.update(out, n);
-    return { draws: [{ batch, perDatum: true, data: out }], hit: spread ? buildHit(ctx, (s, _si, i) => ctx.x.norm(s.x[i]) + offset(s.rows[i])) : buildHit(ctx) };
+    return { draws: [{ batch, perDatum: true, data: out, keys }], hit: spread ? buildHit(ctx, (s, _si, i) => ctx.x.norm(s.x[i]) + offset(s.rows[i])) : buildHit(ctx) };
   },
 };
 
@@ -329,7 +337,7 @@ const tick: MarkDefinition = {
   },
 };
 
-const builtins: Record<string, MarkDefinition> = { line, area, bar, point, rule, tick, ...STANDALONE_MARKS, ...FLOW_MARKS, ...EXTRA_MARKS, ...MORE_MARKS, ...SHAPE_MARKS, ...CATALOG_MARKS, flow, race };
+const builtins: Record<string, MarkDefinition> = { line, area, bar, point, rule, tick, ...STANDALONE_MARKS, ...FLOW_MARKS, ...EXTRA_MARKS, ...MORE_MARKS, ...SHAPE_MARKS, ...CATALOG_MARKS, ...ADVANCED_MARKS, flow, race };
 
 /**
  * Register the built-in marks. Called when a chart is created rather than at

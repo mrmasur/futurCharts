@@ -711,12 +711,17 @@ export const tree: MarkDefinition = {
   standalone: true,
   sizeDependent: true,
   symbol: 'circle',
-  scales: () => ({ x: new LinearScale(0, 1), y: new LinearScale(0, 1) }),
+  // A radial tree keeps x and y at the same scale.
+  scales: ({ layer }) =>
+    (layer.style as { radial?: boolean } | undefined)?.radial
+      ? { x: new LinearScale(-1, 1), y: new LinearScale(-1, 1), aspect: 1 }
+      : { x: new LinearScale(0, 1), y: new LinearScale(0, 1) },
   build(ctx) {
     const { layer, table } = ctx.data;
     const { style, theme } = ctx;
     const path = layer.encode.path;
     if (!path?.length) throw new Error('futurCharts: mark "tree" needs encode.path (a list of fields).');
+    const radial = style.radial && !style.boxes;
     const vf = layer.encode.value ?? layer.encode.y;
     const h = hierarchy(ctx, table, path, vf);
     const legend = paintHierarchy(ctx, hierarchy(ctx, table, path, vf, false).root, h.root);
@@ -759,7 +764,12 @@ export const tree: MarkDefinition = {
     const side = boxes ? (LR ? boxH / 2 + 4 : boxW / 2 + 4) : 12;
     const dpx = LR ? px : py;
     const bpx = LR ? py : px;
+    // Radial: depth is the radius, leaves spread over the full turn; room around for the labels.
+    const R = 0.62;
+    const polar = (n: TNode): [number, number] => [(leaves > 0 ? n.u / leaves : 0) * Math.PI * 2, depth ? (n.v / depth) * R : 0];
+    const toXY = (a: number, r: number): [number, number] => [ctx.x.norm(Math.sin(a) * r), ctx.y.norm(Math.cos(a) * r)];
     const place = (n: TNode): [number, number] => {
+      if (radial) return toXY(...polar(n));
       const d = m0 * dpx + (depth ? n.v / depth : 0.5) * (1 - (m0 + m1) * dpx);
       const b = side * bpx + (leaves > 1 ? n.u / (leaves - 1) : 0.5) * (1 - 2 * side * bpx);
       return LR ? [d, 1 - b] : [b, 1 - d];
@@ -788,13 +798,16 @@ export const tree: MarkDefinition = {
         }
         continue;
       }
-      // Smooth S-curve from parent to child.
+      // Smooth S-curve from parent to child (in polar coordinates for a radial tree).
       let lx = ax, ly = ay;
+      const [pa, pr] = polar(n.parent);
+      const [ca, cr] = polar(n);
       for (let k = 1; k <= 16; k++) {
         const t = k / 16;
         const s = t * t * (3 - 2 * t);
-        const x = LR ? ax + (bx - ax) * t : ax + (bx - ax) * s;
-        const y = LR ? ay + (by - ay) * s : ay + (by - ay) * t;
+        const [x, y] = radial
+          ? toXY(pr === 0 ? ca : pa + (ca - pa) * s, pr + (cr - pr) * t)
+          : [LR ? ax + (bx - ax) * t : ax + (bx - ax) * s, LR ? ay + (by - ay) * s : ay + (by - ay) * t];
         pushSegment(lines, lx, ly, x, y, withAlpha(n.color, 0.45), style.linkWidth);
         lx = x;
         ly = y;
@@ -818,7 +831,16 @@ export const tree: MarkDefinition = {
       }
       const size = leaf ? style.nodeSize * 0.8 : style.nodeSize;
       dots.push(x, y, size, 0, c[0], c[1], c[2], c[3], ctx.surface[0], ctx.surface[1], ctx.surface[2], 1, 2);
-      if (LR) {
+      if (radial) {
+        const [a] = polar(n);
+        const right = Math.sin(a) >= 0;
+        // Leaves outward, on the side they point to; inner nodes above their dot.
+        labels.push(
+          leaf
+            ? { tx: x, ty: y, text: n.name, align: right ? 'left' : 'right', baseline: 'middle', dx: right ? 8 : -8, size: 11, color: theme.text.secondary }
+            : { tx: x, ty: y, text: n.name, align: 'center', baseline: 'bottom', dy: -7, size: 11, weight: 650, color: theme.text.primary, background: theme.background },
+        );
+      } else if (LR) {
         labels.push(
           leaf
             ? { tx: x, ty: y, text: n.name, align: 'left', baseline: 'middle', dx: 9, size: 12, color: theme.text.secondary }

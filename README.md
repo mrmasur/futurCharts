@@ -10,6 +10,15 @@ npm run typecheck
 npm run build      # dist/ de chaque paquet
 ```
 
+## Storybook
+
+`npm run storybook` (port 6006) : une page par famille de graphiques, une story par exemple de la galerie. L'onglet
+**Controls** liste chaque option de style de la marque principale, avec sa description et sa valeur par défaut, lues
+dans le type et les valeurs du thème : changer une valeur met le graphique à jour sur place. Thème clair ou sombre
+dans la barre d'outils, hauteur et animation en contrôles, spec JSON exacte sous chaque graphique, et un sélecteur
+d'état sur les exemples de transitions. Les stories sont générées depuis `apps/demo/src/library.ts` :
+`npm run stories` après l'ajout d'un exemple.
+
 ## Utilisation
 
 ```ts
@@ -80,6 +89,10 @@ Démo : `http://localhost:5273/gallery.html`, une application de tableau de bord
 | Parts (pyramide) | `pyramid` (étages empilés depuis la pointe, hauteur selon la valeur) |
 | Animation | `motion` (nuage animé façon Gapminder : `key`, `time`, `x`, `y`, `size`, `color` ; barre de lecture, traînée sur les points de `highlight`) |
 | Tableaux | `pivot` (tableau croisé : `key` en lignes, `x` en colonnes, `value` ; cellules teintées, total et tendance par ligne) |
+| Distributions (suite) | `ridgeline` (densités empilées par `key`), `beeswarm` (points sans chevauchement le long de `x`, un essaim par `key`) |
+| Grilles | `tilemap` (tuiles hexagonales ou carrées en colonne `x` / ligne `y`), `surface` (grille interpolée + courbes de niveau), `horizon` (séries repliées en bandes) |
+| Unités | `pictorial` (une rangée de symboles par catégorie, `style.unit` par symbole) |
+| Arbres (suite) | `tree` avec `style.radial` (arbre radial) |
 | Bourse | `candlestick` (`y` haut, `y2` bas, `open`, `close` ; `style.ohlc` pour des barres OHLC) |
 | Cartes (suite) | `route` (de `x`, `y` à `x2`, `y2`, courbée ; épaisseur avec `size`) |
 | Arbres | `tree` (`path` ; dendrogramme, ou organigramme avec `boxes` et `direction: "TB"`), `icicle` (partition en lignes, zoom au clic ; `orientation: "BT"` pour un flame chart) |
@@ -257,6 +270,15 @@ leur nouveau rang, l'axe suit le meneur et la date avance. Une barre de lecture 
 ajoutée sous le graphique. API : `chart.play()`, `chart.pause()`, `chart.seek(index)` ; l'événement `frame`
 (`onFrame`, `@frame`, `chart-frame`) annonce chaque nouvelle image, pour synchroniser le reste d'un tableau de bord.
 La lecture démarre quand le graphique devient visible.
+
+## Transitions entre deux états de données
+
+`chart.update(spec)` (ou `setData`) avec les mêmes marques : chaque barre, chaque point et chaque part se déplace de son ancien
+état vers le nouveau (position, taille, couleur), les nouveaux poussent de rien, en 650 ms (`animation: 1000`
+pour une autre durée, `false` pour couper). L'identité d'une barre est sa série et sa catégorie, celle d'un point
+sa série et son `encode.key` (sinon son x). Les deux états sont dans deux buffers et le vertex shader les mélange
+selon un uniform de progression (`Batch.setPrevious`, `DrawCall.morph`) : aucun buffer n'est reconstruit pendant
+l'animation. Les filtres des tableaux de bord et le masquage d'une série par la légende en profitent.
 
 ## Prévu : transitions et évolution dans le temps
 

@@ -142,6 +142,18 @@ export interface Theme {
     motion: { duration: number; autoplay: boolean; loop: boolean; opacity: number; trails: boolean };
     /** Cross table: cells shaded by magnitude, a total and a sparkline per row. */
     pivot: { heat: boolean; totals: boolean; sparkline: boolean };
+    /** Stacked densities: `overlap` rows a peak reaches up, `bandwidth` of the kernel (0: automatic). */
+    ridgeline: { overlap: number; opacity: number; bandwidth: number };
+    /** Dots that do not overlap: `size` px; `label`: field naming each dot in the tooltip. */
+    beeswarm: { size: number; opacity: number; label: string };
+    /** Grid of tiles: hexagons (`hex`) or squares, `gap` px. */
+    tilemap: { hex: boolean; gap: number; labels: boolean };
+    /** Rows of symbols: one `icon` per `unit` of value, `gap` share of a symbol's slot. */
+    pictorial: { unit: number; icon: PointShape; gap: number };
+    /** Smooth color field over a grid with `contours` iso-lines (`auto` ink). */
+    surface: { contours: number; contourColor: string };
+    /** Horizon rows: `bands` folds, `gap` px between rows. */
+    horizon: { bands: number; gap: number };
     /** Concentric bars around a center: `endAngle` degrees for the longest, `gap` share of a ring left empty. */
     /** `labelColor`: ink of the values, `auto` for the primary text color (they sit on the track, past the bar). */
     radialBar: { innerRadius: number; gap: number; endAngle: number; track: string; labels: boolean; labelColor: string };
@@ -171,7 +183,7 @@ export interface Theme {
     candlestick: { ohlc: boolean; rising: string; falling: string; body: number; wick: number };
     /** Routes on a map from (x, y) to (x2, y2), bent by `curvature`; width from `encode.size` (`sizeRange`, px). */
     route: { curvature: number; opacity: number; ends: boolean };
-    tree: { direction: 'LR' | 'TB'; boxes: boolean; nodeSize: number; linkWidth: number; boxWidth: number; boxHeight: number };
+    tree: { direction: 'LR' | 'TB'; radial: boolean; boxes: boolean; nodeSize: number; linkWidth: number; boxWidth: number; boxHeight: number };
     flow: {
       variant: 'pipeline' | 'boxes';
       /** Steps can be dragged; the chart then emits `layout` with every position. */
@@ -280,6 +292,12 @@ export const lightTheme: Theme = {
     race: { top: 10, duration: 900, autoplay: true, loop: false },
     motion: { duration: 1000, autoplay: true, loop: false, opacity: 0.82, trails: true },
     pivot: { heat: true, totals: true, sparkline: true },
+    ridgeline: { overlap: 1.8, opacity: 0.8, bandwidth: 0 },
+    beeswarm: { size: 7, opacity: 0.85, label: '' },
+    tilemap: { hex: true, gap: 2, labels: true },
+    pictorial: { unit: 1, icon: 'circle', gap: 0.18 },
+    surface: { contours: 8, contourColor: 'auto' },
+    horizon: { bands: 3, gap: 2 },
     radialBar: { innerRadius: 0.3, gap: 0.28, endAngle: 270, track: 'auto', labels: true, labelColor: 'auto' },
     icicle: { orientation: 'TB', gap: 1.5, radius: 3, labels: true },
     parliament: { innerRadius: 0.38, center: true },
@@ -292,7 +310,7 @@ export const lightTheme: Theme = {
     pyramid: { gap: 3, labels: true },
     candlestick: { ohlc: false, rising: 'auto', falling: 'auto', body: 0.7, wick: 1.25 },
     route: { curvature: 0.25, opacity: 0.6, ends: true },
-    tree: { direction: 'LR', boxes: false, nodeSize: 9, linkWidth: 1.5, boxWidth: 132, boxHeight: 46 },
+    tree: { direction: 'LR', radial: false, boxes: false, nodeSize: 9, linkWidth: 1.5, boxWidth: 132, boxHeight: 46 },
     flow: { variant: 'pipeline', editable: true, direction: 'LR', rankGap: 56, nodeGap: 28, fontSize: 13, edge: 'auto', edgeWidth: 1.5, tint: 0.16, radius: 6 },
   },
   tooltip: {

@@ -193,7 +193,13 @@ export type MarkStyle = { color?: string } & DeepPartial<
     Theme['marks']['candlestick'] &
     Theme['marks']['route'] &
     Theme['marks']['motion'] &
-    Theme['marks']['pivot']
+    Theme['marks']['pivot'] &
+    Theme['marks']['ridgeline'] &
+    Theme['marks']['beeswarm'] &
+    Theme['marks']['tilemap'] &
+    Theme['marks']['pictorial'] &
+    Theme['marks']['surface'] &
+    Theme['marks']['horizon']
 >;
 
 /** A condition on one field of a row. Several conditions in an array must all hold. */
