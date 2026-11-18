@@ -110,7 +110,8 @@ async function mountCard(board: HTMLElement, card: Card): Promise<Mounted> {
   const specs = card.tiles ?? [card.spec];
   for (const [i, spec] of specs.entries()) {
     const box = document.createElement('div');
-    box.style.height = card.stack ? `${card.stack[i] ?? 160}px` : '100%';
+    // Small multiples take the height they need (the card grows); everything else fills the card.
+    box.style.height = card.stack ? `${card.stack[i] ?? 160}px` : spec.facet ? 'auto' : '100%';
     box.style.minWidth = '0';
     body.appendChild(box);
     try {

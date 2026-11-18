@@ -15,15 +15,25 @@ export class FacetChart {
   private listeners: { type: keyof ChartEvents; handler: (p: any) => void }[] = [];
   private hidden = new Set<string>();
   private building: Promise<void> = Promise.resolve();
+  /** Panels fitted to the container's height (no `facet.height`): grid and header to lay out again on resize. */
+  private fit?: { grid: HTMLDivElement; header: HTMLDivElement; count: number; columns?: number; max: number };
+  private observer?: ResizeObserver;
+  /** The container has a height of its own (measured empty, before any panel): panels fit in it. */
+  private fixedHeight = false;
 
   private constructor(private container: HTMLElement, private spec: ChartSpec, private options: ChartOptions) {}
 
   static async create(container: HTMLElement, spec: ChartSpec, options: ChartOptions = {}): Promise<FacetChart> {
     const f = new FacetChart(container, spec, options);
+    f.fixedHeight = container.clientHeight > 0;
     f.root = document.createElement('div');
     f.root.style.cssText = 'width:100%;height:100%;overflow:auto;box-sizing:border-box;';
     container.appendChild(f.root);
     await f.build();
+    if (typeof ResizeObserver !== 'undefined') {
+      f.observer = new ResizeObserver(() => f.layoutFit());
+      f.observer.observe(container);
+    }
     return f;
   }
 
@@ -56,6 +66,7 @@ export class FacetChart {
   }
 
   destroy(): void {
+    this.observer?.disconnect();
     for (const p of this.panels) p.destroy();
     this.panels = [];
     this.root.remove();
@@ -112,7 +123,11 @@ export class FacetChart {
     const cols = facet.columns ?? Math.min(values.length, 3);
     grid.style.cssText = `display:grid;grid-template-columns:repeat(${cols}, minmax(0, 1fr));gap:4px;padding:0 4px 4px;`;
     this.root.appendChild(grid);
-    const height = `${facet.height ?? 220}px`;
+    // A container of fixed height (a dashboard card, a thumbnail): every panel fits in it, no scrollbar,
+    // at most `facet.height` tall. Otherwise (height from the content), panels are `facet.height` tall and the page grows.
+    this.fit = this.fixedHeight ? { grid, header, count: values.length, columns: facet.columns, max: facet.height ?? Infinity } : undefined;
+    const height = this.fit ? '100%' : `${facet.height ?? 220}px`;
+    if (this.fit) this.layoutFit();
     for (const v of values) {
       const rows = indicesOf(table, facet.field, v);
       const panelSpec: ChartSpec = {
@@ -148,6 +163,33 @@ export class FacetChart {
         for (const p of this.panels) p.update({ ...p.getSpec(), scales });
       }
     }
+  }
+
+  /**
+   * Fit the panels in the container: the fewest columns that leave each panel
+   * readable (not too flat, not too narrow), all rows sharing the height left
+   * under the header.
+   */
+  private layoutFit(): void {
+    const f = this.fit;
+    if (!f) return;
+    const W = this.container.clientWidth;
+    const H = this.container.clientHeight - f.header.offsetHeight - 6;
+    if (W <= 0 || H <= 0) return;
+    const gap = 4;
+    const minH = 110;
+    const minW = 130;
+    let cols = f.columns ?? Math.min(f.count, 3);
+    // An explicit `columns` is kept.
+    if (!f.columns) {
+      // Wider grids until the rows fit in height, as long as panels stay wide enough.
+      while (cols < f.count && Math.ceil(f.count / cols) * (minH + gap) > H && W / (cols + 1) >= minW) cols++;
+    }
+    const rows = Math.ceil(f.count / cols);
+    const h = Math.min(f.max, Math.max(48, Math.floor((H - (rows - 1) * gap) / rows)));
+    f.grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+    f.grid.style.gridAutoRows = `${h}px`;
+    this.root.style.overflow = 'hidden';
   }
 
   private cell(parent: HTMLElement, height: string): HTMLDivElement {

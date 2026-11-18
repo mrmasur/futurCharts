@@ -1398,10 +1398,14 @@ export class Chart implements SyncMember {
         ctx.fillStyle = lab.color;
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
+        // In a short plot (a small multiple), skip labels that would touch the previous one.
+        let lastY = Infinity;
         for (const t of L.yTicks) {
           const y = T.oy + t.t * T.sy;
           if (y < plot.y - 1 || y > bottom + 1) continue;
+          if (Math.abs(lastY - y) < lab.size + 3) continue;
           ctx.fillText(t.label, plot.x - lab.padding, y + 0.5);
+          lastY = y;
         }
       }
       if (yAxis.title) {
