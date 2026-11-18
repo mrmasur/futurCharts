@@ -65,6 +65,18 @@ function find(title: string): Entry {
   return e;
 }
 
+/** A slider over a sensible range for the option; a plain number field when there is none. */
+function slider(key: string, value: number) {
+  if (!Number.isFinite(value)) return { type: 'number' as const };
+  // Shares, opacities, radii in units of the radius: 0 to 1.
+  if (value >= 0 && value <= 1 && !Number.isInteger(value)) return { type: 'range' as const, min: 0, max: 1, step: 0.01 };
+  if (/opacity|innerRadius|gap$|overlap|curvature|body|thickness|width$|jitter/i.test(key) && value <= 1) return { type: 'range' as const, min: 0, max: 1, step: 0.01 };
+  if (/angle/i.test(key)) return { type: 'range' as const, min: -360, max: 360, step: 5 };
+  if (/duration/i.test(key)) return { type: 'range' as const, min: 100, max: 5000, step: 50 };
+  const max = Math.max(10, Math.ceil(Math.abs(value) * 4));
+  return { type: 'range' as const, min: value < 0 ? -max : 0, max, step: Number.isInteger(value) ? 1 : 0.1 };
+}
+
 function argTypesFor(defaults: Record<string, unknown>, category: string, mark: string): ArgTypes {
   const out: ArgTypes = {};
   for (const [key, value] of Object.entries(defaults)) {
@@ -73,8 +85,9 @@ function argTypesFor(defaults: Record<string, unknown>, category: string, mark: 
     if (description) out[key] = { description };
     const add = (t: ArgTypes[string]) => (out[key] = { ...out[key], ...t });
     if (typeof value === 'boolean') add({ control: 'boolean', table });
-    else if (typeof value === 'number') add({ control: { type: 'number', step: Number.isInteger(value) && Math.abs(value) >= 1 ? 1 : 0.05 }, table });
-    else if (typeof value === 'string' && ENUMS[key]) add({ control: 'select', options: ENUMS[key], table });
+    else if (typeof value === 'number') add({ control: slider(key, value), table });
+    // A short list of choices: one button each.
+    else if (typeof value === 'string' && ENUMS[key]) add({ control: ENUMS[key].length <= 4 ? 'inline-radio' : 'select', options: ENUMS[key], table });
     else if (typeof value === 'string' && (COLOR.test(key) || value.startsWith('#'))) add({ control: 'color', table });
     else if (typeof value === 'string') add({ control: 'text', table });
     else add({ control: 'object', table });
