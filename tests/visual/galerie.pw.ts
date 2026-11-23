@@ -30,7 +30,9 @@ for (const e of exemples) {
       if (msg.type() === 'error') problems.push(msg.text());
     });
 
-    await page.clock.install({ time: NOW });
+    // Installed a minute earlier: the clock runs until it is paused, and pausing in the past is refused
+    // (seen on a loaded machine when both calls shared the same instant).
+    await page.clock.install({ time: NOW.getTime() - 60_000 });
     await page.clock.pauseAt(NOW);
     // The frozen clock still lets `performance.now()` creep by a millisecond or two, enough to shift
     // a continuous animation (pulse rings) by a pixel: derive it from the date, which does not move.

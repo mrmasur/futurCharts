@@ -21,13 +21,24 @@ export interface ChartSpec {
   subtitle?: string;
   theme?: ThemeSpec;
   layers: LayerSpec[];
-  scales?: { x?: ScaleSpec; y?: ScaleSpec; color?: ColorScaleSpec };
+  /**
+   * `secondary`: the second value axis of a dual-axis chart, used by the layers that set
+   * `axis: 'secondary'` (two measures in different units: euros and a percentage, rain and
+   * temperature). It has its own domain; `x` / `y` stay the screen axes of the other layers.
+   * Named `secondary` rather than `y2` on purpose: `encode.y2` is already the end of a range,
+   * and on a horizontal chart the second value axis runs along x (it is drawn at the top).
+   */
+  scales?: { x?: ScaleSpec; y?: ScaleSpec; secondary?: ScaleSpec; color?: ColorScaleSpec };
   /**
    * Draw on a map instead of cartesian axes: `x` is then a longitude field and
    * `y` a latitude field, and the chart keeps the projection's aspect ratio.
    */
   projection?: ProjectionSpec;
-  axes?: { x?: AxisSpec | false; y?: AxisSpec | false };
+  /**
+   * `secondary`: the axis of `scales.secondary`, drawn on the right (at the top of a horizontal
+   * chart) with its own graduations, title and format. The grid stays the primary axis' one.
+   */
+  axes?: { x?: AxisSpec | false; y?: AxisSpec | false; secondary?: AxisSpec | false };
   /**
    * On a small screen, give up the subtitle, then the axis titles, then the
    * legend when the drawing would be cramped. Default true.
@@ -100,18 +111,27 @@ export interface Encoding {
   key?: string;
   /** Measure of marks that are not positioned on x / y: pie, treemap, funnel, gauge, radar, sankey, sunburst. */
   value?: string;
-  /** Flow start and end (sankey). */
+  /** Flow start and end (sankey). Link ends (`bundle`; `color` is then the group of the source). */
   source?: string;
+  /** Also the goal of an indicator, one per row (`bullet`, `liquid`, `activity`, `led`). */
   target?: string;
-  /** Hierarchy, from the outermost level to the innermost (sunburst). */
+  /** Hierarchy, from the outermost level to the innermost (sunburst). The categorical dimensions, left to right (`parsets`). */
   path?: string[];
   /** The field that steps through time, one frame per value (bar chart race). */
   time?: string;
+  /** Share done, 0 to 1 (or 0 to 100): the filled part of a `gantt` bar. */
+  progress?: string;
+  /** Phase of a task (`gantt`): each group opens with a summary bar spanning its tasks. */
+  group?: string;
+  /** Predecessors of a task (`gantt`): ids separated by commas, each drawn as an arrow from its end to this start. */
+  depends?: string;
+  /** Task identity that `depends` refers to (`gantt`), when it is not the `key` (names repeated or shortened). */
+  id?: string;
   /** Field name: a string field splits into series, a numeric field maps to the sequential ramp. */
   color?: string;
   /** Field name (point marks): numeric field mapped to the size range. */
   size?: string;
-  /** Direction in degrees, clockwise from up (`vector`). */
+  /** Direction in degrees, clockwise from up (`vector`); the angle of a polar mark, instead of `x` (`polarLine`, `polarScatter`, `radialArea`). */
   angle?: string;
   /** Depth (`scatter3d`). */
   z?: string;
@@ -139,6 +159,8 @@ export type AnnotationValue = number | string;
 export interface AnnotationSpec {
   x?: AnnotationValue | [AnnotationValue, AnnotationValue];
   y?: AnnotationValue | [AnnotationValue, AnnotationValue];
+  /** Read the value on the secondary value axis of a dual-axis chart (an 80 % line on a Pareto chart). */
+  axis?: 'primary' | 'secondary';
   text?: string;
   /** Color or theme token (`$1`, `$muted`…). Lines default to `$muted`, bands to `$1`. */
   color?: string;
@@ -163,6 +185,13 @@ export interface LayerSpec {
   /** Where a shape's join key and name live, e.g. `properties.iso_a3`. Default: `properties.name`, then `id`. */
   geoKey?: string;
   encode: Encoding;
+  /**
+   * Which value axis the layer reads: `primary` (default) or `secondary`, the second value axis
+   * (`scales.secondary`, `axes.secondary`), which has its own domain and is drawn on the right.
+   * Cartesian marks only; ignored when no layer is left on the primary axis.
+   * `{ "mark": "line", "axis": "secondary", "encode": { "x": "month", "y": "margin" } }`
+   */
+  axis?: 'primary' | 'secondary';
   /**
    * Stack series on top of each other (bar, area). `normalize`: each stack
    * fills 100 %. `center`: stacks centered on zero (streamgraph).
@@ -247,17 +276,29 @@ export type MarkStyle = { color?: string } & DeepPartial<
     Theme['marks']['flow'] &
     Theme['marks']['race'] &
     Theme['marks']['radialBar'] &
+    Theme['marks']['spiral'] &
+    Theme['marks']['polarLine'] &
+    Theme['marks']['polarScatter'] &
+    Theme['marks']['radialArea'] &
     Theme['marks']['icicle'] &
     Theme['marks']['parliament'] &
     Theme['marks']['venn'] &
+    Theme['marks']['parsets'] &
+    Theme['marks']['upset'] &
+    Theme['marks']['bundle'] &
     Theme['marks']['wordcloud'] &
     Theme['marks']['timeline'] &
+    Theme['marks']['gantt'] &
+    Theme['marks']['schedule'] &
+    Theme['marks']['swimlane'] &
     Theme['marks']['tree'] &
     Theme['marks']['vector'] &
     Theme['marks']['bubbles'] &
     Theme['marks']['arcDiagram'] &
     Theme['marks']['pyramid'] &
     Theme['marks']['candlestick'] &
+    Theme['marks']['renko'] &
+    Theme['marks']['kagi'] &
     Theme['marks']['route'] &
     Theme['marks']['motion'] &
     Theme['marks']['pivot'] &
@@ -269,8 +310,17 @@ export type MarkStyle = { color?: string } & DeepPartial<
     Theme['marks']['beeswarm'] &
     Theme['marks']['tilemap'] &
     Theme['marks']['pictorial'] &
+    Theme['marks']['bullet'] &
+    Theme['marks']['liquid'] &
+    Theme['marks']['activity'] &
+    Theme['marks']['led'] &
     Theme['marks']['surface'] &
-    Theme['marks']['horizon']
+    Theme['marks']['horizon'] &
+    Theme['marks']['difference'] &
+    Theme['marks']['fan'] &
+    Theme['marks']['cycle'] &
+    Theme['marks']['sparktable'] &
+    Theme['marks']['bumpArea']
 >;
 
 /** A condition on one field of a row. Several conditions in an array must all hold. */
@@ -364,6 +414,11 @@ export interface AxisSpec {
   grid?: boolean;
   line?: boolean;
   labels?: boolean;
+  /**
+   * Ink of the graduations and of the title (theme tokens allowed: `$1`, `$muted`…). On a
+   * dual-axis chart, the color of a series on its axis says which one it reads on.
+   */
+  color?: string;
 }
 
 export interface InteractionSpec {

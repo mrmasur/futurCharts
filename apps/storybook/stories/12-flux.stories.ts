@@ -17,3 +17,5 @@ export const DiagrammeEnCordes: StoryObj = { name: "Diagramme en cordes", ...ent
 export const Reseau: StoryObj = { name: "Réseau", ...entryStory("Réseau") };
 export const Entonnoir: StoryObj = { name: "Entonnoir", ...entryStory("Entonnoir") };
 export const Cascade: StoryObj = { name: "Cascade", ...entryStory("Cascade") };
+export const DependancesEntreModulesFaisceaux: StoryObj = { name: "Dépendances entre modules (faisceaux)", ...entryStory("Dépendances entre modules (faisceaux)") };
+export const FaisceauxUnePersonneMiseEnAvant: StoryObj = { name: "Faisceaux : une personne mise en avant", ...entryStory("Faisceaux : une personne mise en avant") };

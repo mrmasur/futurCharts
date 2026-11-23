@@ -10,3 +10,12 @@ export default meta;
 
 export const ChandeliersCandlestick: StoryObj = { name: "Chandeliers (candlestick)", ...entryStory("Chandeliers (candlestick)") };
 export const BarresOHLC: StoryObj = { name: "Barres OHLC", ...entryStory("Barres OHLC") };
+export const ChandeliersEtMoyennesMobiles: StoryObj = { name: "Chandeliers et moyennes mobiles", ...entryStory("Chandeliers et moyennes mobiles") };
+export const BandesDeBollinger: StoryObj = { name: "Bandes de Bollinger", ...entryStory("Bandes de Bollinger") };
+export const HeikinAshi: StoryObj = { name: "Heikin-Ashi", ...entryStory("Heikin-Ashi") };
+export const CoursEtRSI: StoryObj = { name: "Cours et RSI", ...entryStory("Cours et RSI") };
+export const MACD: StoryObj = { name: "MACD", ...entryStory("MACD") };
+export const CoursEtVolumes: StoryObj = { name: "Cours et volumes", ...entryStory("Cours et volumes") };
+export const Renko: StoryObj = { name: "Renko", ...entryStory("Renko") };
+export const RenkoABriquesFines: StoryObj = { name: "Renko à briques fines", ...entryStory("Renko à briques fines") };
+export const Kagi: StoryObj = { name: "Kagi", ...entryStory("Kagi") };

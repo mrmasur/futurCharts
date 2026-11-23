@@ -11,3 +11,7 @@ export default meta;
 export const GraphiquesSynchronises: StoryObj = { name: "Graphiques synchronisés", ...entryStory("Graphiques synchronisés") };
 export const NavigateurDePlage: StoryObj = { name: "Navigateur de plage", ...entryStory("Navigateur de plage") };
 export const TableauCroise: StoryObj = { name: "Tableau croisé", ...entryStory("Tableau croisé") };
+export const DiagrammeDePareto: StoryObj = { name: "Diagramme de Pareto", ...entryStory("Diagramme de Pareto") };
+export const DoubleAxeChiffreDAffairesEtMarge: StoryObj = { name: "Double axe : chiffre d’affaires et marge", ...entryStory("Double axe : chiffre d’affaires et marge") };
+export const TemperaturesEtPrecipitations: StoryObj = { name: "Températures et précipitations", ...entryStory("Températures et précipitations") };
+export const DoubleAxeHorizontal: StoryObj = { name: "Double axe horizontal", ...entryStory("Double axe horizontal") };

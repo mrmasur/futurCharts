@@ -1,5 +1,6 @@
 import { niceStep } from '../scale/scales';
 import { Table, type ColumnType } from './table';
+import { applyIndicator, type IndicatorSpec } from './indicators';
 
 export type AggregateOp = 'count' | 'sum' | 'mean' | 'min' | 'max' | 'median';
 
@@ -10,6 +11,8 @@ export type AggregateOp = 'count' | 'sum' | 'mean' | 'min' | 'max' | 'median';
  * (binning a distribution, box-plot statistics, a running total).
  */
 export type TransformSpec =
+  /** Technical analysis (`sma`, `ema`, `bollinger`, `rsi`, `macd`, `heikinAshi`): see `indicators.ts`. */
+  | IndicatorSpec
   | {
       /** Histogram bins: one row per bin (and per group), zero counts included. Outputs `bin_start`, `bin_end`, `bin_mid`, `count`. */
       type: 'bin';
@@ -47,6 +50,16 @@ export type TransformSpec =
       kinds?: { increase?: string; decrease?: string; total?: string };
     }
   | { type: 'sort'; field: string; order?: 'asc' | 'desc' }
+  | {
+      /**
+       * Pareto analysis: rows sorted by `field`, largest first, plus the running
+       * share of the total. Outputs `cumulative` (from 0 to 1, `as` to rename it)
+       * and `share` (each row's own part of the total). Rows without a value go last.
+       */
+      type: 'pareto';
+      field: string;
+      as?: string;
+    }
   | {
       /**
        * Pearson correlation of every pair of `fields`: one row per pair, with
@@ -146,6 +159,13 @@ function aggregate(values: number[], op: AggregateOp): number {
 
 export function applyTransform(table: Table, t: TransformSpec): Table {
   switch (t.type) {
+    case 'sma':
+    case 'ema':
+    case 'bollinger':
+    case 'rsi':
+    case 'macd':
+    case 'heikinAshi':
+      return applyIndicator(table, t);
     case 'bin': {
       const values = numeric(table, t.field);
       let lo = Infinity;
@@ -242,6 +262,34 @@ export function applyTransform(table: Table, t: TransformSpec): Table {
       });
       const cols: Record<string, Cell[]> = {};
       for (const f of table.fields) cols[f] = order.map((i) => table.column(f).values[i] as Cell);
+      return output(table, cols);
+    }
+    case 'pareto': {
+      const values = numeric(table, t.field);
+      const num = (i: number) => (Number.isNaN(values[i]) ? -Infinity : values[i]);
+      // Stable: equal values keep the order of the data.
+      const order = Array.from({ length: table.length }, (_, i) => i).sort((a, b) => num(b) - num(a) || a - b);
+      let total = 0;
+      for (const i of order) if (!Number.isNaN(values[i])) total += values[i];
+      const cols: Record<string, Cell[]> = {};
+      for (const f of table.fields) cols[f] = order.map((i) => table.column(f).values[i] as Cell);
+      const cumulative: number[] = [];
+      const share: number[] = [];
+      let running = 0;
+      for (const i of order) {
+        const v = Number.isNaN(values[i]) ? 0 : values[i];
+        running += v;
+        share.push(total ? v / total : 0);
+        cumulative.push(total ? running / total : 0);
+      }
+      // The last row closes on exactly 100 %, whatever the rounding of the sums.
+      if (total && cumulative.length) {
+        let last = cumulative.length - 1;
+        while (last > 0 && Number.isNaN(values[order[last]])) last--;
+        for (let k = last; k < cumulative.length; k++) cumulative[k] = 1;
+      }
+      cols[t.as ?? 'cumulative'] = cumulative;
+      cols.share = share;
       return output(table, cols);
     }
     case 'correlation': {

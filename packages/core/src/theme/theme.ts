@@ -193,20 +193,385 @@ export interface Theme {
     surface: { contours: number; contourColor: string };
     /** Horizon rows: `bands` folds, `gap` px between rows. */
     horizon: { bands: number; gap: number };
+    /** Difference chart: `y` against `y2`, the area between them colored by which one is on top. */
+    difference: {
+      /** Opacity of the area between the two series. */
+      opacity: number;
+      /** Fill where `y` is above `y2` (`auto`: the KPI good color). */
+      positive: string;
+      /** Fill where `y` is below `y2` (`auto`: the KPI bad color). */
+      negative: string;
+      /** Legend entry of the positive fill ("Au-dessus du budget"); empty: none. */
+      positiveLabel: string;
+      /** Legend entry of the negative fill; empty: none. */
+      negativeLabel: string;
+      /** Width of the `y` line, px. */
+      width: number;
+      /** How both lines join their points. */
+      curve: 'linear' | 'step' | 'smooth';
+      /** Color of the `y2` line (`auto`: the muted ink). */
+      referenceColor: string;
+      /** Width of the `y2` line, px. */
+      referenceWidth: number;
+      /** Dash of the `y2` line, px; `[]` for a solid line. */
+      referenceDash: number[];
+    };
+    /** Fan chart: history, then nested quantile bands around the forecast median. */
+    fan: {
+      /** Opacity of the narrowest band; wider bands are lighter in proportion. */
+      opacity: number;
+      /** Width of the history line, px. */
+      width: number;
+      /** How lines and band edges join their points. */
+      curve: 'linear' | 'step' | 'smooth';
+      /** Quantile levels computed when several `y` share an `x` and there is no `encode.key` (paired from the outside in). */
+      quantiles: number[];
+      /** Width of the median line, px. */
+      medianWidth: number;
+      /** Dash of the median line, px; `[]` for a solid line. */
+      medianDash: number[];
+      /** Start the bands at the last actual point, from zero width. */
+      anchor: boolean;
+    };
+    /** Cycle plot: one panel per period, values year after year and their mean. */
+    cycle: {
+      /** Panels when `x` is a date: one per month, quarter, weekday or hour. */
+      period: 'month' | 'quarter' | 'weekday' | 'hour';
+      /** Rows falling in the same panel at the same position are summed or averaged. */
+      aggregate: 'sum' | 'mean';
+      /** Width of the lines, px. */
+      width: number;
+      /** Draw each panel's mean as a horizontal line. */
+      mean: boolean;
+      /** Width of the mean line, px. */
+      meanWidth: number;
+      /** Color of the mean line (`auto`: the primary ink; with several series, each one's own color). */
+      meanColor: string;
+      /** A dot on the latest value of each panel. */
+      points: boolean;
+      /** A faint card behind each panel. */
+      panels: boolean;
+      /** Share of a panel's width left empty on its sides. */
+      inset: number;
+      /** Start the value axis at zero. */
+      zero: boolean;
+    };
+    /** Sparkline table: one row per entity with its latest value, change, sparkline and comparison bar. */
+    sparktable: {
+      /** Columns after the name, in order: `value`, `change`, `spark`, `bar` (the last ones go first on a narrow screen). */
+      show: ('value' | 'change' | 'spark' | 'bar')[];
+      /** Sparkline drawn as a line, a filled area or small columns. */
+      spark: 'line' | 'area' | 'bar';
+      /** The change compares the latest value with the previous one or with the first one. */
+      change: 'previous' | 'first';
+      /** Row order: as in the data, or by decreasing latest value or change. */
+      sortBy: 'data' | 'value' | 'change';
+      /** Whether a rise is good news (it picks the color of the change). */
+      upIsGood: boolean;
+      /** Color of a good change (`auto`: the KPI good color). */
+      good: string;
+      /** Color of a bad change (`auto`: the KPI bad color). */
+      bad: string;
+      /** Column titles above the rows. */
+      headers: boolean;
+      /** Tallest a row gets, px (rows shrink to fit, down to 20 px). */
+      rowHeight: number;
+      /** One value scale for every sparkline (levels compare) instead of one per row (shapes compare). */
+      sharedScale: boolean;
+    };
+    /** Bump area: ribbons as thick as the values, sorted at each step from the largest down. */
+    bumpArea: {
+      /** Opacity of the ribbons. */
+      opacity: number;
+      /** Space between two ribbons, px. */
+      gap: number;
+      /** Share of a step's width where ribbons stay flat (the rest is the crossing). */
+      flat: number;
+      /** Entity names at the right end of the ribbons. */
+      labels: boolean;
+    };
     /** Concentric bars around a center: `endAngle` degrees for the longest, `gap` share of a ring left empty. */
     /** `labelColor`: ink of the values, `auto` for the primary text color (they sit on the track, past the bar). */
     radialBar: { innerRadius: number; gap: number; endAngle: number; track: string; labels: boolean; labelColor: string };
+    /** A series wound into a spiral, one turn per period, first datum at the center; `value` is the color, `size` thins the ribbon. */
+    spiral: {
+      /** What one turn is worth for `x` dates: a `year`, a `week` or a `day` (`auto`: from the span of the data). */
+      turn: 'auto' | 'year' | 'week' | 'day';
+      /** Rows per turn when `x` is not a date, or to force a period (0: by date, or 12). */
+      turnCount: number;
+      /** Share of the radius left empty at the center. */
+      innerRadius: number;
+      /** Space between two turns, px. */
+      gap: number;
+      /** Period graduations around, turn names up 12 o'clock, value range in the hole. */
+      labels: boolean;
+      /** Colors from one hue (negative) through neutral to another (positive) instead of the sequential ramp. */
+      diverging: boolean;
+    };
+    /** Curves around a round graduated grid: `x` the angle (categories or a numeric cycle), `y` the radius. */
+    polarLine: {
+      /** Line width, px. */
+      width: number;
+      /** Bend the curve between the points instead of straight chords. */
+      smooth: boolean;
+      /** Join the last point back to the first. */
+      closed: boolean;
+      /** Opacity of the fill down to the center (0: lines only). */
+      fillOpacity: number;
+      /** A dot on every data point. */
+      points: boolean;
+      /** Number of graduated rings (fewer on a small chart). */
+      levels: number;
+      /** Value of a full turn of a numeric angle (360, 24…); 0: deduced from the data. */
+      angleMax: number;
+      /** Name the angles N, NE, E… when a turn is 360. */
+      compass: boolean;
+      /** Angle names around the circle and ring values. */
+      labels: boolean;
+    };
+    /** Dots at angle `x` and radius `y`; `size` and `color` as on `point`. */
+    polarScatter: {
+      /** Dot diameter without a `size` field, px. */
+      size: number;
+      /** Smallest and largest diameter with a `size` field, px. */
+      sizeRange: [number, number];
+      /** Dot opacity: overlapping measures stay visible. */
+      opacity: number;
+      /** Number of graduated rings (fewer on a small chart). */
+      levels: number;
+      /** Value of a full turn of a numeric angle (360, 24…); 0: deduced from the data. */
+      angleMax: number;
+      /** Name the angles N, NE, E… when a turn is 360. */
+      compass: boolean;
+      /** Angle names around the circle and ring values. */
+      labels: boolean;
+    };
+    /** Series stacked outwards around the circle (`layer.stack`: `center` for a radial stream, `normalize` for shares). */
+    radialArea: {
+      /** Share of the radius left empty at the center. */
+      innerRadius: number;
+      /** Fill opacity of the bands. */
+      opacity: number;
+      /** Bend the bands between the points instead of straight chords. */
+      smooth: boolean;
+      /** Width of the rim drawn on each band's outer edge, px (0: none). */
+      width: number;
+      /** Number of graduated rings (fewer on a small chart). */
+      levels: number;
+      /** Value of a full turn of a numeric angle (360, 24…); 0: deduced from the data. */
+      angleMax: number;
+      /** Name the angles N, NE, E… when a turn is 360. */
+      compass: boolean;
+      /** Angle names around the circle and ring values. */
+      labels: boolean;
+    };
+    /** Bullet graph: per row, a measure bar and a target tick over qualitative ranges. */
+    bullet: {
+      /** Ends of the qualitative ranges, in the measure's unit, from poor to good (`[60, 85, 100]`); the same for every row. */
+      ranges: number[];
+      /** Fields holding each row's own range ends, in the same order (replaces `ranges`). */
+      rangeFields: string[];
+      /** Names of the ranges, shown in the tooltip (`["Insuffisant", "Correct", "Bon"]`). */
+      rangeLabels: string[];
+      /** Target of every row when there is no `encode.target` field. */
+      target: number;
+      /** One scale for every row (same unit) instead of one per row. */
+      shared: boolean;
+      /** Ranges in shades of the measure's color instead of grey. */
+      tinted: boolean;
+      /** Largest thickness of a row's band, px. */
+      thickness: number;
+      /** Graduations under the rows. */
+      axis: boolean;
+      /** Corner radius of the bands, px. */
+      radius: number;
+    };
+    /** Liquid fill gauge: a container per row, filled to its value, the figure in the middle. */
+    liquid: {
+      /** Value of an empty container. */
+      min: number;
+      /** Value of a full container, without an `encode.target` field. */
+      max: number;
+      /** Shape of the container: a circle or a square with round corners. */
+      container: 'circle' | 'rounded';
+      /** Height of the wave, as a share of the container (0: flat surface). */
+      amplitude: number;
+      /** Number of waves across the container. */
+      waves: number;
+      /** Thickness of the outline, px (0: none). */
+      border: number;
+      /** Opacity of the container's color in its empty part. */
+      wash: number;
+      /** Color by level, each up to a value (`[{ "to": 20, "color": "#e34948" }, …]`). */
+      zones: { to: number; color: string }[];
+      /** Name (and value / capacity) under each container. */
+      labels: boolean;
+      /** Keep the wave moving (off by default: a still surface). */
+      animated: boolean;
+      /** Speed of the moving wave, radians per second. */
+      speed: number;
+    };
+    /** Activity rings: one closed ring per goal reached. */
+    activity: {
+      /** Goal of every ring without an `encode.target` field. */
+      max: number;
+      /** Share of the radius left empty in the middle. */
+      innerRadius: number;
+      /** Share of a ring's slot left empty between rings. */
+      gap: number;
+      /** Color of the empty part of a ring (`auto`: the ring's own color, faded). */
+      track: string;
+      /** Round ends on the rings. */
+      rounded: boolean;
+      /** List of the indicators (name, value / goal, share) beside or under the rings. */
+      labels: boolean;
+      /** With a single ring, its share in the middle. */
+      center: boolean;
+    };
+    /** Segmented (LED) meter: one row of segments per item, lit up to its value. */
+    led: {
+      /** Number of segments (fewer when the chart is narrow). */
+      segments: number;
+      /** Value with no segment lit. */
+      min: number;
+      /** Value with every segment lit, without an `encode.target` field. */
+      max: number;
+      /** Space between segments, px. */
+      gap: number;
+      /** Corner radius of a segment, px. */
+      radius: number;
+      /** Largest height of a row of segments, px. */
+      thickness: number;
+      /** Color of the segments by level, each up to a value (`[{ "to": 60, "color": "#1baf7a" }, …]`). */
+      zones: { to: number; color: string }[];
+      /** Color of the unlit segments (`auto` follows the grid). */
+      track: string;
+    };
     /** Partition in rows: `orientation` TB (icicle), BT (flame chart, root at the bottom) or LR. Click to zoom. */
     icicle: { orientation: 'TB' | 'BT' | 'LR'; gap: number; radius: number; labels: boolean };
     /** One dot per item on a half circle (seats of an assembly). `innerRadius`: share of the radius left empty. */
     parliament: { innerRadius: number; center: boolean };
     /** Overlapping circles, areas proportional to the sets and their intersections (2 or 3 sets). */
     venn: { opacity: number; labels: boolean };
+    /** Parallel sets: one column per field of `path`, ribbons between neighbouring columns. Sizes in px. */
+    parsets: {
+      /** Thickness of the category bars. */
+      nodeWidth: number;
+      /** Space between two categories of a column. */
+      nodePadding: number;
+      /** Opacity of the ribbons. */
+      linkOpacity: number;
+      /** Corner radius of the bars. */
+      radius: number;
+      /** Category names beside the bars. */
+      labels: boolean;
+      /** Value and share under the name, where the bar is tall enough. */
+      values: boolean;
+      /** Name of each dimension above its column. */
+      titles: boolean;
+      /** Category order in a column: as met in the data, or largest first. */
+      categoryOrder: 'data' | 'value';
+    };
+    /** UpSet plot: intersections as columns of linked dots, their sizes as bars above, set sizes on the left. */
+    upset: {
+      /** `distinct`: a key counts the elements of exactly these sets. `inclusive`: of at least these sets (as `venn`). */
+      mode: 'distinct' | 'inclusive';
+      /** Order of the intersections: largest first, fewest sets first, or as in the data. */
+      order: 'size' | 'degree' | 'data';
+      /** Order of the sets (rows): largest first, or as in the data. */
+      setOrder: 'size' | 'data';
+      /** At most this many intersections (0: as many as fit). */
+      maxIntersections: number;
+      /** Bars of the set sizes, left of the names. */
+      setBars: boolean;
+      /** Values above the bars and beside the set bars. */
+      labels: boolean;
+    };
+    /** Hierarchical edge bundling: leaves on a circle, links bent towards their common ancestors. */
+    bundle: {
+      /** Bundling strength: 0 draws straight links, 1 follows the hierarchy all the way. */
+      tension: number;
+      /** Opacity of the links. */
+      opacity: number;
+      /** Width of a link, px (scaled by `value` when there is one). */
+      linkWidth: number;
+      /** Thickness of the ring of leaves, px. */
+      nodeSize: number;
+      /** Empty room between two groups, in leaves. */
+      groupGap: number;
+      /** Leaf names around the circle. */
+      labels: boolean;
+      /** Opacity factor of the links left out by a focus (click or `highlight`). */
+      dim: number;
+      /** Splits a name (or a group) into its hierarchy: `core.render.batch`. Empty: no split. */
+      separator: string;
+    };
     /** Words sized by `value`, font sizes in px. */
     wordcloud: { minSize: number; maxSize: number; weight: number };
     /** Events along a line, labels alternating above and below. `proportional`: space them by date. */
     /** `minImportance`: events whose `encode.size` is below it never get a card (dots only). */
     timeline: { proportional: boolean; markerSize: number; minImportance: number };
+    /** Gantt chart: one row per task, bars from start to end, progress, milestones, phases and dependencies. */
+    gantt: {
+      /** Share of a row's height taken by a bar (0–1). */
+      barHeight: number;
+      /** Cap on a bar's thickness, px. */
+      maxBarHeight: number;
+      /** Corner radius of the bars, px. */
+      radius: number;
+      /** Size of a milestone's diamond, px. */
+      milestoneSize: number;
+      /** Percentage done written in the bars, and the date next to each milestone. */
+      labels: boolean;
+      /** Arrows from each predecessor (`encode.depends`) to its successor. */
+      dependencies: boolean;
+      /** Color of the dependency arrows (`auto`: the muted ink). */
+      linkColor: string;
+      /** Width of the dependency arrows, px. */
+      linkWidth: number;
+      /** Date of the "today" line (ISO string or epoch ms); empty: no line. Always given by the spec, never the clock. */
+      today: string | number;
+      /** Text of the flag on the "today" line. */
+      todayLabel: string;
+      /** Color of the "today" line (`auto`: the theme's alert color). */
+      todayColor: string;
+      /** Show the phases only (one summary bar per `encode.group`), their tasks folded away: for small screens. */
+      collapsed: boolean;
+      /** A thin line between rows. */
+      rowLines: boolean;
+    };
+    /** Resource planning: one row per resource (`encode.y`), its slots side by side, overlapping ones on sub-lanes. */
+    schedule: {
+      /** Share of a lane's height taken by a slot (0–1). */
+      barHeight: number;
+      /** Corner radius of the slots, px. */
+      radius: number;
+      /** Space kept between two slots that touch, px. */
+      gap: number;
+      /** The slot's name (`encode.key`) written inside it when it fits, cut with "…" otherwise. */
+      labels: boolean;
+      /** Date of the "now" line (ISO string or epoch ms); empty: no line. Always given by the spec, never the clock. */
+      today: string | number;
+      /** Text of the flag on the "now" line. */
+      todayLabel: string;
+      /** Color of the "now" line (`auto`: the theme's alert color). */
+      todayColor: string;
+      /** A thin line between resources. */
+      rowLines: boolean;
+    };
+    /** State timeline: one row per entity (`encode.y`), its successive states (`encode.color`) as colored spans. */
+    swimlane: {
+      /** Share of a row's height taken by the spans (0–1). */
+      barHeight: number;
+      /** Corner radius of the spans, px. */
+      radius: number;
+      /** Space kept between two spans, px. */
+      gap: number;
+      /** The state's name written in each span when it fits. */
+      labels: boolean;
+      /** A thin line between rows. */
+      rowLines: boolean;
+    };
     /** Hierarchy as a tree: dots (dendrogram) or `boxes` (org chart), growing along `direction`. Sizes in px. */
     /** Arrows at x / y, pointing along `encode.angle`, as long as `encode.size` (within `sizeRange`, px). */
     vector: { width: number; head: number };
@@ -221,6 +586,30 @@ export interface Theme {
      * `body`: share of the slot taken by a body; `wick`: px.
      */
     candlestick: { ohlc: boolean; rising: string; falling: string; body: number; wick: number };
+    renko: {
+      /** Height of a brick, in price units; 0 picks a round size from the price range. */
+      brick: number;
+      /** Color of rising bricks (`auto` = the KPI good color). */
+      rising: string;
+      /** Color of falling bricks (`auto` = the KPI bad color). */
+      falling: string;
+      /** px between two bricks. */
+      gap: number;
+      /** Corner radius of a brick, px. */
+      radius: number;
+    };
+    kagi: {
+      /** Price move against the current line that starts a new one, in price units; 0 picks a round amount from the price range. */
+      reversal: number;
+      /** Color of the thick (yang) stretches (`auto` = the KPI good color). */
+      rising: string;
+      /** Color of the thin (yin) stretches (`auto` = the KPI bad color). */
+      falling: string;
+      /** Width of the yang line (above the previous high), px. */
+      yang: number;
+      /** Width of the yin line (under the previous low), px. */
+      yin: number;
+    };
     /** Routes on a map from (x, y) to (x2, y2), bent by `curvature`; width from `encode.size` (`sizeRange`, px). */
     route: { curvature: number; opacity: number; ends: boolean };
     /** `reverse`: grow right to left (LR) or bottom to top (TB). */
@@ -344,17 +733,38 @@ export const lightTheme: Theme = {
     pictorial: { unit: 1, icon: 'circle', gap: 0.18 },
     surface: { contours: 8, contourColor: 'auto' },
     horizon: { bands: 3, gap: 2 },
+    difference: { opacity: 0.3, positive: 'auto', negative: 'auto', positiveLabel: '', negativeLabel: '', width: 2, curve: 'linear', referenceColor: 'auto', referenceWidth: 1.5, referenceDash: [5, 4] },
+    fan: { opacity: 0.42, width: 2, curve: 'linear', quantiles: [0.1, 0.25, 0.75, 0.9], medianWidth: 2, medianDash: [5, 4], anchor: true },
+    cycle: { period: 'month', aggregate: 'sum', width: 2, mean: true, meanWidth: 1.5, meanColor: 'auto', points: true, panels: true, inset: 0.16, zero: false },
+    sparktable: { show: ['value', 'change', 'spark', 'bar'], spark: 'line', change: 'previous', sortBy: 'data', upIsGood: true, good: 'auto', bad: 'auto', headers: true, rowHeight: 38, sharedScale: false },
+    bumpArea: { opacity: 0.88, gap: 3, flat: 0.3, labels: true },
     radialBar: { innerRadius: 0.3, gap: 0.28, endAngle: 270, track: 'auto', labels: true, labelColor: 'auto' },
+    spiral: { turn: 'auto', turnCount: 0, innerRadius: 0.2, gap: 1.5, labels: true, diverging: false },
+    polarLine: { width: 2, smooth: true, closed: true, fillOpacity: 0, points: false, levels: 4, angleMax: 0, compass: false, labels: true },
+    polarScatter: { size: 7, sizeRange: [4, 20], opacity: 0.75, levels: 4, angleMax: 0, compass: false, labels: true },
+    radialArea: { innerRadius: 0.16, opacity: 0.88, smooth: true, width: 1, levels: 4, angleMax: 0, compass: false, labels: true },
+    bullet: { ranges: [], rangeFields: [], rangeLabels: [], target: NaN, shared: false, tinted: false, thickness: 26, axis: true, radius: 3 },
+    liquid: { min: 0, max: 100, container: 'circle', amplitude: 0.035, waves: 1.4, border: 3, wash: 0.1, zones: [], labels: true, animated: false, speed: 1.6 },
+    activity: { max: 100, innerRadius: 0.36, gap: 0.16, track: 'auto', rounded: true, labels: true, center: true },
+    led: { segments: 24, min: 0, max: 100, gap: 2, radius: 2, thickness: 20, zones: [], track: 'auto' },
     icicle: { orientation: 'TB', gap: 1.5, radius: 3, labels: true },
     parliament: { innerRadius: 0.38, center: true },
     venn: { opacity: 0.3, labels: true },
+    parsets: { nodeWidth: 12, nodePadding: 10, linkOpacity: 0.5, radius: 2, labels: true, values: true, titles: true, categoryOrder: 'data' },
+    upset: { mode: 'distinct', order: 'size', setOrder: 'size', maxIntersections: 0, setBars: true, labels: true },
+    bundle: { tension: 0.85, opacity: 0.6, linkWidth: 1.25, nodeSize: 6, groupGap: 1, labels: true, dim: 0.2, separator: '.' },
     wordcloud: { minSize: 11, maxSize: 46, weight: 650 },
     timeline: { proportional: false, markerSize: 12, minImportance: NaN },
+    gantt: { barHeight: 0.62, maxBarHeight: 22, radius: 4, milestoneSize: 14, labels: true, dependencies: true, linkColor: 'auto', linkWidth: 1.25, today: '', todayLabel: 'Aujourd’hui', todayColor: 'auto', collapsed: false, rowLines: true },
+    schedule: { barHeight: 0.8, radius: 4, gap: 2, labels: true, today: '', todayLabel: 'Maintenant', todayColor: 'auto', rowLines: true },
+    swimlane: { barHeight: 0.7, radius: 2, gap: 1, labels: true, rowLines: false },
     vector: { width: 1.5, head: 5 },
     bubbles: { gap: 2, labels: true, opacity: 0.9 },
     arcDiagram: { maxWidth: 14, opacity: 0.45, nodeSize: 10 },
     pyramid: { gap: 3, labels: true },
     candlestick: { ohlc: false, rising: 'auto', falling: 'auto', body: 0.7, wick: 1.25 },
+    renko: { brick: 0, rising: 'auto', falling: 'auto', gap: 1, radius: 1 },
+    kagi: { reversal: 0, rising: 'auto', falling: 'auto', yang: 3.5, yin: 1.5 },
     route: { curvature: 0.25, opacity: 0.6, ends: true },
     tree: { direction: 'LR', reverse: false, radial: false, boxes: false, nodeSize: 9, linkWidth: 1.5, boxWidth: 132, boxHeight: 46 },
     flow: { variant: 'pipeline', editable: true, direction: 'LR', rankGap: 56, nodeGap: 28, fontSize: 13, edge: 'auto', edgeWidth: 1.5, tint: 0.16, radius: 6 },

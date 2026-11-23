@@ -174,17 +174,20 @@ export class FacetChart {
 
     // Same value scales everywhere: the union of what each panel drew.
     if (facet.shared !== false && this.panels.length > 1) {
-      const union = (axis: 'x' | 'y') => {
+      const union = (axis: 'x' | 'y' | 'secondary') => {
         const ds = this.panels.map((p) => p.getDomains()[axis]).filter((d): d is [number, number] => !!d);
         return ds.length === this.panels.length ? ([Math.min(...ds.map((d) => d[0])), Math.max(...ds.map((d) => d[1]))] as [number, number]) : undefined;
       };
       const x = union('x');
       const y = union('y');
-      if (x || y) {
+      // Dual-axis panels share their second value axis too.
+      const second = union('secondary');
+      if (x || y || second) {
         const scales = {
           ...shared,
           x: x ? { ...shared.x, domain: x, nice: false } : shared.x,
           y: y ? { ...shared.y, domain: y, nice: false } : shared.y,
+          ...(second ? { secondary: { ...shared.secondary, domain: second, nice: false } } : {}),
         };
         for (const p of this.panels) p.update({ ...p.getSpec(), scales });
       }

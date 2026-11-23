@@ -4,6 +4,7 @@ import { applyTransforms } from '../data/transforms';
 import { prefersReducedMotion } from '../marks/animate';
 import { luminance } from '../marks/primitives';
 import { annotationRaw, buildAnnotations } from './annotations';
+import { layerExtents, linearValueDomain } from './domains';
 import { broadcast, joinGroup, leaveGroup, type SyncMember } from './sync';
 import { prepareLayer, standaloneLayer, type LayerData, type SeriesData } from '../marks/prepare';
 import { emptyHit, getMark, type BuildContext, type BuiltMark, type MarkDefinition, type MarkDraw, type MarkLabel, type ShapeHit, type Timeline } from '../marks/registry';
@@ -112,6 +113,8 @@ interface Layout {
   legendY: number;
   xTicks: Tick[];
   yTicks: Tick[];
+  /** Graduations of the secondary value axis (dual-axis charts), in the same normalized space as the primary ones. */
+  ticks2: Tick[];
   transform: ViewTransform;
 }
 
@@ -223,6 +226,12 @@ export class Chart implements SyncMember {
   /** Category scale and value scale (x and y, swapped when horizontal). */
   private cat: Scale = this.xScale;
   private val: Scale = this.yScale;
+  /**
+   * Dual axis: the scale of the layers bound to the secondary value axis (`secondary` holds their
+   * indexes). Both value scales write the same normalized space, so one view transform serves both.
+   */
+  private val2?: Scale;
+  private secondary = new Set<number>();
   private horizontal = false;
   /** The scales come from a standalone mark (no grid by default). */
   private markScales = false;
@@ -378,12 +387,12 @@ export class Chart implements SyncMember {
   }
 
   /** Domains of the continuous axes as drawn (small multiples share them). */
-  getDomains(): { x?: [number, number]; y?: [number, number] } {
+  getDomains(): { x?: [number, number]; y?: [number, number]; secondary?: [number, number] } {
     const d = (s: Scale): [number, number] | undefined => {
       const l = s as Partial<{ d0: number; d1: number }>;
       return s.type !== 'band' && typeof l.d0 === 'number' && typeof l.d1 === 'number' ? [Math.min(l.d0, l.d1), Math.max(l.d0, l.d1)] : undefined;
     };
-    return this.markScales || this.geo ? {} : { x: d(this.xScale), y: d(this.yScale) };
+    return this.markScales || this.geo ? {} : { x: d(this.xScale), y: d(this.yScale), secondary: this.val2 && d(this.val2) };
   }
 
   on<K extends keyof ChartEvents>(type: K, handler: (payload: ChartEvents[K]) => void): () => void {
@@ -557,6 +566,7 @@ export class Chart implements SyncMember {
       return t;
     };
     if (spec.layers.length === 0) {
+      this.val2 = undefined;
       this.legend = [];
       this.requestRender();
       return;
@@ -575,11 +585,22 @@ export class Chart implements SyncMember {
       horizontal = spec.scales?.y?.type === 'band' || (yc.type === 'string' && xc.type !== 'string');
     }
     this.horizontal = horizontal;
+    // Dual axis: cartesian layers asking for the secondary value axis, as long as one stays on the primary.
+    const wantsSecondary = (i: number) => !geo && !defs[i].standalone && spec.layers[i].axis === 'secondary';
+    const dual = spec.layers.some((_, i) => wantsSecondary(i)) && spec.layers.some((_, i) => !defs[i].standalone && !wantsSecondary(i));
+    const onSecondary = (i: number) => dual && wantsSecondary(i);
+    this.secondary = new Set(spec.layers.map((_, i) => i).filter(onSecondary));
+    this.val2 = undefined;
+    // Each value axis takes its default field (format, time type) from its own first layer.
+    const valRefIndex = dual ? spec.layers.findIndex((_, i) => !defs[i].standalone && !onSecondary(i)) : refIndex;
+    const valRef = valRefIndex >= 0 ? spec.layers[valRefIndex] : undefined;
+    const val2RefIndex = dual ? spec.layers.findIndex((_, i) => onSecondary(i)) : -1;
     const catSpec = (horizontal ? spec.scales?.y : spec.scales?.x) ?? {};
     const valSpec = (horizontal ? spec.scales?.x : spec.scales?.y) ?? {};
     const valAxis = (horizontal ? spec.axes?.x : spec.axes?.y) || undefined;
+    const val2Axis = spec.axes?.secondary || undefined;
     const catField = ref ? (horizontal ? ref.encode.y : ref.encode.x) : undefined;
-    const valField = ref ? (horizontal ? ref.encode.x : ref.encode.y) : undefined;
+    const valField = valRef ? (horizontal ? valRef.encode.x : valRef.encode.y) : undefined;
 
     let catType: NonNullable<ScaleSpec['type']> = 'linear';
     if (!geo && ref && catField) {
@@ -643,44 +664,32 @@ export class Chart implements SyncMember {
       this.cat = this.xScale;
       this.val = this.yScale;
     } else {
-      let c0 = Infinity, c1 = -Infinity, v0 = Infinity, v1 = -Infinity;
-      let step = Infinity;
-      let baseline = false;
-      let banded = false;
-      for (const { data, def } of layers) {
-        // A range (y2) has its own start: it does not pull zero into the domain.
-        baseline ||= !!def.baseline && !data.ranged;
-        banded ||= !!def.banded;
-        // Only marks drawn from a start (bars, areas, stacks, ranges) span y0: a line or a point is just y1.
-        const spans = data.stacked || data.ranged || !!def.baseline;
-        for (const s of data.series) {
-          if (s.hidden) continue;
-          for (let i = 0; i < s.x.length; i++) {
-            const x = s.x[i];
-            if (x < c0) c0 = x;
-            if (x > c1) c1 = x;
-            const lo = spans ? Math.min(s.y0[i], s.y1[i]) : s.y1[i];
-            const hi = spans ? Math.max(s.y0[i], s.y1[i]) : s.y1[i];
-            if (lo < v0) v0 = lo;
-            if (hi > v1) v1 = hi;
-            if (def.banded && i > 0 && x - s.x[i - 1] > 0) step = Math.min(step, x - s.x[i - 1]);
-          }
-        }
-      }
+      const ext = layerExtents(layers, onSecondary);
+      let { c0, c1, step } = ext;
+      const { banded } = ext;
+      let { v0, v1 } = ext.primary;
+      let { v0: w0, v1: w1 } = ext.secondary;
       // A target line or band on the value axis must be in view, even past the data.
       const valKey = horizontal ? 'x' : 'y';
       for (const a of spec.annotations ?? []) {
         const v = a[valKey];
         if (v === undefined || (a.x !== undefined && a.y !== undefined && !Array.isArray(a.x) && !Array.isArray(a.y))) continue;
+        const second = dual && a.axis === 'secondary';
         for (const u of Array.isArray(v) ? v : [v]) {
           const n = annotationRaw(u, false, categories);
           if (!Number.isFinite(n)) continue;
+          if (second) {
+            if (n < w0) w0 = n;
+            if (n > w1) w1 = n;
+            continue;
+          }
           if (n < v0) v0 = n;
           if (n > v1) v1 = n;
         }
       }
       if (c0 > c1) [c0, c1] = [0, 1];
       if (v0 > v1) [v0, v1] = [0, 1];
+      if (w0 > w1) [w0, w1] = [0, 1];
       if (!Number.isFinite(step)) step = c1 > c0 ? c1 - c0 : 1;
 
       let cat: Scale;
@@ -704,31 +713,25 @@ export class Chart implements SyncMember {
         xStep = Math.abs(cat.norm(c0 + step) - cat.norm(c0));
       }
 
-      const valCol = valField ? tableOf(refIndex).column(valField) : undefined;
-      const valType = valSpec.type ?? (valCol?.type === 'time' ? 'time' : 'linear');
-      const normalized = layers.some(({ data }) => data.stacked && data.stackMode === 'normalize');
-      // A 100 % stack reads in percent, whatever the unit of the values.
-      const valFormat = valAxis?.format ?? (normalized ? { style: 'percent' as const } : fields[valField ?? '']?.format);
-      let val: Scale;
-      if (valType === 'time') {
-        val = new TimeScale(valSpec.domain?.[0] ?? v0, valSpec.domain?.[1] ?? v1);
-      } else if (valType === 'log') {
-        val = new LogScale(valSpec.domain?.[0] ?? v0, valSpec.domain?.[1] ?? v1, valFormat, !!valSpec.domain);
-      } else {
-        if (valSpec.zero ?? baseline) [v0, v1] = [Math.min(0, v0), Math.max(0, v1)];
+      // One value axis: its scale from the extent of the layers bound to it.
+      const valueScale = (lo: number, hi: number, vs: ScaleSpec, axis: AxisSpec | undefined, refAt: number, baseline: boolean, bound: (i: number) => boolean): Scale => {
+        const refLayer = refAt >= 0 ? spec.layers[refAt] : undefined;
+        const field = refLayer ? (horizontal ? refLayer.encode.x : refLayer.encode.y) : undefined;
+        const col = field ? tableOf(refAt).column(field) : undefined;
+        const type = vs.type ?? (col?.type === 'time' ? 'time' : 'linear');
+        const own = layers.filter((_, i) => bound(i));
+        const normalized = own.some(({ data }) => data.stacked && data.stackMode === 'normalize');
+        // A 100 % stack reads in percent, whatever the unit of the values.
+        const format = axis?.format ?? (normalized ? { style: 'percent' as const } : fields[field ?? '']?.format);
+        if (type === 'time') return new TimeScale(vs.domain?.[0] ?? lo, vs.domain?.[1] ?? hi);
+        if (type === 'log') return new LogScale(vs.domain?.[0] ?? lo, vs.domain?.[1] ?? hi, format, !!vs.domain);
         // Value labels outside the bar ends need room past the longest bar.
-        const outsideLabels = layers.some(({ data }) => data.layer.style?.labels && !data.stacked && data.layer.mark === 'bar');
-        if (outsideLabels && !valSpec.domain) {
-          const pad = (v1 - v0) * (horizontal ? 0.14 : 0.08);
-          if (v1 > 0) v1 += pad;
-          if (v0 < 0) v0 -= pad;
-        }
-        if ((valSpec.nice ?? true) && !normalized) [v0, v1] = niceDomain(v0, v1, 5);
-        if (normalized && !valSpec.domain) [v0, v1] = [0, 1];
-        const d0 = valSpec.domain?.[0] ?? v0;
-        const d1 = valSpec.domain?.[1] ?? v1;
-        val = valSpec.reverse ? new LinearScale(d1, d0, valFormat) : new LinearScale(d0, d1, valFormat);
-      }
+        const outsideLabels = own.some(({ data }) => data.layer.style?.labels && !data.stacked && data.layer.mark === 'bar');
+        const [d0, d1] = linearValueDomain(lo, hi, { spec: vs, baseline, outsideLabels, horizontal, normalized });
+        return vs.reverse ? new LinearScale(d1, d0, format) : new LinearScale(d0, d1, format);
+      };
+      const val = valueScale(v0, v1, valSpec, valAxis, valRefIndex, ext.primary.baseline, (i) => !onSecondary(i));
+      if (dual) this.val2 = valueScale(w0, w1, spec.scales?.secondary ?? {}, val2Axis, val2RefIndex, ext.secondary.baseline, onSecondary);
       this.cat = cat;
       this.val = val;
       this.xScale = horizontal ? val : cat;
@@ -746,7 +749,7 @@ export class Chart implements SyncMember {
       // Dashes are measured in px: rebuilt with the view, like other size-dependent marks.
       const def: MarkDefinition = { standalone: true, sizeDependent: true, symbol: 'square', build: () => ({ draws: [], hit: emptyHit() }) };
       const data = standaloneLayer({ mark: 'rule', encode: {} }, -1, tableOf(refIndex));
-      const mark = buildAnnotations(annotations!, {
+      const actx = {
         renderer: this.renderer,
         theme,
         x: this.xScale,
@@ -754,8 +757,15 @@ export class Chart implements SyncMember {
         categories,
         bandX: bandCat && !horizontal,
         bandY: bandCat && horizontal,
-        pixel: [1 / Math.max(1, view.width), 1 / Math.max(1, view.height)],
-      }, part);
+        pixel: [1 / Math.max(1, view.width), 1 / Math.max(1, view.height)] as [number, number],
+      };
+      const val2 = this.val2;
+      const second = val2 ? annotations!.filter((a) => a.axis === 'secondary') : [];
+      if (!val2 || !second.length) return { data, def, mark: buildAnnotations(annotations!, actx, part) };
+      // Annotations read on the secondary axis: same drawing, with that axis' scale along the values.
+      const first = buildAnnotations(annotations!.filter((a) => a.axis !== 'secondary'), actx, part);
+      const other = buildAnnotations(second, horizontal ? { ...actx, x: val2 } : { ...actx, y: val2 }, part);
+      const mark: BuiltMark = { draws: [...first.draws, ...other.draws], hit: emptyHit(), labels: [...(first.labels ?? []), ...(other.labels ?? [])] };
       return { data, def, mark };
     };
     const buildAll = (view: { width: number; height: number }): Built[] =>
@@ -769,7 +779,8 @@ export class Chart implements SyncMember {
         const [r0, r1] = (style.sizeRange as [number, number] | undefined) ?? [4, 28];
         const enc = data.layer.encode;
         const layerValue = def.standalone ? (enc.value ?? enc.color ?? enc.y) : horizontal ? enc.x : enc.y;
-        const axisFormat = def.standalone ? undefined : valAxis?.format;
+        const second = this.secondary.has(data.index);
+        const axisFormat = def.standalone ? undefined : (second ? val2Axis : valAxis)?.format;
         const override = compileOverrides(data.layer, data.table, !def.standalone && horizontal);
         const paint = (c: RGBA, row: number | undefined): RGBA => {
           const o = row === undefined ? undefined : override?.(row);
@@ -785,7 +796,7 @@ export class Chart implements SyncMember {
           renderer: this.renderer,
           data,
           x: this.cat,
-          y: this.val,
+          y: second ? this.val2! : this.val,
           horizontal: !def.standalone && horizontal,
           pos: def.standalone ? (c, v) => [c, v] : pos,
           theme,
@@ -1147,6 +1158,23 @@ export class Chart implements SyncMember {
     return a === false ? null : (a ?? {});
   }
 
+  /** The secondary value axis of a dual-axis chart: right of the plot, or above it when horizontal. */
+  private axis2(): AxisSpec | null {
+    if (!this.val2) return null;
+    const a = this.spec.axes?.secondary;
+    return a === false ? null : (a ?? {});
+  }
+
+  /** Ink of an axis' graduations and title: its own `color`, or the theme's. */
+  private axisInk(axis: AxisSpec, fallback: string): string {
+    return axis.color ? themeColor(this.theme, axis.color) : fallback;
+  }
+
+  /** The value scale a layer is drawn with. */
+  private valOf(b: Built): Scale {
+    return this.val2 && this.secondary.has(b.data.index) ? this.val2 : this.val;
+  }
+
   private showLegend(): boolean {
     return (this.spec.legend ?? this.theme.legend.visible) && this.legend.length >= 2 && this.compact < 3;
   }
@@ -1202,8 +1230,14 @@ export class Chart implements SyncMember {
 
     const xAxis = this.axis('x');
     const yAxis = this.axis('y');
+    const axis2 = this.axis2();
     const lab = theme.axis.label;
     const ttl = theme.axis.title;
+    // Horizontal dual-axis chart: the second value axis runs along the top of the plot.
+    if (axis2 && this.horizontal) {
+      if (axis2.labels !== false) top += lab.size + lab.padding;
+      if (axis2.title && this.compact < 2) top += ttl.size + ttl.padding;
+    }
     let bottom = pad;
     if (this.timeline) bottom += 40;
     if (xAxis && xAxis.labels !== false) bottom += lab.size + lab.padding;
@@ -1231,13 +1265,27 @@ export class Chart implements SyncMember {
       ctx.font = font(500, 11, ff);
       for (const s of b.data.series) if (!s.hidden) endRoom = Math.max(endRoom, ctx.measureText(s.key).width + 14);
     }
-    const plotW = Math.max(10, this.width - left - pad - 4 - endRoom);
+    // Dual axis: the second value axis takes its room on the right, like the first one on the left.
+    let ticks2: Tick[] = [];
+    let right = 0;
+    if (axis2 && !this.horizontal) {
+      ticks2 = this.val2!.ticks(vy0, vy1, axis2.tickCount ?? yCount);
+      if (axis2.labels !== false) {
+        ctx.font = font(lab.weight, lab.size, ff);
+        let w = 0;
+        for (const t of ticks2) w = Math.max(w, ctx.measureText(t.label).width);
+        right += Math.ceil(w) + lab.padding;
+      }
+      if (axis2.title && this.compact < 2) right += ttl.size + ttl.padding;
+    }
+    const plotW = Math.max(10, this.width - left - pad - 4 - endRoom - right);
     const plot = { x: left, y: top, width: plotW, height: plotH };
 
     const vx0 = -zoom.tx / zoom.kx;
     const vx1 = (1 - zoom.tx) / zoom.kx;
     const xCount = xAxis?.tickCount ?? Math.min(12, Math.max(2, Math.round(plotW / 90)));
     const xTicks = this.xScale.ticks(vx0, vx1, xCount);
+    if (axis2 && this.horizontal) ticks2 = this.val2!.ticks(vx0, vx1, axis2.tickCount ?? xCount);
 
     // With an imposed aspect ratio, letterbox the view inside the plot.
     let view: ClipRect = plot;
@@ -1255,7 +1303,7 @@ export class Chart implements SyncMember {
       sy: -zoom.ky * view.height,
       oy: view.y + view.height - zoom.ty * view.height,
     };
-    return { plot: plotOut, view, titleY, legendY, xTicks, yTicks, transform };
+    return { plot: plotOut, view, titleY, legendY, xTicks, yTicks, ticks2, transform };
   }
 
   // ------------------------------------------------------------------- render
@@ -1449,7 +1497,7 @@ export class Chart implements SyncMember {
       }
       if (xAxis.labels !== false) {
         ctx.font = font(lab.weight, lab.size, ff);
-        ctx.fillStyle = lab.color;
+        ctx.fillStyle = this.axisInk(xAxis, lab.color);
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         let lastRight = -Infinity;
@@ -1471,7 +1519,7 @@ export class Chart implements SyncMember {
       }
       if (xAxis.title && this.compact < 2) {
         ctx.font = font(ttl.weight, ttl.size, ff);
-        ctx.fillStyle = ttl.color;
+        ctx.fillStyle = this.axisInk(xAxis, ttl.color);
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
         // Above the play bar when there is one.
@@ -1493,7 +1541,7 @@ export class Chart implements SyncMember {
       }
       if (yAxis.labels !== false) {
         ctx.font = font(lab.weight, lab.size, ff);
-        ctx.fillStyle = lab.color;
+        ctx.fillStyle = this.axisInk(yAxis, lab.color);
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
         // In a short plot (a small multiple), skip labels that would touch the previous one.
@@ -1509,13 +1557,88 @@ export class Chart implements SyncMember {
       if (yAxis.title && this.compact < 2) {
         ctx.save();
         ctx.font = font(ttl.weight, ttl.size, ff);
-        ctx.fillStyle = ttl.color;
+        ctx.fillStyle = this.axisInk(yAxis, ttl.color);
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         ctx.translate(pad, plot.y + plot.height / 2);
         ctx.rotate(-Math.PI / 2);
         ctx.fillText(yAxis.title, 0, 0);
         ctx.restore();
+      }
+    }
+
+    // Secondary value axis (dual-axis charts): right of the plot, or above it on a horizontal chart.
+    const axis2 = this.axis2();
+    if (axis2 && !this.horizontal) {
+      const edge = plot.x + plot.width;
+      if (axis2.line) {
+        const w = theme.axis.line.width;
+        const x = crisp(edge, w);
+        ctx.strokeStyle = theme.axis.line.color;
+        ctx.lineWidth = w;
+        ctx.beginPath();
+        ctx.moveTo(x, plot.y);
+        ctx.lineTo(x, bottom);
+        ctx.stroke();
+      }
+      if (axis2.labels !== false) {
+        ctx.font = font(lab.weight, lab.size, ff);
+        ctx.fillStyle = this.axisInk(axis2, lab.color);
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        let lastY = Infinity;
+        for (const t of L.ticks2) {
+          const y = T.oy + t.t * T.sy;
+          if (y < plot.y - 1 || y > bottom + 1) continue;
+          if (Math.abs(lastY - y) < lab.size + 3) continue;
+          ctx.fillText(t.label, edge + lab.padding, y + 0.5);
+          lastY = y;
+        }
+      }
+      if (axis2.title && this.compact < 2) {
+        ctx.save();
+        ctx.font = font(ttl.weight, ttl.size, ff);
+        ctx.fillStyle = this.axisInk(axis2, ttl.color);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.translate(this.width - pad, plot.y + plot.height / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText(axis2.title, 0, 0);
+        ctx.restore();
+      }
+    } else if (axis2) {
+      if (axis2.line) {
+        const w = theme.axis.line.width;
+        const y = crisp(plot.y, w);
+        ctx.strokeStyle = theme.axis.line.color;
+        ctx.lineWidth = w;
+        ctx.beginPath();
+        ctx.moveTo(plot.x, y);
+        ctx.lineTo(plot.x + plot.width, y);
+        ctx.stroke();
+      }
+      if (axis2.labels !== false) {
+        ctx.font = font(lab.weight, lab.size, ff);
+        ctx.fillStyle = this.axisInk(axis2, lab.color);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        let lastRight = -Infinity;
+        for (const t of L.ticks2) {
+          const x = T.ox + t.t * T.sx;
+          if (x < plot.x - 1 || x > plot.x + plot.width + 1) continue;
+          const w = ctx.measureText(t.label).width;
+          const cx = Math.min(this.width - 2 - w / 2, Math.max(2 + w / 2, x));
+          if (cx - w / 2 < lastRight + 10) continue;
+          ctx.fillText(t.label, cx, plot.y - lab.padding);
+          lastRight = cx + w / 2;
+        }
+      }
+      if (axis2.title && this.compact < 2) {
+        ctx.font = font(ttl.weight, ttl.size, ff);
+        ctx.fillStyle = this.axisInk(axis2, ttl.color);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(axis2.title, plot.x + plot.width / 2, plot.y - lab.padding - (axis2.labels !== false ? lab.size + ttl.padding : 0));
       }
     }
 
@@ -1849,8 +1972,10 @@ export class Chart implements SyncMember {
       const raw = h.x[i];
       const enc = b.data.layer.encode;
       const vField = (this.horizontal ? enc.x : enc.y) ?? '';
-      const axisFmt = ((this.horizontal ? this.spec.axes?.x : this.spec.axes?.y) || undefined)?.format;
-      const fmt = this.val.type === 'time' ? (v: number) => this.val.format(v) : numberFormatter(fields[vField]?.format ?? axisFmt);
+      // Each value is formatted with its own field, then with the axis it is read on.
+      const val = this.valOf(b);
+      const axisFmt = ((val !== this.val ? this.spec.axes?.secondary : this.horizontal ? this.spec.axes?.x : this.spec.axes?.y) || undefined)?.format;
+      const fmt = val.type === 'time' ? (v: number) => val.format(v) : numberFormatter(fields[vField]?.format ?? axisFmt);
       // A range (Gantt, waterfall) reads "start → end".
       const valueLabel = h.value2 ? `${fmt(h.value[i])} → ${fmt(h.value2[i])}` : fmt(h.value[i]);
       return {
@@ -2262,13 +2387,15 @@ export class Chart implements SyncMember {
       if (b.def.standalone) continue;
       // Bars, areas, stacks and ranges span from y0; lines and points are just y1.
       const spans = b.data.stacked || b.data.ranged || !!b.def.baseline;
+      // Both value axes share the normalized space: the window fits the layers of the two.
+      const val = this.valOf(b);
       for (const s of b.data.series) {
         if (s.hidden) continue;
         for (let i = 0; i < s.x.length; i++) {
           const x = this.cat.norm(s.x[i]);
           if (x < v0 || x > v1) continue;
-          const y1 = this.val.norm(s.y1[i]);
-          const y0 = spans ? this.val.norm(s.y0[i]) : y1;
+          const y1 = val.norm(s.y1[i]);
+          const y0 = spans ? val.norm(s.y0[i]) : y1;
           lo = Math.min(lo, y0, y1);
           hi = Math.max(hi, y0, y1);
         }

@@ -41,6 +41,12 @@ Mettre ces documents à jour quand un chantier avance.
   textes) : `#/galerie` en vignettes vivantes par famille avec recherche, `#/demo/<nom>` en page détail. Chaque
   nouveau type de graphique y reçoit un exemple (`library.ts` : `entries` et `GROUPS`). Pistes restantes du
   catalogue : faits (axe recalé sur la plage visible, Gapminder `motion`, tableau croisé `pivot` compris).
+- **Sources d'inspiration** pour les nouveaux graphiques (rappelées le 2026-11-23) : Tableau, Apache ECharts et
+  Highcharts, pour les types de graphiques et leur finition ; jamais leurs marques, textes, données ni code.
+- **Nouvelles familles** (depuis le 2026-11-23) : une famille de marques par fichier `marks/<famille>.ts` (table
+  `<FAMILLE>_MARKS` branchée dans `builtin.ts`) et ses exemples dans `apps/demo/src/examples/<famille>.ts`
+  (`FAMILIES`, branché dans `examples/index.ts`), plutôt que d'allonger `library.ts`. Plusieurs agents peuvent ainsi
+  travailler en parallèle sans se marcher dessus ; seuls `theme.ts`, `spec/types.ts` et le README restent partagés.
 - Les marques animées dans le temps (`race`, `motion`) exposent un `Timeline` ; le graphique ajoute la barre de lecture.
 - Le texte posé sur une couleur prend `on: fill` (encre contrastée) ; posé sur un fond clair (piste, surface),
   il prend l'encre du thème. Ne jamais laisser du texte blanc déborder d'une marque sur le fond.

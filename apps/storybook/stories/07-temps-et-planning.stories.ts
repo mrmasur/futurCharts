@@ -10,3 +10,8 @@ export default meta;
 
 export const DiagrammeDeGantt: StoryObj = { name: "Diagramme de Gantt", ...entryStory("Diagramme de Gantt") };
 export const Calendrier: StoryObj = { name: "Calendrier", ...entryStory("Calendrier") };
+export const GanttAvecAvancementEtDependances: StoryObj = { name: "Gantt avec avancement et dépendances", ...entryStory("Gantt avec avancement et dépendances") };
+export const GanttParPhasesEtJalons: StoryObj = { name: "Gantt par phases et jalons", ...entryStory("Gantt par phases et jalons") };
+export const PlanningDesSalles: StoryObj = { name: "Planning des salles", ...entryStory("Planning des salles") };
+export const PlanningDAffectation: StoryObj = { name: "Planning d’affectation", ...entryStory("Planning d’affectation") };
+export const EtatsDesMachines: StoryObj = { name: "États des machines", ...entryStory("États des machines") };

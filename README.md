@@ -137,25 +137,42 @@ Démo : `http://localhost:5273/gallery.html`, une application de tableau de bord
 | Calendrier | `calendar` (une case par jour, `x`: date) |
 | Indicateurs (suite) | `kpi` (dernière valeur, évolution, sparkline ; `upIsGood`), `waffle` (100 cases) |
 | Polaires | `rose` (rose polaire, aire proportionnelle, séries empilées), `radialBar` (un anneau par catégorie ; valeurs à l'encre sur la piste, `labelColor` pour en changer) |
+| Polaires : spirale | `spiral` (`x` dates, `value` en couleur, `size` en épaisseur ; un tour par `turn` : `year`, `week`, `day`, ou `turnCount` lignes ; début au centre) |
+| Polaires : courbes | `polarLine` (`x` ou `angle` : catégories ou cycle numérique déduit, 24 h, 360°… ; `y` rayon, `color` séries ; `smooth`, `closed`, `fillOpacity`, `points`, `compass`, `angleMax`) |
+| Polaires : nuage | `polarScatter` (`x` ou `angle`, `y` rayon, `size`, `color` ; les valeurs d'anneau s'écrivent sur le rayon le moins chargé) |
+| Polaires : aires | `radialArea` (séries empilées depuis le centre ; `stack: 'center'` pour un flux radial, `'normalize'` pour des parts ; `innerRadius`, `smooth`) |
 | Relations (suite) | `arcDiagram` (`source`, `target`, `value` : nœuds alignés, liens en demi-cercles), `bubbles` (bulles groupées, une grappe par `color`) |
 | Champs | `vector` (flèches : `x`, `y`, `angle` en degrés depuis le haut, `size` pour la longueur) |
 | Parts (pyramide) | `pyramid` (étages empilés depuis la pointe, hauteur selon la valeur) |
 | Animation | `motion` (nuage animé façon Gapminder : `key`, `time`, `x`, `y`, `size`, `color` ; barre de lecture, traînée sur les points de `highlight`) |
 | Tableaux | `pivot` (tableau croisé : `key` en lignes, `x` en colonnes, `value` ; cellules teintées, total et tendance par ligne) |
 | Distributions (suite) | `ridgeline` (densités empilées par `key`), `beeswarm` (points sans chevauchement le long de `x`, un essaim par `key`) |
+| Évolution (suite) | `difference` (`y` contre `y2` : aire colorée selon le signe de l'écart, croisements exacts), `fan` (éventail de prévision : quantiles par `key` ou calculés sur plusieurs `y` par `x`, historique en trait plein), `cycle` (cycle plot : un panneau par mois, trimestre, jour de semaine ou heure, moyenne en trait), `sparktable` (une ligne par `key` : dernière valeur, variation, mini-courbe, barre de comparaison), `bumpArea` (classement en rubans d'épaisseur proportionnelle à la valeur) |
 | Grilles | `tilemap` (tuiles hexagonales ou carrées en colonne `x` / ligne `y`), `surface` (grille interpolée + courbes de niveau), `horizon` (séries repliées en bandes) |
 | Unités | `pictorial` (une rangée de symboles par catégorie, `style.unit` par symbole) |
 | Arbres (suite) | `tree` avec `style.radial` (arbre radial) |
 | Jauges (suite) | `gauge` avec `zones` (seuils colorés), `needle`, `ticks`, `sweep` (ouverture en degrés), `rounded` |
+| Puces | `bullet` (par ligne : mesure, trait d'objectif `encode.target`, plages qualitatives `ranges` ou `rangeFields` ; `shared` pour une échelle commune, `tinted`) |
+| Jauge à remplissage | `liquid` (un contenant par ligne rempli à valeur / `encode.target` ou `max`, surface en vague, `container` rond ou arrondi, `zones` ; `animated` pour une vague en mouvement) |
+| Anneaux d'activité | `activity` (un anneau par objectif, piste teintée, bouts arrondis, second tour au-delà de 100 % ; un seul anneau : la part au centre) |
+| Compteur à segments | `led` (segments allumés jusqu'à la valeur, `zones` : couleur par niveau) |
 | Matrices (suite) | `heatmap` avec `circles` (punch card) ou `diverging` (corrélations, transform `correlation`), `polarHeatmap` (cases en anneaux) |
 | Multivarié (suite) | `splom` (matrice de nuages, `path` = champs), `scatter3d` (`x`, `y`, `z`, à tourner à la souris) |
 | Globe | `globe` (projection orthographique, `geo` pour les contours, points `x`/`y`, routes en grands cercles vers `x2`/`y2`, à tourner à la souris) |
 | Effets | `point` avec `pulse` (ondes), `bar` avec `track` (piste), `line` avec `colorByValue`, parts avec `cornerRadius`, `tree` avec `reverse` |
 | Bourse | `candlestick` (`y` haut, `y2` bas, `open`, `close` ; `style.ohlc` pour des barres OHLC) |
+| Bourse (indicateurs) | transforms `sma`, `ema`, `bollinger` (`middle`, `upper`, `lower`), `rsi`, `macd` (`macd`, `signal`, `histogram`) et `heikinAshi` : ils ajoutent des colonnes, à tracer avec `line`, `area` ou `bar` |
+| Bourse (sans axe du temps) | `renko` (`x` date, `y` clôture ; briques de `style.brick`), `kagi` (`x` date, `y` clôture ; retournement de `style.reversal`, trait épais au-dessus du sommet précédent) |
 | Cartes (suite) | `route` (de `x`, `y` à `x2`, `y2`, courbée ; épaisseur avec `size`) |
 | Arbres | `tree` (`path` ; dendrogramme, ou organigramme avec `boxes` et `direction: "TB"`), `icicle` (partition en lignes, zoom au clic ; `orientation: "BT"` pour un flame chart) |
 | Ensembles | `venn` (2 ou 3 ensembles ; `key` vaut `A`, `A&B` ou `A&B&C`, aires proportionnelles) |
+| UpSet | `upset` (au-delà de 3 ensembles : matrice de points reliés, barres par intersection et par ensemble ; `key` vaut `A&B`, `value` optionnelle, `style.mode: 'inclusive'` pour des données de type `venn`) |
+| Ensembles parallèles | `parsets` (diagramme alluvial : une colonne par champ de `path`, rubans colorés par `color` ou la première dimension, `value` ou comptage des lignes) |
+| Faisceaux d’arêtes | `bundle` (feuilles en cercle groupées par `color`, `graph.nodes[].group` ou noms pointés ; liens `source` → `target` regroupés en faisceaux ; clic ou `highlight` sur un nœud) |
 | Texte et temps | `wordcloud` (taille selon `value`), `timeline` (frise : `x` date, `key` titre, `value` détail) |
+| Gantt | `gantt` (`key` tâche, `x` → `x2` ; `progress` part remplie, `group` phases avec barre de synthèse, `depends` flèches depuis les prédécesseurs désignés par `id` ou `key`, début = fin : jalon ; `style.today` ligne du jour, `style.collapsed` phases seules) |
+| Planning de ressources | `schedule` (`y` ressource, `x` → `x2`, `key` titre du créneau, `color` ; les chevauchements passent sur des sous-lignes ; `style.today`) |
+| États dans le temps | `swimlane` (`y` entité, `color` état, `x` → `x2` ou jusqu’au changement suivant) |
 | Parts (suite) | `marimekko` (largeur = part du total, hauteur = part dans la colonne), `pack` (cercles imbriqués) |
 | Relations | `chord` (échanges entre entités), `network` (placement par forces, nœuds déplaçables) |
 | Multivarié | `parallel` (coordonnées parallèles, `path` = champs à comparer), `hexbin` (densité de très nombreux points) |
