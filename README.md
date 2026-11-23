@@ -92,7 +92,7 @@ Le builder ne produit qu'une `ChartSpec`. Tout ce qu'il exprime peut s'écrire d
 |---|---|
 | `render/` | Contrat de rendu indépendant du moteur (`types.ts`, `layouts.ts`) et moteur `webgl2/` |
 | `scale/` | Échelles linéaire, log, temps, bandes, Mercator. Elles produisent des positions normalisées, jamais des pixels |
-| `marks/` | Les 92 marques du cœur (`geoshape` est dans `@futurcharts/geo`), contrat dans `registry.ts`, enregistrées par `ensureBuiltinMarks` ; `registerMark` pour les vôtres |
+| `marks/` | Les 97 marques du cœur (`geoshape` est dans `@futurcharts/geo`), contrat dans `registry.ts`, enregistrées par `ensureBuiltinMarks` ; `registerMark` pour les vôtres |
 | `data/` | `Table` (colonnes typées) et transformations de la spec |
 | `theme/` | Thèmes `light` / `dark`, `registerTheme`, surcharge feuille par feuille ; options de style documentées dans `Theme['marks']` |
 | `spec/` | Types de la spec (référence commentée de toutes les options) et builder |
@@ -127,6 +127,7 @@ Démo : `http://localhost:5273/gallery.html`, une application de tableau de bord
 | Intervalles | `bar` avec `x2` / `y2` : Gantt, cascade ; `rule` : moustaches, barres d'erreur, sucettes ; `tick` : médianes, distributions en traits |
 | Distribution | courbe en cloche ou densité (transform `density`, `method: "normal"` ou `kde` ; `step` = largeur des classes pour la superposer à un histogramme), nuage dispersé (`point` avec `style.jitter`), histogramme (transform `bin` + `bar`), boîte à moustaches (transform `boxplot` + `rule` + `bar` + `tick` + `point`), `violin` (densité, quartiles, médiane) |
 | Corrélation | `point` (nuage, bulles avec `size`), droite de régression (transform `regression`) |
+| Corrélation (analyse) | `quadrant` (matrice à quadrants : `x`, `y`, `size`, `key` ; seuils `style.xThreshold` / `yThreshold`, médianes par défaut ; zones teintées et nommées par `style.quadrants`), `connected` (nuage connecté : trajectoire dans l'ordre de `time`, flèches de sens, teinte qui fonce avec le temps, étapes clés nommées, une trajectoire par `color`), `marginal` (nuage avec histogrammes de `x` en haut et de `y` à droite, empilés par `color`) |
 | Parts | `pie`, `donut` (`startAngle` / `endAngle` en degrés : `-90` et `90` pour un demi-anneau ; `encode.size` : rayon variable), `treemap` (squarifié, groupes), `parliament` (un point par siège) |
 | Indicateurs | `gauge` (min, max, objectif), `funnel` (taux de conversion) |
 | Matrices | `heatmap` (deux axes de catégories) |
@@ -177,6 +178,8 @@ Démo : `http://localhost:5273/gallery.html`, une application de tableau de bord
 | Carte à pics | `spike` (un triangle effilé par lieu, hauteur selon `value` ; `color` catégorie ou mesure, nom des `top` plus hauts) |
 | Barres sur carte | `mapBars` (petites colonnes par lieu `key`, une par valeur de `color`, sur une échelle commune ; `height`, `thickness`) |
 | Arbres | `tree` (`path` ; dendrogramme, ou organigramme avec `boxes` et `direction: "TB"`), `icicle` (partition en lignes, zoom au clic ; `orientation: "BT"` pour un flame chart) |
+| Treemap de Voronoï | `voronoi` (`path` à deux niveaux, `value` : une cellule polygonale par feuille dans un cercle, aire proportionnelle, regroupées et colorées par branche ; `gap`, `groupGap`, `iterations`) |
+| Arbre indenté | `indentedTree` (`path`, `value` : une ligne par nœud, sous-totaux, barre de part, clic pour replier ; `expand: "all" \| "none" \| "first"`, `rowHeight`, `indent`, `bars`, `sorted`) |
 | Ensembles | `venn` (2 ou 3 ensembles ; `key` vaut `A`, `A&B` ou `A&B&C`, aires proportionnelles) |
 | UpSet | `upset` (au-delà de 3 ensembles : matrice de points reliés, barres par intersection et par ensemble ; `key` vaut `A&B`, `value` optionnelle, `style.mode: 'inclusive'` pour des données de type `venn`) |
 | Ensembles parallèles | `parsets` (diagramme alluvial : une colonne par champ de `path`, rubans colorés par `color` ou la première dimension, `value` ou comptage des lignes) |

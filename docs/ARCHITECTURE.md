@@ -188,14 +188,14 @@ destruction. Le wrapper ne fait que relier le cycle de vie et les événements. 
 
 ## 6. Tests
 
-- `npm test` (Vitest, environnement Node, sans DOM) : 286 tests sur la logique pure (données, transformations,
+- `npm test` (Vitest, environnement Node, sans DOM) : 304 tests sur la logique pure (données, transformations,
   échelles, mises en page de flux / arbres / formes, formules et modèle du tableur, adaptateurs, géo).
 - Pas de test unitaire de `Chart` lui-même, ni des wrappers. L'audit mobile se fait avec `fcAudit`.
 
 ### Tests visuels (`npm run test:visual`)
 
-Les 201 exemples de la galerie sont la suite de tests du rendu : Playwright (Chromium sans écran, WebGL logiciel)
-ouvre chaque exemple seul et compare une capture à sa référence, au pixel près. 804 comparaisons, environ deux minutes.
+Les 208 exemples de la galerie sont la suite de tests du rendu : Playwright (Chromium sans écran, WebGL logiciel)
+ouvre chaque exemple seul et compare une capture à sa référence, au pixel près. 832 comparaisons, environ deux minutes.
 
 | Élément | Rôle |
 |---|---|

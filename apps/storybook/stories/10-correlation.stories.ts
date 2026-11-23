@@ -17,3 +17,7 @@ export const Bulles: StoryObj = { name: "Bulles", ...entryStory("Bulles") };
 export const DensiteHexagonale: StoryObj = { name: "Densité hexagonale", ...entryStory("Densité hexagonale") };
 export const CoordonneesParalleles: StoryObj = { name: "Coordonnées parallèles", ...entryStory("Coordonnées parallèles") };
 export const NuageEtLegendeDeDegrade: StoryObj = { name: "Nuage et légende de dégradé", ...entryStory("Nuage et légende de dégradé") };
+export const MatriceAQuadrantsPortefeuilleDeProduits: StoryObj = { name: "Matrice à quadrants : portefeuille de produits", ...entryStory("Matrice à quadrants : portefeuille de produits") };
+export const EffortEtImpact: StoryObj = { name: "Effort et impact", ...entryStory("Effort et impact") };
+export const NuageConnecteChomageEtInflation: StoryObj = { name: "Nuage connecté : chômage et inflation", ...entryStory("Nuage connecté : chômage et inflation") };
+export const NuageEtDistributionsMarginales: StoryObj = { name: "Nuage et distributions marginales", ...entryStory("Nuage et distributions marginales") };

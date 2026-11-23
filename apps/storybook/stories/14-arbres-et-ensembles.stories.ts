@@ -23,3 +23,5 @@ export const TicketsDeSupportEnEnsemblesParalleles: StoryObj = { name: "Tickets 
 export const CompetencesPartageesEntreEquipesUpSet: StoryObj = { name: "Compétences partagées entre équipes (UpSet)", ...entryStory("Compétences partagées entre équipes (UpSet)") };
 export const UpSetCombinaisonsDeCanauxDAchat: StoryObj = { name: "UpSet : combinaisons de canaux d’achat", ...entryStory("UpSet : combinaisons de canaux d’achat") };
 export const FaisceauxAuxNomsRayonnants: StoryObj = { name: "Faisceaux aux noms rayonnants", ...entryStory("Faisceaux aux noms rayonnants") };
+export const DepensesParPosteArbreIndente: StoryObj = { name: "Dépenses par poste (arbre indenté)", ...entryStory("Dépenses par poste (arbre indenté)") };
+export const ArbreIndenteReplie: StoryObj = { name: "Arbre indenté replié", ...entryStory("Arbre indenté replié") };

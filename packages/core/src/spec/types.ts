@@ -299,6 +299,8 @@ export type MarkStyle = { color?: string } & DeepPartial<
     Theme['marks']['schedule'] &
     Theme['marks']['swimlane'] &
     Theme['marks']['tree'] &
+    Theme['marks']['voronoi'] &
+    Theme['marks']['indentedTree'] &
     Theme['marks']['vector'] &
     Theme['marks']['bubbles'] &
     Theme['marks']['arcDiagram'] &
@@ -320,6 +322,9 @@ export type MarkStyle = { color?: string } & DeepPartial<
     Theme['marks']['qq'] &
     Theme['marks']['contour'] &
     Theme['marks']['raincloud'] &
+    Theme['marks']['quadrant'] &
+    Theme['marks']['connected'] &
+    Theme['marks']['marginal'] &
     Theme['marks']['tilemap'] &
     Theme['marks']['dorling'] &
     Theme['marks']['mapPie'] &

@@ -20,3 +20,4 @@ export const CerclesImbriques: StoryObj = { name: "Cercles imbriqués", ...entry
 export const Marimekko: StoryObj = { name: "Marimekko", ...entryStory("Marimekko") };
 export const Gaufre: StoryObj = { name: "Gaufre", ...entryStory("Gaufre") };
 export const TreemapAuxLibellesCoupes: StoryObj = { name: "Treemap aux libellés coupés", ...entryStory("Treemap aux libellés coupés") };
+export const BudgetParMissionVoronoi: StoryObj = { name: "Budget par mission (Voronoï)", ...entryStory("Budget par mission (Voronoï)") };

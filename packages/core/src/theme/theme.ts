@@ -290,6 +290,57 @@ export interface Theme {
       /** How much of the room under the box the dots spread over, 0 (one line) to 1. */
       jitter: number;
     };
+    /** Quadrant matrix: points (bubbles with `size`) in four tinted, named zones split by a threshold on each axis. */
+    quadrant: {
+      /** Threshold along x, in data units. `null`: the median of the values. */
+      xThreshold: number | null;
+      /** Threshold along y, in data units. `null`: the median of the values. */
+      yThreshold: number | null;
+      /** Names of the zones, in reading order: top-left, top-right, bottom-left, bottom-right. An empty name is not written. */
+      quadrants: string[];
+      /** Opacity of the tint of each zone, 0 (none) to 1. */
+      tint: number;
+      /** Point diameter without `encode.size`, px. */
+      size: number;
+      /** Smallest and largest bubble diameter with `encode.size`, px (area follows the value). */
+      sizeRange: [number, number];
+      /** Opacity of the points. */
+      opacity: number;
+      /** Name each point (`encode.key`) where a free place is found next to it. */
+      labels: boolean;
+    };
+    /** Connected scatter: the path of an entity in the x / y plane, in the order of `encode.time`; one path per `color`. */
+    connected: {
+      /** Width of the segments, px. */
+      width: number;
+      /** Diameter of the dot of each step, px (the two ends are a little larger). */
+      size: number;
+      /** An arrow head in the middle of each segment long enough to carry it. */
+      arrows: boolean;
+      /** Length of the arrow heads, px. */
+      arrowSize: number;
+      /** Name the key steps: first, last, and the extremes along x and y. */
+      labels: boolean;
+    };
+    /** Scatter with marginal histograms: distribution of `x` above the cloud, of `y` on its right, stacked by `color`. */
+    marginal: {
+      /** Point diameter, px. */
+      size: number;
+      /** Opacity of the points. */
+      opacity: number;
+      /** Approximate number of classes of each histogram (edges fall on round values of the axis). */
+      bins: number;
+      /** Part of the width and of the height given to the histograms, 0.05 to 0.45. */
+      share: number;
+      /** Space between two bars of a histogram, px. */
+      gap: number;
+      /** Corner radius at the end of the bars, px. */
+      radius: number;
+      /** Opacity of the bars. */
+      fillOpacity: number;
+      /** Write the highest count of the top histogram beside it. */
+      labels: boolean;
+    };
     /** Grid of tiles: hexagons (`hex`) or squares, `gap` px. */
     tilemap: { hex: boolean; gap: number; labels: boolean };
     /** Dorling cartogram: one circle per place, area by `value`, pushed apart from its neighbours. */
@@ -855,6 +906,30 @@ export interface Theme {
     route: { curvature: number; opacity: number; ends: boolean };
     /** `reverse`: grow right to left (LR) or bottom to top (TB). */
     tree: { direction: 'LR' | 'TB'; reverse: boolean; radial: boolean; boxes: boolean; nodeSize: number; linkWidth: number; boxWidth: number; boxHeight: number };
+    /** Voronoi treemap: one polygon per leaf of `path` in a circle, its area proportional to `value`, grouped by first level. */
+    voronoi: {
+      /** Surface-colored line between two cells, px. */
+      gap: number;
+      /** Surface-colored line around each group of cells (first level of `path`), px. */
+      groupGap: number;
+      /** Name (and value when the cell is tall enough) at the center of each cell. */
+      labels: boolean;
+      /** Rounds of relaxation: more rounds bring the areas closer to the values (the best round is kept). */
+      iterations: number;
+    };
+    /** Indented tree: one line per node of `path`, with its value (subtotal) and a bar. Click a node to fold it. */
+    indentedTree: {
+      /** Height of a line, px (lines shrink down to 20 px before the list is cut with "+ n lignes"). */
+      rowHeight: number;
+      /** Indentation of each level, px. */
+      indent: number;
+      /** A bar per line, as long as its share (the largest first-level node fills the track). */
+      bars: boolean;
+      /** Nodes open at first: every one (`all`), none, or the first of each level (`first`). */
+      expand: 'all' | 'none' | 'first';
+      /** Siblings from the largest value down instead of the order of the data. */
+      sorted: boolean;
+    };
     /** Likert scale: one diverging stack per question, centered on the middle of the scale. */
     likert: {
       /** The answers in order, from the most unfavourable to the most favourable (empty: the order of the data). */
@@ -1064,6 +1139,9 @@ export const lightTheme: Theme = {
     qq: { size: 6, opacity: 0.8, band: true, level: 0.95, referenceColor: 'auto', referenceWidth: 1.5, referenceDash: [] },
     contour: { levels: 6, smoothing: 1, opacity: 0.9, lines: true, points: true, size: 3.5 },
     raincloud: { opacity: 0.5, bandwidth: 0, box: true, points: true, size: 3.5, jitter: 1 },
+    quadrant: { xThreshold: null, yThreshold: null, quadrants: [], tint: 0.07, size: 10, sizeRange: [8, 34], opacity: 0.85, labels: true },
+    connected: { width: 2, size: 6, arrows: true, arrowSize: 9, labels: true },
+    marginal: { size: 5, opacity: 0.7, bins: 20, share: 0.2, gap: 1, radius: 2, fillOpacity: 0.85, labels: true },
     tilemap: { hex: true, gap: 2, labels: true },
     dorling: { coverage: 0.36, iterations: 140, gap: 1.5, labels: true, label: '', shortLabel: '', values: true, opacity: 1 },
     mapPie: { sizeRange: [16, 46], innerRadius: 0, gap: 1, outline: 1.5, labels: true, opacity: 1 },
@@ -1110,6 +1188,8 @@ export const lightTheme: Theme = {
     kagi: { reversal: 0, rising: 'auto', falling: 'auto', yang: 3.5, yin: 1.5 },
     route: { curvature: 0.25, opacity: 0.6, ends: true },
     tree: { direction: 'LR', reverse: false, radial: false, boxes: false, nodeSize: 9, linkWidth: 1.5, boxWidth: 132, boxHeight: 46 },
+    voronoi: { gap: 1.5, groupGap: 4, labels: true, iterations: 120 },
+    indentedTree: { rowHeight: 26, indent: 18, bars: true, expand: 'first', sorted: true },
     likert: { answers: [], neutral: 'center', labels: true, totals: true, thickness: 26, radius: 3, gap: 1, negative: 'auto', positive: 'auto', negativeLabel: 'Défavorable', positiveLabel: 'Favorable', sorted: false },
     tornado: { base: NaN, sorted: true, labels: true, shared: true, thickness: 24, radius: 3 },
     variwide: { gap: 2, radius: 3, labels: true, sorted: false },
