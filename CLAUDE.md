@@ -7,6 +7,11 @@ Mettre ces documents à jour quand un chantier avance.
 
 - Démo et Storybook écoutent sur le réseau local (`--host`) : accessibles depuis un autre poste par l'IP du Mac.
 - `npm run dev` (démo, port 5273 ; `/wrappers.html` pour React, Vue, Web Component), `npm test`, `npm run typecheck`, `npm run build`.
+- **Tests visuels** (faits le 2026-11-23) : `npm run test:visual` (Playwright, ~1 min) compare chaque exemple de la
+  galerie à sa capture de référence, en 4 variantes (bureau clair, bureau sombre, 343 × 260, 375 × 520), au pixel près.
+  À lancer après tout changement de rendu ; si l'écart est voulu, `npm run test:visual:update` puis **regarder** les
+  images changées (`git status tests/visual/captures`) avant de les commiter. Un nouvel exemple y entre tout seul.
+  Détail : `docs/ARCHITECTURE.md` § 6.
 - `npm run storybook` (port 6006, `apps/storybook`) : stories générées depuis les exemples de la galerie par
   `npm run stories` ; à relancer après chaque nouvel exemple. Les contrôles et leurs descriptions viennent du thème
   (valeurs de `lightTheme.marks`, commentaires du type `Theme['marks']`) : documenter chaque option dans ce type.

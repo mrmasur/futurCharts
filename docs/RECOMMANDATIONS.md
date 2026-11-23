@@ -20,7 +20,8 @@ sont dans [REPRISE.md](REPRISE.md) § 4.
   copie du code.
 - **`chart/chart.ts` fait ~2 400 lignes** : mise en page, axes, légende, survol, zoom, lasso, navigateur, timeline,
   transitions, étiquettes. C'est là que les régressions naîtront.
-- **Rien ne teste le rendu ni `Chart`** : toutes les vérifications visuelles sont manuelles.
+- **Rien ne teste `Chart` ni les interactions** : le rendu final de chaque exemple est couvert par les tests
+  visuels (depuis le 2026-11-23), mais survol, zoom, lasso et glisser restent vérifiés à la main.
 - **Perte de contexte WebGL non gérée** : sur mobile ou après une mise en veille, un contexte perdu laisse tous
   les graphiques de la page vides (un seul contexte partagé : une perte touche tout).
 - **Bundle monolithique** : ~125 Ko gzip pour le cœur, même pour une simple courbe.
@@ -36,9 +37,9 @@ sont dans [REPRISE.md](REPRISE.md) § 4.
 3. **Gestion de la perte de contexte** dans `SharedWebGL2Renderer` : écouter `webglcontextlost` /
    `webglcontextrestored`, recréer `GLCore`, recompiler les shaders, puis demander à chaque graphique de
    reconstruire ses batches (`compile()`). Tester avec l'extension `WEBGL_lose_context`.
-4. **Tests visuels de non-régression** : Playwright qui ouvre `gallery.html#/demo/<nom>` pour chaque entrée de
-   `library.ts`, attend la fin de l'animation (ou `animation: false`), et compare une capture (seuil de
-   tolérance). Les 114 exemples deviennent la suite de tests. Ajouter les deux tailles de `fcAudit`.
+4. ~~Tests visuels de non-régression~~ : **fait le 2026-11-23** (`npm run test:visual`, voir
+   [ARCHITECTURE.md](ARCHITECTURE.md) § 6). Reste à les brancher sur la CI (point 2) : les références actuelles
+   sont celles de macOS, il faudra en générer pour la plateforme de la CI (Linux), dans un conteneur Playwright.
 5. **Licence** (MIT ou autre, à décider), `LICENSE`, champ `license` dans chaque `package.json`.
 
 ## Priorité 2 — consolider
@@ -93,6 +94,12 @@ Dans l'ordre de valeur pour une application de BI :
 - `renderer: 'webgl2'` crée un contexte dédié : au-delà d'une quinzaine sur une page, le navigateur retire les plus
   anciens.
 - Ajouter un exemple sans relancer `npm run stories` le laisse absent de Storybook.
+- Un nouvel exemple n'a pas de capture de référence : le premier `npm run test:visual` l'écrit et échoue pour
+  le signaler ; relire les quatre images, puis les commiter.
+- Mettre à jour Playwright change la version de Chromium, donc peut déplacer des pixels partout : le faire dans
+  un commit à part, avec les captures régénérées.
+- Un exemple dont les données dépendent de la date du jour ou du hasard rendrait sa capture instable : les
+  jeux de données de `library.ts` sont tous déterministes, à garder ainsi.
 - Les fichiers `apps/storybook/stories/NN-*.stories.ts` sont générés et écrasés : n'écrire à la main que des
   stories non numérotées (comme `Tableur.stories.ts`).
 - Ember classique (`.hbs`) : réexporter le modifier dans `app/modifiers/futur-chart.js`.

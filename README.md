@@ -6,6 +6,7 @@ Librairie de graphiques rendue sur GPU, pilotée par une spec déclarative, pens
 npm install
 npm run dev        # démo sur http://localhost:5273
 npm test
+npm run test:visual   # chaque exemple de la galerie comparé à sa capture de référence
 npm run typecheck
 npm run build      # dist/ de chaque paquet
 ```
@@ -447,6 +448,5 @@ Des boîtes reliées pour tracer un processus de bout en bout, embranchements et
 ## Pas encore fait
 
 Lecture du format Arrow, moteur WebGPU, publication sur npm,
-export SVG/PDF, gestion de la perte de contexte WebGL, accessibilité (lecteur d'écran, clavier), CI et tests
-visuels. Les tirets sont découpés à la construction : un zoom les étire avec les données. Ordre conseillé :
+export SVG/PDF, gestion de la perte de contexte WebGL, accessibilité (lecteur d'écran, clavier), CI. Les tirets sont découpés à la construction : un zoom les étire avec les données. Ordre conseillé :
 [docs/RECOMMANDATIONS.md](docs/RECOMMANDATIONS.md).

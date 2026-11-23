@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>futurCharts · test visuel</title>
+    <style>
+      html, body { margin: 0; }
+      body { font-family: system-ui, sans-serif; }
+      /* One gallery example alone, at a fixed size: what the visual tests capture (tests/visual). */
+      #cadre { box-sizing: border-box; overflow: hidden; }
+      #cadre.tuiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      #cadre.pile { display: flex; flex-direction: column; gap: 4px; }
+      #cadre > div { min-width: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="cadre"></div>
+    <script type="module" src="/src/visual.ts"></script>
+  </body>
+</html>

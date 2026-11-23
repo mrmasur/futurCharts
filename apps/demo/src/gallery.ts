@@ -3,6 +3,7 @@ import { ordersSheet, projectWorkbook } from './sheets';
 import { auditCharts } from './audit';
 import { CATEGORIES, CHANNELS, COUNTRIES, DASHBOARDS, type Card, type Dashboard, type Filters } from './dashboards';
 import { entries, GROUPS, PALETTES, type Entry } from './library';
+import { slug } from './slug';
 
 // ------------------------------------------------------------------ state
 
@@ -33,7 +34,6 @@ const themeFor = (): ChartSpec['theme'] => {
   return { extends: mode, palette: { categorical: mode === 'dark' ? p.dark : p.light, sequential: mode === 'dark' ? [...p.ramp].reverse() : p.ramp } };
 };
 
-const slug = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '');
 
 // ------------------------------------------------------------- navigation
 

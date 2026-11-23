@@ -37,6 +37,8 @@ npm install
 npm run dev          # démo : http://localhost:5273 (gallery.html, wrappers.html, maps.html)
 npm run storybook    # http://localhost:6006
 npm test             # vitest, 80 tests, < 1 s
+npm run test:visual  # Playwright : 114 exemples × 4 variantes comparés à leurs captures, ~1 min
+npm run test:visual:update   # accepter le rendu actuel comme nouvelle référence (relire les images)
 npm run typecheck    # tsc sur chaque paquet et chaque app
 npm run build        # dist/ de chaque paquet (vite + tsc)
 npm run stories      # régénère les stories après un nouvel exemple de galerie
@@ -72,6 +74,8 @@ apps/
   demo/        galerie, tableaux de bord, tableur (Vite)
     src/library.ts   LES exemples : `entries` (114) et `GROUPS` (familles) ; source de la galerie ET de Storybook
   storybook/   Storybook HTML ; stories générées par scripts/generate.ts (fichiers 01-…18-, ne pas éditer)
+tests/visual/        tests visuels : suite Playwright et captures de référence (voir ARCHITECTURE.md § 6)
+playwright.config.ts variantes des tests visuels (bureau, sombre, mobile, mobile-haut)
 scripts/build.mjs    build de chaque paquet (ordre important : core d'abord)
 CLAUDE.md            règles du projet, lues automatiquement par Claude Code (à garder à jour)
 ```
@@ -130,8 +134,10 @@ Elles sont aussi dans `CLAUDE.md`. Chacune a une raison ; la plupart ont été a
   et les identifiants sont en anglais. Les commits sont courts et décrivent l'effet visible (« Frise : points
   importants, zoom qui replace les cartes, lien au clic »).
 - **Vérifier dans le navigateur**, pas seulement dans les tests : la plupart des défauts sont visuels (étiquettes
-  qui se chevauchent, texte blanc sur fond clair, graphique écrasé sur mobile). Les tests couvrent la logique pure
-  (mises en page, transformations, formules, adaptateurs) ; rien ne teste le rendu WebGL lui-même.
+  qui se chevauchent, texte blanc sur fond clair, graphique écrasé sur mobile). Les tests unitaires couvrent la
+  logique pure (mises en page, transformations, formules, adaptateurs).
+- **Lancer `npm run test:visual` après tout changement de rendu** : il dit quels exemples ont bougé, au pixel
+  près. Il ne dit pas si le nouveau dessin est bon : c'est en relisant les images changées qu'on le sait.
 - **Une démo par fonctionnalité** : si ce n'est pas dans la galerie, ça n'existe pas pour l'utilisateur, et ce
   n'est pas dans Storybook non plus.
 - **Garder `CLAUDE.md` à jour** quand une décision durable est prise : c'est la mémoire du projet pour les sessions
@@ -148,6 +154,7 @@ Elles sont aussi dans `CLAUDE.md`. Chacune a une raison ; la plupart ont été a
 | Tableur | Formules, dates, fusions, mise en forme, classeur, wrappers | Lien avec le catalogue dbt ; tri qui ignore les fusions |
 | Petits écrans | Compaction, `responsive`, petits multiples, calendrier, tactile | Calendrier d'une année trop serré (5-8 px) : cas pour une règle `responsive` |
 | Données | Adaptateurs ES / ClickHouse / dbt, rôles de champ (`importance`, `link`) | Format Arrow |
+| Tests | 80 tests unitaires ; tests visuels de la galerie (456 captures, 2026-11-23) | Tests de `Chart` sans GPU, interactions, tableur |
 | Distribution | `npm run build` produit `dist/` | Publication npm, CI, licence, changelog |
 
 ## 7. Passation (même Mac, autre compte)

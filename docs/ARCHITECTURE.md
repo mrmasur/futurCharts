@@ -166,5 +166,30 @@ destruction. Le wrapper ne fait que relier le cycle de vie et les événements. 
 
 - `npm test` (Vitest, environnement Node, sans DOM) : 80 tests sur la logique pure (données, transformations,
   échelles, mises en page de flux / arbres / formes, formules et modèle du tableur, adaptateurs, géo).
-- Pas de test du rendu (WebGL), de `Chart` lui-même, ni des wrappers. La vérification visuelle se fait dans la
-  galerie et Storybook, et l'audit mobile avec `fcAudit`.
+- Pas de test unitaire de `Chart` lui-même, ni des wrappers. L'audit mobile se fait avec `fcAudit`.
+
+### Tests visuels (`npm run test:visual`)
+
+Les 114 exemples de la galerie sont la suite de tests du rendu : Playwright (Chromium sans écran, WebGL logiciel)
+ouvre chaque exemple seul et compare une capture à sa référence, au pixel près. 456 comparaisons, environ une minute.
+
+| Élément | Rôle |
+|---|---|
+| `apps/demo/visual.html` + `src/visual.ts` | Un exemple seul, à taille fixe : `visual.html?nom=<slug>&l=800&h=480&theme=dark`. Tuiles, piles et petits multiples suivent les règles d'une carte de galerie. `window.__pret` et `window.__erreurs` renseignent le test |
+| `tests/visual/liste.ts` | Écrit `exemples.json` (non commité) depuis `library.ts` : Playwright doit connaître les noms des tests avant d'ouvrir une page. Refuse deux exemples de même adresse ou un exemple absent de `GROUPS` |
+| `tests/visual/galerie.pw.ts` | Un test par exemple ; échoue aussi sur une erreur de console ou de création |
+| `playwright.config.ts` | Quatre variantes : `bureau` (800 × 480, clair), `sombre`, `mobile` (343 × 260, ×2), `mobile-haut` (375 × 520, ×2) ; lance la démo si elle ne tourne pas |
+| `tests/visual/captures/<plateforme>/<variante>/<slug>.png` | Les références, commitées (16 Mo). Elles dépendent de la plateforme (polices, lissage) : celles de `darwin` ne valent pas sous Linux |
+
+- **Le temps est figé** (horloge Playwright, `performance.now()` recalé sur la date) puis avancé par sauts : les
+  animations d'entrée arrivent à leur état final, une course de barres ou une onde s'arrêtent toujours sur la même
+  image. C'est ce qui permet la comparaison exacte (`maxDiffPixels: 0`, `threshold: 0`) ; une tolérance, même
+  faible, laissait passer un rayon de barre changé d'un pixel.
+- **Un écart** : `npx playwright show-report tests/visual/rapport` montre attendu / obtenu / différence. S'il est
+  voulu, `npm run test:visual:update` (ou `-- -g "Sankey"` pour un seul exemple), puis relire les images modifiées
+  avant de les commiter : une référence acceptée sans la regarder ne protège plus rien.
+- **Cibler** : `npm run test:visual -- --project=mobile -g "Frise"`.
+- **Limites** : rien ne teste les interactions (survol, zoom, lasso, glisser), ni les tableaux de bord, ni le tableur,
+  ni Storybook. L'état testé est l'état final : une animation cassée en cours de route ne se voit pas. Le rendu
+  WebGL est logiciel (SwiftShader) : un défaut propre à un GPU réel ne se voit pas non plus.
+- Première installation sur un autre poste : `npx playwright install chromium`.
