@@ -10,3 +10,4 @@ export default meta;
 
 export const NuageDeMots: StoryObj = { name: "Nuage de mots", ...entryStory("Nuage de mots") };
 export const FriseChronologique: StoryObj = { name: "Frise chronologique", ...entryStory("Frise chronologique") };
+export const FriseChronologiqueDense: StoryObj = { name: "Frise chronologique dense", ...entryStory("Frise chronologique dense") };

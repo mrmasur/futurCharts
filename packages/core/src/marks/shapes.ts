@@ -610,9 +610,30 @@ export const wordcloud: MarkDefinition = {
 
 // ------------------------------------------------------------------ timeline
 
+/** Indices 0..n-1 in an order that spreads them: ends first, then halves, quarters… */
+function spreadOrder(n: number): number[] {
+  if (n <= 2) return Array.from({ length: n }, (_, i) => i);
+  const out = [0, n - 1];
+  const seen = new Set(out);
+  for (let parts = 2; out.length < n; parts *= 2) {
+    for (let k = 1; k < parts; k += 2) {
+      const i = Math.round(((n - 1) * k) / parts);
+      if (!seen.has(i)) {
+        seen.add(i);
+        out.push(i);
+      }
+    }
+    if (parts > n * 2) for (let i = 0; i < n; i++) if (!seen.has(i)) out.push(i);
+  }
+  return out;
+}
+
 /**
  * `timeline`: events (`key`, optional `value` as a description) at dates (`x`)
- * on one line, labels alternating above and below on two levels.
+ * on one line. Every event is a dot; those with room get a card (title, date),
+ * on up to four levels above and below the line, the most important first
+ * (`encode.size`, otherwise a spread across the whole span). The others stay
+ * dots: the tooltip names the event under the pointer and its neighbours.
  */
 export const timeline: MarkDefinition = {
   standalone: true,
@@ -626,10 +647,12 @@ export const timeline: MarkDefinition = {
     const xf = need(layer, 'x', 'timeline');
     const df = layer.encode.value;
     const gf = layer.encode.color;
+    const sf = layer.encode.size;
     const xcol = table.column(xf);
     const keys = table.column(kf).values;
     const desc = df ? table.column(df).values : undefined;
     const groups = gf ? table.column(gf).values : undefined;
+    const weight = sf ? (table.column(sf).values as Float64Array) : undefined;
     const rows = Array.from({ length: table.length }, (_, i) => i);
     if (xcol.type !== 'string') rows.sort((a, b) => (xcol.values[a] as number) - (xcol.values[b] as number));
     const fmt =
@@ -642,59 +665,111 @@ export const timeline: MarkDefinition = {
     const n = rows.length;
     const t0 = xcol.type === 'string' ? 0 : (xcol.values[rows[0]] as number);
     const t1 = xcol.type === 'string' ? 1 : (xcol.values[rows[n - 1]] as number);
-    const margin = 0.07;
+    const [px, py] = ctx.pixel;
+    const W = 1 / px;
+    const H = 1 / py;
+    const margin = Math.min(0.07, 60 * px);
+    // By date when asked, or when there are many events (even spacing would lie about time).
+    const proportional = (style.proportional || n > 12) && xcol.type !== 'string' && t1 > t0;
     const at = (k: number) =>
-      style.proportional && xcol.type !== 'string' && t1 > t0
-        ? margin + ((1 - 2 * margin) * ((xcol.values[rows[k]] as number) - t0)) / (t1 - t0)
-        : n === 1 ? 0.5 : margin + ((1 - 2 * margin) * k) / (n - 1);
-    const [, py] = ctx.pixel;
+      proportional ? margin + ((1 - 2 * margin) * ((xcol.values[rows[k]] as number) - t0)) / (t1 - t0) : n === 1 ? 0.5 : margin + ((1 - 2 * margin) * k) / (n - 1);
+    const xs = rows.map((_, k) => at(k));
+
+    // Cards: size in px, levels above and below (near, then far when the height allows).
+    const family = theme.font.family;
+    const cardH = desc ? 52 : 36;
+    const near = Math.min(40, H * 0.07) + 4;
+    const levels: { up: boolean; stem: number }[] = [];
+    if (H / 2 - 8 >= near + cardH) levels.push({ up: true, stem: near }, { up: false, stem: near });
+    const far = near + cardH + 8;
+    if (H / 2 - 8 >= far + cardH) levels.push({ up: true, stem: far }, { up: false, stem: far });
+    const taken: [number, number][][] = levels.map(() => []);
+    const order = weight ? rows.map((_, k) => k).sort((a, b) => (weight[rows[b]] || 0) - (weight[rows[a]] || 0)) : spreadOrder(n);
+    const card = new Map<number, { level: number; cx: number }>();
+    for (const k of order) {
+      const r = rows[k];
+      const wpx =
+        Math.max(
+          textWidth(String(keys[r]), `650 12px ${family}`),
+          textWidth(fmt(xcol.values[r] as number | string), `10px ${family}`),
+          desc ? textWidth(String(desc[r]), `10px ${family}`) : 0,
+        ) + 14;
+      // Centered on its dot, slid inwards at the edges.
+      const cx = Math.max(wpx / 2 + 2, Math.min(W - wpx / 2 - 2, xs[k] * W));
+      const span: [number, number] = [cx - wpx / 2 - 6, cx + wpx / 2 + 6];
+      // Alternate the starting level so neighbours fall on opposite sides.
+      for (let q = 0; q < levels.length; q++) {
+        const l = (q + (card.size % 2)) % levels.length;
+        if (taken[l].some(([a, b]) => span[0] < b && span[1] > a)) continue;
+        taken[l].push(span);
+        card.set(k, { level: l, cx: cx / W });
+        break;
+      }
+    }
+
     const lines: number[] = [];
     const dots: number[] = [];
     const labels: MarkLabel[] = [];
     const axis = parseColor(theme.axis.line.color);
     const y0 = ctx.y.norm(0);
-    pushSegment(lines, 0.02, y0, 0.98, y0, axis, 2);
+    pushSegment(lines, 0.01, y0, 0.99, y0, axis, 2);
     const legend = groups ? [...new Set(rows.map((r) => String(groups[r])))].map((g) => ({ key: g, color: ctx.categorical(g) })) : [];
-    const pos: { x: number; row: number }[] = [];
+    const surface = theme.background;
+    const pos: { x: number; row: number; labelled: boolean }[] = [];
     rows.forEach((r, k) => {
-      const x = at(k);
-      const up = k % 2 === 0;
-      const far = k % 4 >= 2;
-      // Stem length in px: near and far levels.
-      const H = 1 / py;
-      const stem = (far ? Math.min(92, H * 0.22) : Math.min(40, H * 0.06)) * py + (far ? 0 : 4 * py);
-      const ty = y0 + (up ? stem : -stem);
+      const x = xs[k];
       const base = groups ? legend.find((l) => l.key === String(groups[r]))!.color : ctx.categorical(fieldLabel(ctx, kf));
       const c = ctx.paint(base, r);
+      const placed = card.get(k);
+      pos.push({ x, row: r, labelled: !!placed });
+      if (!placed) {
+        // A dot only: smaller, its card would not fit.
+        dots.push(x, y0, Math.max(6, style.markerSize * 0.6), 0, c[0], c[1], c[2], c[3] * 0.85, ctx.surface[0], ctx.surface[1], ctx.surface[2], 1, 1.5);
+        return;
+      }
+      const lv = levels[placed.level];
+      const ty = y0 + (lv.up ? lv.stem : -lv.stem) * py;
       pushSegment(lines, x, y0, x, ty, withAlpha(c, 0.6), 1.25);
       dots.push(x, y0, style.markerSize, 0, c[0], c[1], c[2], c[3], ctx.surface[0], ctx.surface[1], ctx.surface[2], 1, 2);
+      const cx = placed.cx;
       const title = String(keys[r]);
       const date = fmt(xcol.values[r] as number | string);
-      const surface = theme.background;
-      if (up) {
-        if (desc) labels.push({ tx: x, ty, text: String(desc[r]), color: theme.text.secondary, size: 10, align: 'center', baseline: 'bottom', dy: -4, background: surface });
-        labels.push({ tx: x, ty, text: title, color: theme.text.primary, size: 12, weight: 650, align: 'center', baseline: 'bottom', dy: desc ? -20 : -4, background: surface });
-        labels.push({ tx: x, ty, text: date, color: theme.text.muted, size: 10, align: 'center', baseline: 'bottom', dy: desc ? -36 : -20 });
+      if (lv.up) {
+        if (desc) labels.push({ tx: cx, ty, text: String(desc[r]), color: theme.text.secondary, size: 10, align: 'center', baseline: 'bottom', dy: -4, background: surface });
+        labels.push({ tx: cx, ty, text: title, color: theme.text.primary, size: 12, weight: 650, align: 'center', baseline: 'bottom', dy: desc ? -20 : -4, background: surface });
+        labels.push({ tx: cx, ty, text: date, color: theme.text.muted, size: 10, align: 'center', baseline: 'bottom', dy: desc ? -36 : -20 });
       } else {
-        labels.push({ tx: x, ty, text: date, color: theme.text.muted, size: 10, align: 'center', baseline: 'top', dy: 4 });
-        labels.push({ tx: x, ty, text: title, color: theme.text.primary, size: 12, weight: 650, align: 'center', baseline: 'top', dy: 18, background: surface });
-        if (desc) labels.push({ tx: x, ty, text: String(desc[r]), color: theme.text.secondary, size: 10, align: 'center', baseline: 'top', dy: 34, background: surface });
+        labels.push({ tx: cx, ty, text: date, color: theme.text.muted, size: 10, align: 'center', baseline: 'top', dy: 4 });
+        labels.push({ tx: cx, ty, text: title, color: theme.text.primary, size: 12, weight: 650, align: 'center', baseline: 'top', dy: 18, background: surface });
+        if (desc) labels.push({ tx: cx, ty, text: String(desc[r]), color: theme.text.secondary, size: 10, align: 'center', baseline: 'top', dy: 34, background: surface });
       }
-      pos.push({ x, row: r });
     });
+    if (card.size < n) {
+      // Say that more is there: the count of events shown as dots only.
+      labels.push({ tx: 0.99, ty: y0, text: `${n - card.size} autres : survolez les points`, color: theme.text.muted, size: 10, align: 'right', baseline: 'top', dy: H / 2 - 18, free: true });
+    }
     return {
       draws: [{ batch: batch(ctx, 'line', lines) }, { batch: batch(ctx, 'point', dots) }],
       hit: emptyHit(),
       labels,
       legend,
       pick(tx, ty): ShapeHit | null {
-        if (Math.abs(ty - y0) > 24 * py) return null;
-        const best = pos.reduce((b, p) => (Math.abs(p.x - tx) < Math.abs(b.x - tx) ? p : b), pos[0]);
-        if (!best || Math.abs(best.x - tx) > 0.04) return null;
-        return {
-          title: String(keys[best.row]),
-          rows: [{ label: fieldLabel(ctx, xf), value: fmt(xcol.values[best.row] as number | string) }, ...(desc ? [{ label: fieldLabel(ctx, df!), value: String(desc[best.row]) }] : [])],
-        };
+        // Near the line: the closest event, and the ones close around it (often hidden ones).
+        if (Math.abs(ty - y0) > 28 * py) return null;
+        let best = -1;
+        for (let k = 0; k < pos.length; k++) if (best < 0 || Math.abs(pos[k].x - tx) < Math.abs(pos[best].x - tx)) best = k;
+        if (best < 0 || Math.abs(pos[best].x - tx) / px > 24) return null;
+        const r = pos[best].row;
+        const out = [{ label: fieldLabel(ctx, xf), value: fmt(xcol.values[r] as number | string) }];
+        if (desc) out.push({ label: fieldLabel(ctx, df!), value: String(desc[r]) });
+        const around = pos
+          .map((p, k) => ({ p, k, d: Math.abs(p.x - pos[best].x) / px }))
+          .filter((q) => q.k !== best && q.d <= 40)
+          .sort((a, b) => a.d - b.d)
+          .slice(0, 4)
+          .sort((a, b) => a.k - b.k);
+        for (const q of around) out.push({ label: fmt(xcol.values[q.p.row] as number | string), value: String(keys[q.p.row]) });
+        return { title: String(keys[r]), rows: out };
       },
     };
   },

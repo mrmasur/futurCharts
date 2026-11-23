@@ -543,6 +543,18 @@ const cloud3d = Array.from({ length: 360 }, (_, i) => {
   return { x: cx + gauss(r) * 0.9, y: cy + gauss(r) * 0.9, z: cz + gauss(r) * 0.9, segment: ['Fidèles', 'Occasionnels', 'Nouveaux'][g] };
 });
 
+// Two years of releases: many small ones, a few that matter (importance 1 to 5).
+const releases = Array.from({ length: 42 }, (_, i) => {
+  const major = i % 9 === 0;
+  const day = new Date(2025, 0, 6 + Math.round(i * 17.3 + Math.sin(i) * 5));
+  return {
+    date: day,
+    version: major ? `Version ${1 + i / 9}.0` : `v${1 + Math.floor(i / 9)}.${i % 9}`,
+    detail: major ? ['Lancement', 'Tableur', 'Graphiques 3D', 'WebGPU', 'Collaboration'][i / 9] : ['Correctifs', 'Performance', 'Accessibilité', 'Exports', 'Connecteurs'][i % 5],
+    importance: major ? 5 : i % 4 === 0 ? 3 : 1,
+  };
+});
+
 // The same countries over three years, and products over four quarters: data states for transitions.
 const yearsByCountry = [2024, 2025, 2026].map((year, k) => ({
   label: String(year),
@@ -575,6 +587,18 @@ export type Entry = {
   states?: { label: string; data: ChartSpec['data'] }[];
 };
 export const entries: Entry[] = [
+  {
+    title: 'Frise chronologique dense',
+    caption: 'timeline · 42 versions : chaque version est un point, les plus importantes (encode.size) ont une carte là où il y a la place, survolez la ligne pour retrouver les autres',
+    wide: true,
+    spec: {
+      title: 'Versions publiées',
+      subtitle: 'Deux ans de livraisons',
+      data: releases,
+      fields: { date: { label: 'Date' }, detail: { label: 'Contenu' } },
+      layers: [{ mark: 'timeline', encode: { x: 'date', key: 'version', value: 'detail', size: 'importance' } }],
+    },
+  },
   {
     title: 'Graphique adaptatif',
     caption: 'responsive · un Sankey sur grand écran, des barres sous 480 px de large (règle dans la spec) ; réduisez la fenêtre pour voir',
@@ -2020,7 +2044,7 @@ export const GROUPS: [string, string[]][] = [
   ['Flux', ['Pipeline de données', 'Diagramme de flux', 'Processus avec volumes', 'Chemin mis en avant', 'Sankey', 'Diagramme en cordes', 'Réseau', 'Entonnoir', 'Cascade']],
   ['Matrices et polaires', ['Matrice de corrélation', 'Carte de chaleur polaire', 'Punch card', 'Surface et courbes de niveau', 'Horizon', 'Carte de chaleur', 'Radar', 'Rose polaire', 'Barres radiales']],
   ['Arbres et ensembles', ['Bulles groupées', 'Diagramme en arcs', 'Dendrogramme', 'Arbre radial', 'Arbre de bas en haut', 'Organigramme', 'Icicle', 'Flame chart', 'Diagramme de Venn']],
-  ['Texte et chronologie', ['Nuage de mots', 'Frise chronologique']],
+  ['Texte et chronologie', ['Nuage de mots', 'Frise chronologique', 'Frise chronologique dense']],
   ['Indicateurs', ['Tuiles KPI', 'Jauge', 'Jauge à zones', 'Compteur', 'Barres sur piste', 'Pyramide', 'Graphique pictographique']],
   ['Cartes', ['Globe et routes aériennes', 'Points pulsants', 'Carte en tuiles hexagonales', 'Routes aériennes', 'Points sur une carte du monde', 'Choroplèthe mondiale', 'Bulles sur une carte', 'Zoom sur l’Europe et mise en avant']],
   ['Mise en avant', ['Graphique adaptatif', 'Une courbe mise en avant', 'Étiquettes personnalisées', 'Mise en avant dans un camembert', 'Mise en avant dans un treemap', 'Mise en avant d’une série', 'Mise en avant sur une carte de chaleur']],
