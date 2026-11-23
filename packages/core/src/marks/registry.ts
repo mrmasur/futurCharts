@@ -147,7 +147,7 @@ export interface MarkDraw {
   /**
    * Identity of each instance (with `data`): after a data change, an instance
    * moves from the one with the same key in the previous state, and a new key
-   * grows from nothing. Rect and point batches only.
+   * grows from nothing. Rect, point and arc batches only.
    */
   keys?: string[];
 }

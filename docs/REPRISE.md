@@ -5,8 +5,11 @@ est, comment le faire tourner, et quelles règles ne pas casser. Le détail tech
 [ARCHITECTURE.md](ARCHITECTURE.md), les priorités et les risques dans [RECOMMANDATIONS.md](RECOMMANDATIONS.md).
 Le [README](../README.md) reste la référence fonctionnelle (ce que la spec sait faire, avec des exemples).
 
-État au 2026-11-23 : 29 commits sur `main`, tests, typecheck et build au vert. Le projet est repris par un autre
+État au 2026-11-23 : 30 commits sur `main`, tests, typecheck et build au vert. Le projet est repris par un autre
 compte **sur le même Mac**, dans le même dossier (`~/Documents/futurCharts`) : rien à cloner ni à installer.
+Reprise vérifiée le 2026-11-23 par le compte repreneur : 80 tests, typecheck et build passent tels quels, la
+galerie s'ouvre sans erreur de console, et les chiffres de ce guide sont exacts (54 marques, 114 exemples,
+18 familles ; seule `kpi` n'a pas d'exemple en `spec.layers`, ses tuiles sont composées autrement).
 Aucun dépôt distant n'est configuré (`git remote -v` est vide) : c'est la seule copie du code.
 
 ## 1. Ce qu'est futurCharts

@@ -3,7 +3,7 @@
  *
  * Nothing in this file (or anything above the `render/` folder) may reference a
  * WebGL or WebGPU concept. The chart layer only knows about:
- *   - primitives (`rect`, `point`, `line`, `mesh`) with a fixed packed layout,
+ *   - primitives (`rect`, `point`, `line`, `arc`, `mesh`) with a fixed packed layout,
  *   - batches (opaque GPU buffers holding instances of one primitive),
  *   - frames (an ordered list of draw calls with a view transform and a clip).
  *

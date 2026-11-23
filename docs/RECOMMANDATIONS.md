@@ -24,7 +24,7 @@ sont dans [REPRISE.md](REPRISE.md) § 4.
 - **Perte de contexte WebGL non gérée** : sur mobile ou après une mise en veille, un contexte perdu laisse tous
   les graphiques de la page vides (un seul contexte partagé : une perte touche tout).
 - **Bundle monolithique** : ~125 Ko gzip pour le cœur, même pour une simple courbe.
-- Le développement a été très rapide (29 commits en 8 jours) : beaucoup de fonctionnalités, peu de
+- Le développement a été très rapide (30 commits en 8 jours) : beaucoup de fonctionnalités, peu de
   consolidation. Certaines marques (`advanced.ts`, `more.ts`, `shapes.ts`) font 800 à 1 150 lignes.
 
 ## Priorité 1 — sécuriser (avant toute nouvelle fonctionnalité)

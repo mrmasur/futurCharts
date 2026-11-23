@@ -26,7 +26,7 @@ Mettre ces documents à jour quand un chantier avance.
 - **Animation** (demandée le 2026-11-16) : l'animation d'entrée est faite (`DrawCall.progress`, appliquée dans le
   vertex shader ; lignes et aplats révélés par le clip). La course de barres (`mark: 'race'`, contrat `Timeline`) et les transitions entre deux états
   (`Batch.setPrevious` + `DrawCall.morph`, `MarkDraw.keys` ; rect, point et arc) sont faites. Restent : transition des
-  lignes, aires et arcs, et sortie animée des données qui disparaissent. Ne rien concevoir qui l'empêche : chaque donnée doit
+  lignes et des aires, et sortie animée des données qui disparaissent. Ne rien concevoir qui l'empêche : chaque donnée doit
   pouvoir garder une identité stable d'un état à l'autre, et l'interpolation doit pouvoir se faire sur GPU
   (deux états de buffer + un uniform de progression), sans reconstruire les batches à chaque image.
 - **Diagrammes de flux** (`mark: 'flow'`, `marks/flow.ts` + `marks/flowLayout.ts`) : placement en couches maison
