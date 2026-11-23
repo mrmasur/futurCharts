@@ -24,7 +24,9 @@ export default defineConfig({
     // Same machine, same browser build, frozen clock: the drawing is reproducible, so stay strict.
     toHaveScreenshot: { maxDiffPixels: 0, threshold: 0, animations: 'disabled', caret: 'hide' },
   },
-  use: { baseURL: 'http://localhost:5274', browserName: 'chromium' },
+  // The library formats numbers and dates in the browser's language: test what a French user sees,
+  // and pin the time zone so that the captures do not depend on the machine's.
+  use: { baseURL: 'http://localhost:5274', browserName: 'chromium', locale: 'fr-FR', timezoneId: 'Europe/Paris' },
   projects: [
     { name: 'bureau', ...size(800, 480, 'light', 1) },
     { name: 'sombre', ...size(800, 480, 'dark', 1) },
