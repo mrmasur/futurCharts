@@ -171,6 +171,13 @@ export interface BuiltMark {
    * everything) when the mark handled it, `undefined` otherwise.
    */
   click?(tx: number, ty: number): string[] | undefined;
+  /** The datum under the pointer carries a link (`layer.link`): its address and row. */
+  link?(tx: number, ty: number): { url: string; row: number } | undefined;
+  /**
+   * The visible part of the scale space changed (zoom, pan): x from `x0` to `x1`.
+   * A mark that lays its labels out for what is visible (a timeline) does it again; true to redraw.
+   */
+  view?(x0: number, x1: number): boolean;
   /** Advance the mark's own animation to `now`; true while it is still moving. */
   animate?(now: number): boolean;
   /** Legend entries to show dimmed because the mark's own focus leaves them out. */

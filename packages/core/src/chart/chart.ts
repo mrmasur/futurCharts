@@ -63,6 +63,8 @@ export interface ChartEvents {
   select: SelectionPayload;
   /** A drill-down mark (sunburst, rose) changed its focus. `path` is empty when back to everything. */
   drill: { layer: number; path: string[] };
+  /** A datum with a link (`layer.link`) was clicked. */
+  link: { url: string; row: Row; layer: number };
   /** A time-driven chart (bar chart race) reached a new frame. */
   frame: { index: number; label: string };
   /** Boxes of a diagram were moved by hand: every position, to save as `x` / `y` in the spec. */
@@ -426,6 +428,7 @@ export class Chart implements SyncMember {
     this.userZoomed = false;
     this.zoom = { kx: 1, ky: 1, tx: 0, ty: 0 };
     this.navWindow = [0, 1];
+    this.notifyView();
     this.emit('zoom', { ...this.zoom });
     this.shareRange();
     this.requestRender();
@@ -1934,6 +1937,10 @@ export class Chart implements SyncMember {
     this.shape = picked.length ? undefined : this.pickShape(p);
     if (this.shape && this.built.some((b) => b.mark.drag)) this.root.style.cursor = 'grab';
     else if (this.shape && this.built.some((b) => b.mark.click)) this.root.style.cursor = 'pointer';
+    if (this.layout && this.built.some((b) => b.mark.link)) {
+      const T = this.layout.transform;
+      if (this.built.some((b) => b.mark.link?.((p.x - T.ox) / T.sx, (p.y - T.oy) / T.sy))) this.root.style.cursor = 'pointer';
+    }
     this.setPicked(picked);
     this.showTooltip(p);
     this.shareHover();
@@ -2060,6 +2067,15 @@ export class Chart implements SyncMember {
     if (L && this.inPlot(p)) {
       const tx = (p.x - L.transform.ox) / L.transform.sx;
       const ty = (p.y - L.transform.oy) / L.transform.sy;
+      // A datum with a link: tell the app, then open it (unless the spec leaves that to the app).
+      for (let i = this.built.length - 1; i >= 0; i--) {
+        const hit = this.built[i].mark.link?.(tx, ty);
+        if (!hit) continue;
+        const spec = this.built[i].data.layer.link!;
+        this.emit('link', { url: hit.url, row: this.built[i].data.table.row(hit.row), layer: i });
+        if (spec.open !== false && /^(https?:|mailto:|\/|#)/i.test(hit.url)) window.open(hit.url, spec.target ?? '_blank', 'noopener');
+        return;
+      }
       for (let i = this.built.length - 1; i >= 0; i--) {
         const path = this.built[i].mark.click?.(tx, ty);
         if (path === undefined) continue;
@@ -2210,6 +2226,15 @@ export class Chart implements SyncMember {
     z.tx = Math.min(0, Math.max(1 - z.kx, z.tx));
     z.ty = Math.min(0, Math.max(1 - z.ky, z.ty));
     this.fitY();
+    this.notifyView();
+  }
+
+  /** Marks that lay out for the visible range (a timeline's cards) do it again. */
+  private notifyView(): void {
+    const z = this.zoom;
+    const x0 = -z.tx / z.kx;
+    const x1 = (1 - z.tx) / z.kx;
+    for (const b of this.built) b.mark.view?.(x0, x1);
   }
 
   /**

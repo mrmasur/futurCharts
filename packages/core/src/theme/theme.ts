@@ -205,7 +205,8 @@ export interface Theme {
     /** Words sized by `value`, font sizes in px. */
     wordcloud: { minSize: number; maxSize: number; weight: number };
     /** Events along a line, labels alternating above and below. `proportional`: space them by date. */
-    timeline: { proportional: boolean; markerSize: number };
+    /** `minImportance`: events whose `encode.size` is below it never get a card (dots only). */
+    timeline: { proportional: boolean; markerSize: number; minImportance: number };
     /** Hierarchy as a tree: dots (dendrogram) or `boxes` (org chart), growing along `direction`. Sizes in px. */
     /** Arrows at x / y, pointing along `encode.angle`, as long as `encode.size` (within `sizeRange`, px). */
     vector: { width: number; head: number };
@@ -348,7 +349,7 @@ export const lightTheme: Theme = {
     parliament: { innerRadius: 0.38, center: true },
     venn: { opacity: 0.3, labels: true },
     wordcloud: { minSize: 11, maxSize: 46, weight: 650 },
-    timeline: { proportional: false, markerSize: 12 },
+    timeline: { proportional: false, markerSize: 12, minImportance: NaN },
     vector: { width: 1.5, head: 5 },
     bubbles: { gap: 2, labels: true, opacity: 0.9 },
     arcDiagram: { maxWidth: 14, opacity: 0.45, nodeSize: 10 },

@@ -70,6 +70,7 @@ export class FuturChartElement extends HTMLElement {
       onDrill: (p) => this.emit('drill', p),
       onLayout: (p) => this.emit('layout', p),
       onFrame: (p) => this.emit('frame', p),
+      onLink: (p) => this.emit('link', p),
     });
   }
 }

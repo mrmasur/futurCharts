@@ -185,6 +185,11 @@ export interface LayerSpec {
   series?: Record<string, SeriesStyle>;
   /** Labels of this layer, whatever the mark: ink, size (as a factor), weight, a background pill. */
   labels?: LabelStyle;
+  /**
+   * Clicking a datum opens the address in `field` (`target` default `_blank`).
+   * The chart emits `link` first; `open: false` leaves the navigation to the app.
+   */
+  link?: { field: string; target?: '_blank' | '_self'; open?: boolean };
 }
 
 export interface SeriesStyle {

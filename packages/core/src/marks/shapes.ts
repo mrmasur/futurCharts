@@ -683,92 +683,139 @@ export const timeline: MarkDefinition = {
     if (H / 2 - 8 >= near + cardH) levels.push({ up: true, stem: near }, { up: false, stem: near });
     const far = near + cardH + 8;
     if (H / 2 - 8 >= far + cardH) levels.push({ up: true, stem: far }, { up: false, stem: far });
-    const taken: [number, number][][] = levels.map(() => []);
-    const order = weight ? rows.map((_, k) => k).sort((a, b) => (weight[rows[b]] || 0) - (weight[rows[a]] || 0)) : spreadOrder(n);
-    const card = new Map<number, { level: number; cx: number }>();
-    for (const k of order) {
-      const r = rows[k];
-      const wpx =
+    // Below the threshold, an event never gets a card: it stays a small dot.
+    const min = Number.isFinite(style.minImportance) ? style.minImportance : -Infinity;
+    const eligible = (k: number) => !weight || (weight[rows[k]] ?? 0) >= min;
+    const order = (weight ? rows.map((_, k) => k).sort((a, b) => (weight[rows[b]] || 0) - (weight[rows[a]] || 0)) : spreadOrder(n)).filter(eligible);
+    const widths = rows.map(
+      (r) =>
         Math.max(
           textWidth(String(keys[r]), `650 12px ${family}`),
           textWidth(fmt(xcol.values[r] as number | string), `10px ${family}`),
           desc ? textWidth(String(desc[r]), `10px ${family}`) : 0,
-        ) + 14;
-      // Centered on its dot, slid inwards at the edges.
-      const cx = Math.max(wpx / 2 + 2, Math.min(W - wpx / 2 - 2, xs[k] * W));
-      const span: [number, number] = [cx - wpx / 2 - 6, cx + wpx / 2 + 6];
-      // Alternate the starting level so neighbours fall on opposite sides.
-      for (let q = 0; q < levels.length; q++) {
-        const l = (q + (card.size % 2)) % levels.length;
-        if (taken[l].some(([a, b]) => span[0] < b && span[1] > a)) continue;
-        taken[l].push(span);
-        card.set(k, { level: l, cx: cx / W });
-        break;
-      }
-    }
-
-    const lines: number[] = [];
-    const dots: number[] = [];
-    const labels: MarkLabel[] = [];
+        ) + 14,
+    );
+    const links = layer.link ? table.column(layer.link.field).values : undefined;
     const axis = parseColor(theme.axis.line.color);
     const y0 = ctx.y.norm(0);
-    pushSegment(lines, 0.01, y0, 0.99, y0, axis, 2);
     const legend = groups ? [...new Set(rows.map((r) => String(groups[r])))].map((g) => ({ key: g, color: ctx.categorical(g) })) : [];
+    const colorOf = rows.map((r) => ctx.paint(groups ? legend.find((l) => l.key === String(groups[r]))!.color : ctx.categorical(fieldLabel(ctx, kf)), r));
     const surface = theme.background;
-    const pos: { x: number; row: number; labelled: boolean }[] = [];
-    rows.forEach((r, k) => {
-      const x = xs[k];
-      const base = groups ? legend.find((l) => l.key === String(groups[r]))!.color : ctx.categorical(fieldLabel(ctx, kf));
-      const c = ctx.paint(base, r);
-      const placed = card.get(k);
-      pos.push({ x, row: r, labelled: !!placed });
-      if (!placed) {
-        // A dot only: smaller, its card would not fit.
-        dots.push(x, y0, Math.max(6, style.markerSize * 0.6), 0, c[0], c[1], c[2], c[3] * 0.85, ctx.surface[0], ctx.surface[1], ctx.surface[2], 1, 1.5);
-        return;
+    const lineBatch = ctx.renderer.createBatch('line');
+    const dotBatch = ctx.renderer.createBatch('point');
+    const labels: MarkLabel[] = [];
+    /** Cards placed, in scale space, for clicks: event index and box. */
+    let boxes: { k: number; x0: number; x1: number; y0: number; y1: number }[] = [];
+    let span = 1;
+
+    /** Place the cards for the visible part [v0, v1] of the time line (all of it, or a zoom). */
+    const layout = (v0: number, v1: number) => {
+      span = Math.max(1e-6, v1 - v0);
+      const unitPx = W / span; // screen px per scale unit along x
+      const taken: [number, number][][] = levels.map(() => []);
+      const card = new Map<number, { level: number; cx: number }>();
+      let placedCount = 0;
+      let visible = 0;
+      for (let k = 0; k < n; k++) if (xs[k] >= v0 && xs[k] <= v1) visible++;
+      for (const k of order) {
+        if (xs[k] < v0 || xs[k] > v1) continue;
+        const wpx = widths[k];
+        // Centered on its dot (screen px from the visible left edge), slid inwards at the edges.
+        const sx = Math.max(wpx / 2 + 2, Math.min(W - wpx / 2 - 2, (xs[k] - v0) * unitPx));
+        const sp: [number, number] = [sx - wpx / 2 - 6, sx + wpx / 2 + 6];
+        for (let q = 0; q < levels.length; q++) {
+          const l = (q + (placedCount % 2)) % levels.length;
+          if (taken[l].some(([a, b]) => sp[0] < b && sp[1] > a)) continue;
+          taken[l].push(sp);
+          card.set(k, { level: l, cx: v0 + sx / unitPx });
+          placedCount++;
+          break;
+        }
       }
-      const lv = levels[placed.level];
-      const ty = y0 + (lv.up ? lv.stem : -lv.stem) * py;
-      pushSegment(lines, x, y0, x, ty, withAlpha(c, 0.6), 1.25);
-      dots.push(x, y0, style.markerSize, 0, c[0], c[1], c[2], c[3], ctx.surface[0], ctx.surface[1], ctx.surface[2], 1, 2);
-      const cx = placed.cx;
-      const title = String(keys[r]);
-      const date = fmt(xcol.values[r] as number | string);
-      if (lv.up) {
-        if (desc) labels.push({ tx: cx, ty, text: String(desc[r]), color: theme.text.secondary, size: 10, align: 'center', baseline: 'bottom', dy: -4, background: surface });
-        labels.push({ tx: cx, ty, text: title, color: theme.text.primary, size: 12, weight: 650, align: 'center', baseline: 'bottom', dy: desc ? -20 : -4, background: surface });
-        labels.push({ tx: cx, ty, text: date, color: theme.text.muted, size: 10, align: 'center', baseline: 'bottom', dy: desc ? -36 : -20 });
-      } else {
-        labels.push({ tx: cx, ty, text: date, color: theme.text.muted, size: 10, align: 'center', baseline: 'top', dy: 4 });
-        labels.push({ tx: cx, ty, text: title, color: theme.text.primary, size: 12, weight: 650, align: 'center', baseline: 'top', dy: 18, background: surface });
-        if (desc) labels.push({ tx: cx, ty, text: String(desc[r]), color: theme.text.secondary, size: 10, align: 'center', baseline: 'top', dy: 34, background: surface });
+      const lines: number[] = [];
+      const dots: number[] = [];
+      labels.length = 0;
+      boxes = [];
+      pushSegment(lines, Math.min(0.01, v0), y0, Math.max(0.99, v1), y0, axis, 2);
+      rows.forEach((r, k) => {
+        const x = xs[k];
+        const c = colorOf[k];
+        const placed = card.get(k);
+        if (!placed) {
+          dots.push(x, y0, Math.max(6, style.markerSize * 0.55), 0, c[0], c[1], c[2], c[3] * 0.85, ctx.surface[0], ctx.surface[1], ctx.surface[2], 1, 1.5);
+          return;
+        }
+        const lv = levels[placed.level];
+        const ty = y0 + (lv.up ? lv.stem : -lv.stem) * py;
+        pushSegment(lines, x, y0, x, ty, withAlpha(c, 0.6), 1.25);
+        dots.push(x, y0, style.markerSize, 0, c[0], c[1], c[2], c[3], ctx.surface[0], ctx.surface[1], ctx.surface[2], 1, 2);
+        const cx = placed.cx;
+        const title = String(keys[r]);
+        const date = fmt(xcol.values[r] as number | string);
+        // A linked event reads as one: its title in the accent color.
+        const titleInk = links && links[r] ? toCss(c) : theme.text.primary;
+        const halfW = (widths[k] / 2) / unitPx;
+        if (lv.up) {
+          if (desc) labels.push({ tx: cx, ty, text: String(desc[r]), color: theme.text.secondary, size: 10, align: 'center', baseline: 'bottom', dy: -4, background: surface });
+          labels.push({ tx: cx, ty, text: title, color: titleInk, size: 12, weight: 650, align: 'center', baseline: 'bottom', dy: desc ? -20 : -4, background: surface });
+          labels.push({ tx: cx, ty, text: date, color: theme.text.muted, size: 10, align: 'center', baseline: 'bottom', dy: desc ? -36 : -20 });
+          boxes.push({ k, x0: cx - halfW, x1: cx + halfW, y0: ty, y1: ty + cardH * py });
+        } else {
+          labels.push({ tx: cx, ty, text: date, color: theme.text.muted, size: 10, align: 'center', baseline: 'top', dy: 4 });
+          labels.push({ tx: cx, ty, text: title, color: titleInk, size: 12, weight: 650, align: 'center', baseline: 'top', dy: 18, background: surface });
+          if (desc) labels.push({ tx: cx, ty, text: String(desc[r]), color: theme.text.secondary, size: 10, align: 'center', baseline: 'top', dy: 34, background: surface });
+          boxes.push({ k, x0: cx - halfW, x1: cx + halfW, y0: ty - cardH * py, y1: ty });
+        }
+      });
+      if (placedCount < visible) {
+        // Say that more is there.
+        labels.push({ tx: v1, ty: y0, text: `${visible - placedCount} autres : survolez les points`, color: theme.text.muted, size: 10, align: 'right', baseline: 'top', dx: -6, dy: H / 2 - 18, free: true });
       }
-    });
-    if (card.size < n) {
-      // Say that more is there: the count of events shown as dots only.
-      labels.push({ tx: 0.99, ty: y0, text: `${n - card.size} autres : survolez les points`, color: theme.text.muted, size: 10, align: 'right', baseline: 'top', dy: H / 2 - 18, free: true });
-    }
+      lineBatch.update(new Float32Array(lines), lines.length / LAYOUTS.line.stride);
+      dotBatch.update(new Float32Array(dots), dots.length / LAYOUTS.point.stride);
+    };
+    layout(0, 1);
+
+    /** The event under the pointer: its card, or the nearest dot on the line. */
+    const eventAt = (tx: number, ty: number): number => {
+      const b = boxes.find((q) => tx >= q.x0 && tx <= q.x1 && ty >= q.y0 && ty <= q.y1);
+      if (b) return b.k;
+      if (Math.abs(ty - y0) > 28 * py) return -1;
+      let best = -1;
+      for (let k = 0; k < n; k++) if (best < 0 || Math.abs(xs[k] - tx) < Math.abs(xs[best] - tx)) best = k;
+      return best >= 0 && (Math.abs(xs[best] - tx) / span) / px <= 24 ? best : -1;
+    };
     return {
-      draws: [{ batch: batch(ctx, 'line', lines) }, { batch: batch(ctx, 'point', dots) }],
+      draws: [{ batch: lineBatch }, { batch: dotBatch }],
       hit: emptyHit(),
       labels,
       legend,
+      view(x0, x1) {
+        layout(Math.max(0, x0), Math.min(1, x1));
+        return true;
+      },
+      link: links
+        ? (tx, ty) => {
+            const k = eventAt(tx, ty);
+            const url = k >= 0 ? links[rows[k]] : undefined;
+            return url ? { url: String(url), row: rows[k] } : undefined;
+          }
+        : undefined,
       pick(tx, ty): ShapeHit | null {
-        // Near the line: the closest event, and the ones close around it (often hidden ones).
-        if (Math.abs(ty - y0) > 28 * py) return null;
-        let best = -1;
-        for (let k = 0; k < pos.length; k++) if (best < 0 || Math.abs(pos[k].x - tx) < Math.abs(pos[best].x - tx)) best = k;
-        if (best < 0 || Math.abs(pos[best].x - tx) / px > 24) return null;
-        const r = pos[best].row;
+        // The event under the pointer, and the ones close around it (often hidden ones).
+        const best = eventAt(tx, ty);
+        if (best < 0) return null;
+        const r = rows[best];
         const out = [{ label: fieldLabel(ctx, xf), value: fmt(xcol.values[r] as number | string) }];
         if (desc) out.push({ label: fieldLabel(ctx, df!), value: String(desc[r]) });
-        const around = pos
-          .map((p, k) => ({ p, k, d: Math.abs(p.x - pos[best].x) / px }))
+        const around = xs
+          .map((x, k) => ({ k, d: Math.abs(x - xs[best]) / span / px }))
           .filter((q) => q.k !== best && q.d <= 40)
           .sort((a, b) => a.d - b.d)
           .slice(0, 4)
           .sort((a, b) => a.k - b.k);
-        for (const q of around) out.push({ label: fmt(xcol.values[q.p.row] as number | string), value: String(keys[q.p.row]) });
+        for (const q of around) out.push({ label: fmt(xcol.values[rows[q.k]] as number | string), value: String(keys[rows[q.k]]) });
+        if (links && links[r]) out.push({ label: 'Lien', value: 'cliquer pour ouvrir' });
         return { title: String(keys[r]), rows: out };
       },
     };

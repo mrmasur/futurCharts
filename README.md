@@ -300,6 +300,19 @@ Un panneau par valeur du champ, avec le même ordre de catégories, les mêmes c
 (`shared: false` pour des échelles libres) et une seule légende, qui masque une série dans tous les panneaux.
 `createChart()` choisit la bonne vue ; les wrappers l'utilisent.
 
+## Frise chronologique et liens
+
+```json
+{ "mark": "timeline", "encode": { "x": "date", "key": "version", "value": "detail", "size": "importance" },
+  "style": { "minImportance": 3 }, "link": { "field": "url", "target": "_self" } }
+"interactions": { "zoom": { "axes": "x" } }
+```
+
+Chaque événement est un point à sa date ; seuls les plus importants (`encode.size`) reçoivent une carte, là où
+elle tient, sur quatre niveaux ; sous `minImportance`, jamais de carte. Zoomer (molette, pincement) replace les
+cartes pour la période visible. Au survol : l'événement et ses voisins. `link` (sur toute marque qui le gère, la
+frise d'abord) : un clic émet `link` (`onLink`, `@link`, `chart-link`) puis ouvre l'adresse, sauf `open: false`.
+
 ## Petits écrans
 
 La bibliothèque s'adapte seule, et la spec dit le reste :

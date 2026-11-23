@@ -41,6 +41,7 @@ export const FuturChart = defineComponent({
     drill: (_payload: ChartEvents['drill']) => true,
     layout: (_payload: ChartEvents['layout']) => true,
     frame: (_payload: ChartEvents['frame']) => true,
+    link: (_payload: ChartEvents['link']) => true,
   },
   setup(props, { emit, expose }) {
     const container = ref<HTMLDivElement>();
@@ -59,6 +60,7 @@ export const FuturChart = defineComponent({
         onDrill: (p) => emit('drill', p),
         onLayout: (p) => emit('layout', p),
         onFrame: (p) => emit('frame', p),
+        onLink: (p) => emit('link', p),
       });
     });
     watch(

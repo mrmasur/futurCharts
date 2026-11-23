@@ -552,6 +552,8 @@ const releases = Array.from({ length: 42 }, (_, i) => {
     version: major ? `Version ${1 + i / 9}.0` : `v${1 + Math.floor(i / 9)}.${i % 9}`,
     detail: major ? ['Lancement', 'Tableur', 'Graphiques 3D', 'WebGPU', 'Collaboration'][i / 9] : ['Correctifs', 'Performance', 'Accessibilité', 'Exports', 'Connecteurs'][i % 5],
     importance: major ? 5 : i % 4 === 0 ? 3 : 1,
+    // Major versions open the page of what they brought (here, pages of this demo).
+    url: major ? ['#/galerie', '#/tableur', '#/demo/nuage-de-points-d', '#/galerie/cartes', '#/galerie/combinaisons'][i / 9] : null,
   };
 });
 
@@ -589,14 +591,15 @@ export type Entry = {
 export const entries: Entry[] = [
   {
     title: 'Frise chronologique dense',
-    caption: 'timeline · 42 versions : chaque version est un point, les plus importantes (encode.size) ont une carte là où il y a la place, survolez la ligne pour retrouver les autres',
+    caption: 'timeline · 42 versions : importance via encode.size, correctifs (sous minImportance) en simples points ; molette pour zoomer (les cartes se replacent), survol pour les voisins, clic sur une version majeure pour ouvrir sa page (layer.link)',
     wide: true,
     spec: {
       title: 'Versions publiées',
       subtitle: 'Deux ans de livraisons',
       data: releases,
       fields: { date: { label: 'Date' }, detail: { label: 'Contenu' } },
-      layers: [{ mark: 'timeline', encode: { x: 'date', key: 'version', value: 'detail', size: 'importance' } }],
+      layers: [{ mark: 'timeline', encode: { x: 'date', key: 'version', value: 'detail', size: 'importance' }, style: { minImportance: 3 }, link: { field: 'url', target: '_self' } }],
+      interactions: { zoom: { axes: 'x', max: 30 } },
     },
   },
   {
