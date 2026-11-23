@@ -2,6 +2,7 @@ import type { ChartSpec, FlowGraph } from '@futurcharts/core';
 import { registerGeo } from '@futurcharts/geo';
 import { feature } from 'topojson-client';
 import world from 'world-atlas/countries-110m.json';
+import { EXTRA } from './examples';
 
 registerGeo();
 // Natural Earth countries (public domain), shipped as TopoJSON by world-atlas.
@@ -2053,6 +2054,15 @@ export const GROUPS: [string, string[]][] = [
   ['Cartes', ['Globe et routes aériennes', 'Points pulsants', 'Carte en tuiles hexagonales', 'Routes aériennes', 'Points sur une carte du monde', 'Choroplèthe mondiale', 'Bulles sur une carte', 'Zoom sur l’Europe et mise en avant']],
   ['Mise en avant', ['Graphique adaptatif', 'Une courbe mise en avant', 'Étiquettes personnalisées', 'Mise en avant dans un camembert', 'Mise en avant dans un treemap', 'Mise en avant d’une série', 'Mise en avant sur une carte de chaleur']],
 ];
+
+// Examples kept in `examples/` (one file per family) join the lists here.
+for (const f of EXTRA) {
+  entries.push(...f.entries);
+  const titles = f.entries.map((e) => e.title);
+  const group = GROUPS.find(([name]) => name === f.family);
+  if (group) group[1].push(...titles);
+  else if (titles.length) GROUPS.push([f.family, titles]);
+}
 
 // ----------------------------------------------------------- color themes
 

@@ -24,7 +24,7 @@ export default defineConfig({
     // Same machine, same browser build, frozen clock: the drawing is reproducible, so stay strict.
     toHaveScreenshot: { maxDiffPixels: 0, threshold: 0, animations: 'disabled', caret: 'hide' },
   },
-  use: { baseURL: 'http://localhost:5273', browserName: 'chromium' },
+  use: { baseURL: 'http://localhost:5274', browserName: 'chromium' },
   projects: [
     { name: 'bureau', ...size(800, 480, 'light', 1) },
     { name: 'sombre', ...size(800, 480, 'dark', 1) },
@@ -32,8 +32,8 @@ export default defineConfig({
     { name: 'mobile-haut', ...size(375, 520, 'light', 2) },
   ],
   webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5273/visual.html',
+    command: 'npm run dev:test -w @futurcharts/demo',
+    url: 'http://localhost:5274/visual.html',
     reuseExistingServer: true,
     timeout: 60_000,
   },

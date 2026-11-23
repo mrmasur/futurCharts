@@ -4,7 +4,8 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev": "vite --port 5273 --strictPort --host"
+    "dev": "vite --port 5273 --strictPort --host",
+    "dev:test": "FC_VISUAL=1 vite --port 5274 --strictPort"
   },
   "dependencies": {
     "@futurcharts/core": "*",

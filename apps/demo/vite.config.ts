@@ -10,5 +10,7 @@ export default defineConfig({
     target: 'es2022',
     rollupOptions: { input: { main: 'index.html', wrappers: 'wrappers.html', maps: 'maps.html', gallery: 'gallery.html' } },
   },
+  // The visual tests run on their own server, without hot reload: a file saved mid-run must not reload the page under test.
+  server: process.env.FC_VISUAL ? { hmr: false } : undefined,
   esbuild: { target: 'es2022' },
 });

@@ -11,6 +11,12 @@ import { CATALOG_MARKS } from './catalog';
 import { ADVANCED_MARKS } from './advanced';
 import { flow } from './flow';
 import { FLOW_MARKS } from './flows';
+import { STOCK_MARKS } from './stock';
+import { GAUGES_MARKS } from './gauges';
+import { GANTT_MARKS } from './gantt';
+import { POLAR_MARKS } from './polar';
+import { SETS_MARKS } from './sets';
+import { SERIES_MARKS } from './series';
 import type { SeriesData } from './prepare';
 import { dashed, pushRect, pushSegment, pushVertex } from './primitives';
 import { buildHit, hasMark, registerMark, type BuildContext, type BuiltMark, type MarkDefinition, type MarkLabel } from './registry';
@@ -417,7 +423,7 @@ const tick: MarkDefinition = {
   },
 };
 
-const builtins: Record<string, MarkDefinition> = { line, area, bar, point, rule, tick, ...STANDALONE_MARKS, ...FLOW_MARKS, ...EXTRA_MARKS, ...MORE_MARKS, ...SHAPE_MARKS, ...CATALOG_MARKS, ...ADVANCED_MARKS, flow, race };
+const builtins: Record<string, MarkDefinition> = { line, area, bar, point, rule, tick, ...STANDALONE_MARKS, ...FLOW_MARKS, ...EXTRA_MARKS, ...MORE_MARKS, ...SHAPE_MARKS, ...CATALOG_MARKS, ...ADVANCED_MARKS, ...STOCK_MARKS, ...GAUGES_MARKS, ...GANTT_MARKS, ...POLAR_MARKS, ...SETS_MARKS, ...SERIES_MARKS, flow, race };
 
 /**
  * Register the built-in marks. Called when a chart is created rather than at
