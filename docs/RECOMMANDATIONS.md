@@ -11,22 +11,44 @@ sont dans [REPRISE.md](REPRISE.md) § 4.
   WebGPU. C'est l'actif le plus précieux du projet ; le protéger.
 - La spec est entièrement JSON et très documentée (`spec/types.ts`, `Theme['marks']`) : idéale pour une IA ou un
   éditeur visuel.
-- Largeur fonctionnelle rare : 54 marques, transitions sur GPU, petits multiples, synchronisation, tableur.
+- Largeur fonctionnelle rare : 93 marques, transitions sur GPU, petits multiples, synchronisation, tableur.
 - Tests rapides, typecheck strict, build qui passe.
 
 **Faiblesses**
 
 - **Aucune CI, aucun dépôt distant** : rien ne vérifie automatiquement un changement, et ce Mac porte la seule
   copie du code.
-- **`chart/chart.ts` fait ~2 400 lignes** : mise en page, axes, légende, survol, zoom, lasso, navigateur, timeline,
+- **`chart/chart.ts` fait ~2 750 lignes** : mise en page, axes, légende, survol, zoom, lasso, navigateur, timeline,
   transitions, étiquettes. C'est là que les régressions naîtront.
 - **Rien ne teste `Chart` ni les interactions** : le rendu final de chaque exemple est couvert par les tests
   visuels (depuis le 2026-11-23), mais survol, zoom, lasso et glisser restent vérifiés à la main.
 - **Perte de contexte WebGL non gérée** : sur mobile ou après une mise en veille, un contexte perdu laisse tous
   les graphiques de la page vides (un seul contexte partagé : une perte touche tout).
 - **Bundle monolithique** : ~125 Ko gzip pour le cœur, même pour une simple courbe.
-- Le développement a été très rapide (30 commits en 8 jours) : beaucoup de fonctionnalités, peu de
+- Le développement a été très rapide (une quarantaine de commits en 8 jours, dont 39 marques écrites en un après-midi par des agents en parallèle) : beaucoup de fonctionnalités, peu de
   consolidation. Certaines marques (`advanced.ts`, `more.ts`, `shapes.ts`) font 800 à 1 150 lignes.
+
+## Priorité 0 — refermer la journée du 2026-11-23
+
+La branche `graphiques-2026-11-23` porte les tests visuels et 87 exemples nouveaux ; elle n'est pas fusionnée.
+
+- **Décider de la fusion dans `main`** après avoir parcouru la galerie (les captures ne voient pas le survol, le
+  zoom ni les animations : aucune des nouvelles marques n'a été essayée à la main).
+- **Passe de finition** (lancée puis interrompue, rien n'a été fait) : relire les 87 nouveaux exemples dans les
+  quatre variantes. Défauts déjà vus : Likert terne, cercles du Dorling Europe peu visibles et piste des anneaux
+  d'activité trop vive en sombre ; matrice de flux, puces, polaires et planning des salles pauvres en 343 × 260 ;
+  bande basse de la densité 2D coupée au bord ; petits pics réduits à des chevrons.
+- **Vague 3 non faite** : couloirs et routage orthogonal des flux, transitions des lignes et des aires et sortie
+  animée (point 11), hiérarchies (treemap de Voronoï, arbre indenté, arbre de décomposition), corrélation
+  (matrice à quadrants, nuage connecté, barres d'incertitude, distributions marginales).
+- **Manques du contrat encore ouverts**, signalés par les agents : une marque à un seul champ ne peut pas être
+  cartésienne (elle perd survol et lasso standard) ; `HitData.series` empêche d'exposer des points de survol nommés
+  librement (`difference`, `fan`) ; pas de titre d'axe par défaut ni de marge en px dans `MarkScales` ; pas de
+  format par ligne dans `ctx.format` ; pas de symbole à taille en px ancré en espace d'échelle ; `MarkStyle` en
+  intersection (deux options de même nom et de types différents se cassent) ; chaque famille réécrit sa mise en
+  page en px (colonnes nom / barres / chiffres) : une aide commune manque.
+- **Libellés en dur en français** dans plusieurs marques (« Médiane », « Écart », caps de la rose des vents…) :
+  à sortir dans le thème ou les options le jour où une autre langue est visée.
 
 ## Priorité 1 — sécuriser (avant toute nouvelle fonctionnalité)
 

@@ -188,14 +188,14 @@ destruction. Le wrapper ne fait que relier le cycle de vie et les événements. 
 
 ## 6. Tests
 
-- `npm test` (Vitest, environnement Node, sans DOM) : 80 tests sur la logique pure (données, transformations,
+- `npm test` (Vitest, environnement Node, sans DOM) : 286 tests sur la logique pure (données, transformations,
   échelles, mises en page de flux / arbres / formes, formules et modèle du tableur, adaptateurs, géo).
 - Pas de test unitaire de `Chart` lui-même, ni des wrappers. L'audit mobile se fait avec `fcAudit`.
 
 ### Tests visuels (`npm run test:visual`)
 
-Les 114 exemples de la galerie sont la suite de tests du rendu : Playwright (Chromium sans écran, WebGL logiciel)
-ouvre chaque exemple seul et compare une capture à sa référence, au pixel près. 456 comparaisons, environ une minute.
+Les 201 exemples de la galerie sont la suite de tests du rendu : Playwright (Chromium sans écran, WebGL logiciel)
+ouvre chaque exemple seul et compare une capture à sa référence, au pixel près. 804 comparaisons, environ deux minutes.
 
 | Élément | Rôle |
 |---|---|
@@ -203,7 +203,7 @@ ouvre chaque exemple seul et compare une capture à sa référence, au pixel pr�
 | `tests/visual/liste.ts` | Écrit `exemples.json` (non commité) depuis `library.ts` : Playwright doit connaître les noms des tests avant d'ouvrir une page. Refuse deux exemples de même adresse ou un exemple absent de `GROUPS` |
 | `tests/visual/galerie.pw.ts` | Un test par exemple ; échoue aussi sur une erreur de console ou de création |
 | `playwright.config.ts` | Quatre variantes : `bureau` (800 × 480, clair), `sombre`, `mobile` (343 × 260, ×2), `mobile-haut` (375 × 520, ×2) ; navigateur en `fr-FR`, fuseau de Paris (la librairie formate nombres et dates dans la langue du navigateur) ; serveur dédié sur le port 5274, sans rechargement à chaud (`npm run dev:test -w @futurcharts/demo`), lancé s'il ne tourne pas |
-| `tests/visual/captures/<plateforme>/<variante>/<slug>.png` | Les références, commitées (16 Mo). Elles dépendent de la plateforme (polices, lissage) : celles de `darwin` ne valent pas sous Linux |
+| `tests/visual/captures/<plateforme>/<variante>/<slug>.png` | Les références, commitées (une trentaine de Mo). Elles dépendent de la plateforme (polices, lissage) : celles de `darwin` ne valent pas sous Linux |
 
 - **Le temps est figé** (horloge Playwright, `performance.now()` recalé sur la date) puis avancé par sauts : les
   animations d'entrée arrivent à leur état final, une course de barres ou une onde s'arrêtent toujours sur la même

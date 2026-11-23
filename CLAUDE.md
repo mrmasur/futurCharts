@@ -39,8 +39,12 @@ Mettre ces documents à jour quand un chantier avance.
   routage orthogonal, édition à la souris.
 - **Galerie** (demandée le 2026-11-17, modèle : la page de démos Highcharts, sans en reprendre ni la marque ni les
   textes) : `#/galerie` en vignettes vivantes par famille avec recherche, `#/demo/<nom>` en page détail. Chaque
-  nouveau type de graphique y reçoit un exemple (`library.ts` : `entries` et `GROUPS`). Pistes restantes du
-  catalogue : faits (axe recalé sur la plage visible, Gapminder `motion`, tableau croisé `pivot` compris).
+  nouveau type de graphique y reçoit un exemple (`library.ts` : `entries` et `GROUPS`). Depuis le 2026-11-23 un
+  nouvel exemple va dans `apps/demo/src/examples/<famille>.ts`.
+- **État au 2026-11-23** : la branche `graphiques-2026-11-23` (non fusionnée dans `main`) porte les tests visuels,
+  39 marques et 87 exemples nouveaux (201 en tout), le double axe (`scales.secondary`) et un contrat des marques
+  complété (`MarkLabel.rotate` / `ellipsis`, `BuiltMark.hover`, `legendRamp`). Reste à faire, dans l'ordre :
+  `docs/RECOMMANDATIONS.md` § Priorité 0.
 - **Sources d'inspiration** pour les nouveaux graphiques (rappelées le 2026-11-23) : Tableau, Apache ECharts et
   Highcharts, pour les types de graphiques et leur finition ; jamais leurs marques, textes, données ni code.
 - **Nouvelles familles** (depuis le 2026-11-23) : une famille de marques par fichier `marks/<famille>.ts` (table

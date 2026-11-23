@@ -92,7 +92,7 @@ Le builder ne produit qu'une `ChartSpec`. Tout ce qu'il exprime peut s'écrire d
 |---|---|
 | `render/` | Contrat de rendu indépendant du moteur (`types.ts`, `layouts.ts`) et moteur `webgl2/` |
 | `scale/` | Échelles linéaire, log, temps, bandes, Mercator. Elles produisent des positions normalisées, jamais des pixels |
-| `marks/` | Les 53 marques du cœur (`geoshape` est dans `@futurcharts/geo`), contrat dans `registry.ts`, enregistrées par `ensureBuiltinMarks` ; `registerMark` pour les vôtres |
+| `marks/` | Les 92 marques du cœur (`geoshape` est dans `@futurcharts/geo`), contrat dans `registry.ts`, enregistrées par `ensureBuiltinMarks` ; `registerMark` pour les vôtres |
 | `data/` | `Table` (colonnes typées) et transformations de la spec |
 | `theme/` | Thèmes `light` / `dark`, `registerTheme`, surcharge feuille par feuille ; options de style documentées dans `Theme['marks']` |
 | `spec/` | Types de la spec (référence commentée de toutes les options) et builder |
