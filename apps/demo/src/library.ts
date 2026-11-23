@@ -591,14 +591,15 @@ export type Entry = {
 export const entries: Entry[] = [
   {
     title: 'Frise chronologique dense',
-    caption: 'timeline · 42 versions : importance via encode.size, correctifs (sous minImportance) en simples points ; molette pour zoomer (les cartes se replacent), survol pour les voisins, clic sur une version majeure pour ouvrir sa page (layer.link)',
+    caption: 'timeline · 42 versions : importance et lien déclarés une fois dans le catalogue des champs (role), correctifs (sous minImportance) en simples points ; molette pour zoomer (les cartes se replacent), survol pour les voisins, clic sur une version majeure pour ouvrir sa page (layer.link)',
     wide: true,
     spec: {
       title: 'Versions publiées',
       subtitle: 'Deux ans de livraisons',
       data: releases,
-      fields: { date: { label: 'Date' }, detail: { label: 'Contenu' } },
-      layers: [{ mark: 'timeline', encode: { x: 'date', key: 'version', value: 'detail', size: 'importance' }, style: { minImportance: 3 }, link: { field: 'url', target: '_self' } }],
+      // Importance and link are declared once, in the field catalog (or in dbt): any chart can use them.
+      fields: { date: { label: 'Date' }, detail: { label: 'Contenu' }, importance: { label: 'Importance', role: 'importance' }, url: { label: 'Page', role: 'link' } },
+      layers: [{ mark: 'timeline', encode: { x: 'date', key: 'version', value: 'detail' }, style: { minImportance: 3 }, link: { field: 'url', target: '_self' } }],
       interactions: { zoom: { axes: 'x', max: 30 } },
     },
   },

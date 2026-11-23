@@ -68,7 +68,15 @@ export interface FieldSpec {
   format?: FormatSpec;
   /** Free text from the catalog (dbt description); for editors and documentation, not drawn. */
   description?: string;
+  /**
+   * What the field means to every chart, declared once in the catalog (or in dbt's `meta.role`):
+   * `importance` ranks rows (which ones get a label first: a timeline's cards…), `link` holds the
+   * address a click opens. A chart uses it when its own encoding does not say otherwise.
+   */
+  role?: FieldRole;
 }
+
+export type FieldRole = 'importance' | 'link';
 
 export type MarkType = 'line' | 'bar' | 'point' | 'area' | (string & {});
 

@@ -308,7 +308,11 @@ Un panneau par valeur du champ, avec le même ordre de catégories, les mêmes c
 "interactions": { "zoom": { "axes": "x" } }
 ```
 
-Chaque événement est un point à sa date ; seuls les plus importants (`encode.size`) reçoivent une carte, là où
+**Rôles de champ** : l'importance et le lien se déclarent une fois dans le catalogue des champs, et tout graphique
+qui connaît le rôle s'en sert sans encodage de plus : `"fields": { "poids": { "role": "importance" }, "page": { "role": "link" } }`
+(depuis dbt : `meta: { role: importance }` sur la colonne).
+
+Chaque événement est un point à sa date ; seuls les plus importants (`encode.size` ou le champ de rôle `importance`) reçoivent une carte, là où
 elle tient, sur quatre niveaux ; sous `minImportance`, jamais de carte. Zoomer (molette, pincement) replace les
 cartes pour la période visible. Au survol : l'événement et ses voisins. `link` (sur toute marque qui le gère, la
 frise d'abord) : un clic émet `link` (`onLink`, `@link`, `chart-link`) puis ouvre l'adresse, sauf `open: false`.

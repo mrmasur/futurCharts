@@ -274,3 +274,11 @@ export function buildHit(
   });
   return hit;
 }
+
+/**
+ * The field of the layer's table that the catalog gives a role (`fields.x.role`):
+ * declared once, used by every chart that knows the role.
+ */
+export function fieldWithRole(ctx: { fields: Record<string, FieldSpec>; data: { table: Table } }, role: FieldSpec['role']): string | undefined {
+  return Object.keys(ctx.fields).find((f) => ctx.fields[f]?.role === role && ctx.data.table.has(f));
+}

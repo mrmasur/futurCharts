@@ -2071,7 +2071,8 @@ export class Chart implements SyncMember {
       for (let i = this.built.length - 1; i >= 0; i--) {
         const hit = this.built[i].mark.link?.(tx, ty);
         if (!hit) continue;
-        const spec = this.built[i].data.layer.link!;
+        // The layer's `link`, or the defaults when the link comes from a field's `link` role.
+        const spec = this.built[i].data.layer.link ?? { field: '', target: '_blank' as const };
         this.emit('link', { url: hit.url, row: this.built[i].data.table.row(hit.row), layer: i });
         if (spec.open !== false && /^(https?:|mailto:|\/|#)/i.test(hit.url)) window.open(hit.url, spec.target ?? '_blank', 'noopener');
         return;

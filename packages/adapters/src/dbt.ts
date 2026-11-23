@@ -31,11 +31,13 @@ function find(group: Json | undefined, kind: string, name: string): Json | undef
  * Presentation hints are not part of dbt itself, so they are read from `meta`
  * (on the node or under `config`): `label`, and `format` as a FormatSpec.
  */
-function fromMeta(node: Json): Pick<FieldSpec, 'label' | 'format'> {
+function fromMeta(node: Json): Pick<FieldSpec, 'label' | 'format' | 'role'> {
   const meta: Json = { ...node.config?.meta, ...node.meta };
-  const out: Pick<FieldSpec, 'label' | 'format'> = {};
+  const out: Pick<FieldSpec, 'label' | 'format' | 'role'> = {};
   if (typeof meta.label === 'string') out.label = meta.label;
   if (meta.format && typeof meta.format === 'object') out.format = meta.format;
+  // The field's meaning for every chart (importance, link), declared once in the project.
+  if (meta.role === 'importance' || meta.role === 'link') out.role = meta.role;
   return out;
 }
 

@@ -10,7 +10,7 @@ import { mix, parseColor, toCss, withAlpha } from '../util/color';
 import { Tween } from './animate';
 import { batches, need, share, totals } from './charts';
 import { pushArc, pushRect, pushSegment } from './primitives';
-import { emptyHit, type BuildContext, type MarkDefinition, type MarkLabel, type ShapeHit } from './registry';
+import { emptyHit, fieldWithRole, type BuildContext, type MarkDefinition, type MarkLabel, type ShapeHit } from './registry';
 
 const TAU = Math.PI * 2;
 
@@ -647,7 +647,8 @@ export const timeline: MarkDefinition = {
     const xf = need(layer, 'x', 'timeline');
     const df = layer.encode.value;
     const gf = layer.encode.color;
-    const sf = layer.encode.size;
+    // Importance: the encoding, or the catalog's field with the `importance` role.
+    const sf = layer.encode.size ?? fieldWithRole(ctx, 'importance');
     const xcol = table.column(xf);
     const keys = table.column(kf).values;
     const desc = df ? table.column(df).values : undefined;
@@ -695,7 +696,9 @@ export const timeline: MarkDefinition = {
           desc ? textWidth(String(desc[r]), `10px ${family}`) : 0,
         ) + 14,
     );
-    const links = layer.link ? table.column(layer.link.field).values : undefined;
+    // Links: the layer's `link`, or the catalog's field with the `link` role.
+    const linkField = layer.link?.field ?? fieldWithRole(ctx, 'link');
+    const links = linkField ? table.column(linkField).values : undefined;
     const axis = parseColor(theme.axis.line.color);
     const y0 = ctx.y.norm(0);
     const legend = groups ? [...new Set(rows.map((r) => String(groups[r])))].map((g) => ({ key: g, color: ctx.categorical(g) })) : [];
@@ -896,7 +899,13 @@ export const tree: MarkDefinition = {
     const dpx = LR ? px : py;
     const bpx = LR ? py : px;
     // Radial: depth is the radius, leaves spread over the full turn; room around for the labels.
-    const R = 0.62;
+    // The radius leaves room for the longest leaf name (11 px text, 8 px from its dot) around the circle.
+    const unitR = ctx.x.norm(1) - ctx.x.norm(0);
+    const leafPx = Math.max(...nodes.filter((n) => !n.children.length).map((n) => textWidth(n.name, `11px ${theme.font.family}`)), 0) + 14;
+    const fitR = 1 - (leafPx * px) / (unitR || 1);
+    // Too small for the names (a thumbnail): the tree takes the room, leaf names go to the tooltip.
+    const leafNames = fitR >= 0.5;
+    const R = leafNames ? Math.min(0.72, fitR) : 0.85;
     const polar = (n: TNode): [number, number] => [(leaves > 0 ? n.u / leaves : 0) * Math.PI * 2, depth ? (n.v / depth) * R : 0];
     const toXY = (a: number, r: number): [number, number] => [ctx.x.norm(Math.sin(a) * r), ctx.y.norm(Math.cos(a) * r)];
     const place = (n: TNode): [number, number] => {
@@ -966,6 +975,7 @@ export const tree: MarkDefinition = {
         const [a] = polar(n);
         const right = Math.sin(a) >= 0;
         // Leaves outward, on the side they point to; inner nodes above their dot.
+        if (leaf && !leafNames) continue;
         labels.push(
           leaf
             ? { tx: x, ty: y, text: n.name, align: right ? 'left' : 'right', baseline: 'middle', dx: right ? 8 : -8, size: 11, color: theme.text.secondary }

@@ -125,6 +125,18 @@ describe('dbt', () => {
     expect(() => fieldsFromDbt(manifest, { model: 'nope' })).toThrow(/not found/);
   });
 
+  it('reads a field role from meta, so every chart can use it', () => {
+    const manifest = { nodes: { 'model.app.releases': { name: 'releases', resource_type: 'model', columns: {
+      weight: { name: 'weight', data_type: 'integer', meta: { label: 'Importance', role: 'importance' } },
+      page: { name: 'page', data_type: 'text', meta: { role: 'link' } },
+      other: { name: 'other', meta: { role: 'nonsense' } },
+    } } } };
+    const f = fieldsFromDbt(manifest, { model: 'releases' });
+    expect(f.weight).toMatchObject({ role: 'importance', label: 'Importance', type: 'number' });
+    expect(f.page.role).toBe('link');
+    expect(f.other.role).toBeUndefined();
+  });
+
   it('mergeFields combines catalogs per property', () => {
     const merged = mergeFields({ mrr: { type: 'number' } }, { mrr: { label: 'MRR', type: undefined } });
     expect(merged).toEqual({ mrr: { type: 'number', label: 'MRR' } });
