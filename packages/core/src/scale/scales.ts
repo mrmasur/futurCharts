@@ -253,6 +253,114 @@ export class BandScale implements Scale {
   }
 }
 
+/** Graduation steps of a session axis, finest first: every session, then calendar periods. */
+const SESSION_STEPS: { unit: 'day' | 'week' | 'month' | 'year'; n: number }[] = [
+  { unit: 'day', n: 1 },
+  { unit: 'week', n: 1 },
+  { unit: 'week', n: 2 },
+  { unit: 'month', n: 1 },
+  { unit: 'month', n: 3 },
+  { unit: 'month', n: 6 },
+  { unit: 'year', n: 1 },
+  { unit: 'year', n: 2 },
+  { unit: 'year', n: 5 },
+  { unit: 'year', n: 10 },
+];
+
+/**
+ * Graduations of an ordinal axis of dates (trading sessions: no room for the days without data).
+ * `dates`: sorted epoch ms, one per position; `i0`..`i1`: the visible positions; `count`: about how
+ * many graduations fit. The finest calendar step that fits is used: every session, the first
+ * session of each week, of each month, quarter, half-year or year. Pure, so tested on its own.
+ */
+export function sessionTicks(dates: ArrayLike<number>, i0: number, i1: number, count: number, locale?: string): { index: number; label: string }[] {
+  const lo = Math.max(0, Math.ceil(i0));
+  const hi = Math.min(dates.length - 1, Math.floor(i1));
+  if (hi < lo) return [];
+  const max = Math.max(1, Math.floor(count));
+  // The calendar period a date falls in, for each step (local time, weeks from Monday).
+  const period = (v: number, unit: 'day' | 'week' | 'month' | 'year', n: number): number => {
+    const d = new Date(v);
+    if (unit === 'year') return Math.floor(d.getFullYear() / n);
+    if (unit === 'month') return Math.floor((d.getFullYear() * 12 + d.getMonth()) / n);
+    const days = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() - d.getTimezoneOffset() * M) / D);
+    // 1970-01-01 was a Thursday: + 3 puts the week boundary on Mondays.
+    return unit === 'week' ? Math.floor(Math.floor((days + 3) / 7) / n) : days;
+  };
+  // The very first session opens a period only when it sits at its start (nothing before it says so).
+  const opens = (v: number, unit: 'day' | 'week' | 'month' | 'year'): boolean => {
+    const d = new Date(v);
+    if (unit === 'day') return true;
+    if (unit === 'week') return d.getDay() === 1;
+    return d.getDate() <= 4 && (unit === 'month' || d.getMonth() === 0);
+  };
+  let picked: number[] = [];
+  let unit: 'day' | 'week' | 'month' | 'year' = 'day';
+  for (const step of SESSION_STEPS) {
+    picked = [];
+    unit = step.unit;
+    for (let i = lo; i <= hi; i++) {
+      const starts = i === 0 ? opens(dates[0], step.unit) && period(dates[0], step.unit, step.n) * step.n === period(dates[0], step.unit, 1) : period(dates[i], step.unit, step.n) !== period(dates[i - 1], step.unit, step.n);
+      if (starts) picked.push(i);
+    }
+    if (picked.length <= max) break;
+  }
+  // Decades of sessions: thin what is left.
+  if (picked.length > max) {
+    const every = Math.ceil(picked.length / max);
+    picked = picked.filter((_, k) => k % every === 0);
+  }
+  const fmt = (o: Intl.DateTimeFormatOptions) => {
+    const f = new Intl.DateTimeFormat(locale, o);
+    return (v: number) => f.format(v);
+  };
+  const day = fmt({ day: 'numeric', month: 'short' });
+  const month = fmt({ month: 'short' });
+  const monthYear = fmt({ month: 'short', year: 'numeric' });
+  return picked.map((index, k) => {
+    const v = dates[index];
+    const d = new Date(v);
+    const label = unit === 'year' ? String(d.getFullYear()) : unit === 'month' ? (k === 0 || d.getMonth() === 0 ? monthYear(v) : month(v)) : day(v);
+    return { index, label };
+  });
+}
+
+/**
+ * A band axis of dates: one band per date present in the data, in order, with no room for the
+ * missing ones (week-ends and holidays of a price chart). Graduations are calendar ones.
+ */
+export class DateBandScale extends BandScale {
+  constructor(readonly dates: number[], paddingInner = 0.3, paddingOuter = 0.15, reverse = false, private locale?: string) {
+    super(dates.map(String), paddingInner, paddingOuter, reverse);
+  }
+  override ticks(t0: number, t1: number, count = 8): Tick[] {
+    // Visible positions: bands whose center is in view.
+    let i0 = Infinity;
+    let i1 = -Infinity;
+    const lo = Math.min(t0, t1) - 1e-9;
+    const hi = Math.max(t0, t1) + 1e-9;
+    for (let i = 0; i < this.dates.length; i++) {
+      const t = this.norm(i);
+      if (t < lo || t > hi) continue;
+      if (i < i0) i0 = i;
+      if (i > i1) i1 = i;
+    }
+    // Like the time scale, accept a step slightly finer than the ideal one: date labels are short,
+    // and the axis leaves out a label that would touch its neighbour.
+    return sessionTicks(this.dates, i0, i1, Math.ceil(count / 0.7), this.locale).map((k) => ({ t: this.norm(k.index), label: k.label }));
+  }
+  override format(index: number): string {
+    const v = this.dates[index];
+    if (v === undefined) return '';
+    const d = new Date(v);
+    const midnight = d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0;
+    return new Intl.DateTimeFormat(
+      this.locale,
+      midnight ? { day: 'numeric', month: 'short', year: 'numeric' } : { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' },
+    ).format(v);
+  }
+}
+
 const MAX_LAT = 85.0511;
 const mercator = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (Math.max(-MAX_LAT, Math.min(MAX_LAT, lat)) * Math.PI) / 360));
 

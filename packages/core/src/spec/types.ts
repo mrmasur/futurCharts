@@ -57,6 +57,11 @@ export interface ChartSpec {
    * `{ "x": "2024-06-01", "y": 120, "text": "Lancement" }`.
    */
   annotations?: AnnotationSpec[];
+  /**
+   * `false` hides the legend. By default it shows as soon as there are two entries, and the color
+   * ramp of a mark that provides one. `true` also asks for the ramp (theme ramp, both ends of the
+   * values) of a cartesian layer colored by a numeric field.
+   */
   legend?: boolean;
   interactions?: InteractionSpec;
   /**
@@ -121,7 +126,7 @@ export interface Encoding {
   time?: string;
   /** Share done, 0 to 1 (or 0 to 100): the filled part of a `gantt` bar. */
   progress?: string;
-  /** Phase of a task (`gantt`): each group opens with a summary bar spanning its tasks. */
+  /** Phase of a task (`gantt`): each group opens with a summary bar spanning its tasks. Group of the `source` entity (`matrix`). */
   group?: string;
   /** Predecessors of a task (`gantt`): ids separated by commas, each drawn as an arrow from its end to this start. */
   depends?: string;
@@ -138,6 +143,8 @@ export interface Encoding {
   /** Opening and closing prices (`candlestick`; `y` is the high, `y2` the low). */
   open?: string;
   close?: string;
+  /** Value of the previous period, one per row (`barRank`: the tick on each bar, the change and the places moved). */
+  previous?: string;
 }
 
 export interface ResponsiveRule {
@@ -308,7 +315,16 @@ export type MarkStyle = { color?: string } & DeepPartial<
     Theme['marks']['scatter3d'] &
     Theme['marks']['ridgeline'] &
     Theme['marks']['beeswarm'] &
+    Theme['marks']['dotplot'] &
+    Theme['marks']['ecdf'] &
+    Theme['marks']['qq'] &
+    Theme['marks']['contour'] &
+    Theme['marks']['raincloud'] &
     Theme['marks']['tilemap'] &
+    Theme['marks']['dorling'] &
+    Theme['marks']['mapPie'] &
+    Theme['marks']['spike'] &
+    Theme['marks']['mapBars'] &
     Theme['marks']['pictorial'] &
     Theme['marks']['bullet'] &
     Theme['marks']['liquid'] &
@@ -320,7 +336,16 @@ export type MarkStyle = { color?: string } & DeepPartial<
     Theme['marks']['fan'] &
     Theme['marks']['cycle'] &
     Theme['marks']['sparktable'] &
-    Theme['marks']['bumpArea']
+    Theme['marks']['bumpArea'] &
+    Theme['marks']['likert'] &
+    Theme['marks']['tornado'] &
+    Theme['marks']['variwide'] &
+    Theme['marks']['barRank'] &
+    Theme['marks']['barInBar'] &
+    Theme['marks']['table'] &
+    Theme['marks']['matrix'] &
+    Theme['marks']['confusion'] &
+    Theme['marks']['calendarMonth']
 >;
 
 /** A condition on one field of a row. Several conditions in an array must all hold. */
@@ -386,6 +411,11 @@ export interface StyleOverride {
 }
 
 export interface ScaleSpec {
+  /**
+   * `band` over a date field gives an ordinal axis of dates: one band per date present in the data,
+   * in order, no room for the others (trading sessions without week-ends), with calendar
+   * graduations (sessions, weeks, months… as room allows).
+   */
   type?: 'linear' | 'log' | 'time' | 'band';
   /** Explicit domain; `null` on one side keeps that side automatic. */
   domain?: [number | null, number | null];

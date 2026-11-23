@@ -19,3 +19,4 @@ export const CoursEtVolumes: StoryObj = { name: "Cours et volumes", ...entryStor
 export const Renko: StoryObj = { name: "Renko", ...entryStory("Renko") };
 export const RenkoABriquesFines: StoryObj = { name: "Renko à briques fines", ...entryStory("Renko à briques fines") };
 export const Kagi: StoryObj = { name: "Kagi", ...entryStory("Kagi") };
+export const SeancesSansWeekEndsPanneauxAlignes: StoryObj = { name: "Séances sans week-ends, panneaux alignés", ...entryStory("Séances sans week-ends, panneaux alignés") };

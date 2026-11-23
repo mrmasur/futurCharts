@@ -39,6 +39,11 @@ export interface LayerData {
 
 export interface PrepareContext {
   band: boolean;
+  /**
+   * The band axis is an ordinal axis of dates (`scales.x.type: 'band'` over a time field): `categories`
+   * already lists them in chronological order, and each series is drawn in that order.
+   */
+  dates?: boolean;
   /** Categories on y, values on x. */
   horizontal: boolean;
   /** Shared category -> index map of the x band scale (filled as layers are prepared). */
@@ -89,6 +94,8 @@ export function prepareLayer(layer: LayerSpec, index: number, table: Table, ctx:
 
   const xOf = (i: number): number => {
     if (!ctx.band) return xCol.type === 'string' ? Number(xCol.values[i]) : (xCol.values[i] as number);
+    // A row without a date has no place on an axis of dates.
+    if (ctx.dates && !Number.isFinite(xCol.values[i] as number)) return NaN;
     const key = String(xCol.values[i]);
     let idx = ctx.categories.get(key);
     if (idx === undefined) {
@@ -128,7 +135,7 @@ export function prepareLayer(layer: LayerSpec, index: number, table: Table, ctx:
   const acc = new Map<number, { pos: number; neg: number }>();
   const series: SeriesData[] = [];
   for (const [key, rows] of groups) {
-    if (!ctx.band) rows.sort((a, b) => xRaw[a] - xRaw[b]);
+    if (!ctx.band || ctx.dates) rows.sort((a, b) => xRaw[a] - xRaw[b]);
     const n = rows.length;
     const hidden = ctx.hidden.has(key);
     const s: SeriesData = {

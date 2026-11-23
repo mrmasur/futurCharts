@@ -171,7 +171,7 @@ function fit(text: string, max: number, font: string): string {
  * `bundle`: hierarchical edge bundling. Links from `source` to `target` (rows)
  * or from `layer.graph`; leaves grouped by `color` (the group of a row's source),
  * by a node's `group`, or by the prefixes of dotted names (`core.render.batch`).
- * Click a leaf to keep only its links; `highlight` does the same from the spec.
+ * Hover a leaf to bring out its links, click it to keep them; `highlight` does the same from the spec.
  */
 export const bundle: MarkDefinition = {
   standalone: true,
@@ -255,12 +255,16 @@ export const bundle: MarkDefinition = {
     const ring: number = style.nodeSize;
     const widest = style.labels ? Math.min(120, Math.max(0, ...lay.leaves.map((l) => textWidth(known.get(l.id)!.label, font)))) : 0;
     const half = Math.min(W, H) / 2;
+    // Names along the radius (`radialLabels`): every leaf has its own, cut to the room left around the circle.
+    // A small chart keeps the names on its sides: turned and cut to a few letters, they would say nothing.
+    const radial = !!style.labels && !!style.radialLabels && half >= 120;
+    const radialRoom = radial ? Math.min(widest, 110, half * 0.4) : 0;
     // Too low for names all around: the circle takes the height, and only the most connected leaves on its sides are named.
-    const compact = style.labels && H / 2 - ring - 10 - lineH < 84;
+    const compact = style.labels && !radial && H / 2 - ring - 10 - lineH < 84;
     const sideRoom = compact ? Math.min(widest, 64) : widest;
     const R = Math.max(
       half * 0.5,
-      !style.labels ? half - ring - 6 : Math.min(H / 2 - ring - (compact ? 5 : 10 + lineH), W / 2 - sideRoom - ring - 16),
+      radial ? half - ring - 12 - radialRoom : !style.labels ? half - ring - 6 : Math.min(H / 2 - ring - (compact ? 5 : 10 + lineH), W / 2 - sideRoom - ring - 16),
     );
     const Rl = R + 2 + ring + 6;
     const labelRoom = W / 2 - Rl - 4;
@@ -268,7 +272,7 @@ export const bundle: MarkDefinition = {
     // Names: one side each, moved away from the equator where they would overlap.
     interface Name { id: string; text: string; right: boolean; x: number; y: number; moved: boolean }
     const names: Name[] = [];
-    if (style.labels && labelRoom > 24) {
+    if (style.labels && !radial && labelRoom > 24) {
       const gap = compact ? lineH * 1.5 : lineH;
       const capacity = Math.max(1, Math.floor(compact ? (2 * R) / gap : Math.min(H - 8, 2 * Rl + 2 * lineH) / gap));
       for (const right of [true, false]) {
@@ -303,7 +307,10 @@ export const bundle: MarkDefinition = {
     const dim = byNode ? (hl!.dim ?? style.dim) : style.dim;
     let focus = ctx.state.focus as string | undefined;
     if (focus !== undefined && !leafOf.has(focus)) focus = undefined;
+    // The leaf under the pointer: its links come out for as long as it stays there, over a clicked focus too.
+    let hovered: string | undefined;
     const focusSet = (): Set<string> | undefined => {
+      if (hovered !== undefined) return new Set([hovered]);
       if (focus !== undefined) return new Set([focus]);
       if (!byNode) return undefined;
       const s = new Set(hl!.values.map(String).filter((v) => leafOf.has(v)));
@@ -338,7 +345,7 @@ export const bundle: MarkDefinition = {
           const pts = curves[i];
           const segs = pts.length / 2 - 1;
           // The spec's own overrides apply when the highlight is not about nodes.
-          const paint = (c: RGBA) => (byNode ? (on && fs && hl!.color && focus === undefined ? parseColor(hl!.color) : c) : ctx.paint(c, l.row));
+          const paint = (c: RGBA) => (byNode ? (on && fs && hl!.color && focus === undefined && hovered === undefined ? parseColor(hl!.color) : c) : ctx.paint(c, l.row));
           const c0 = paint(colorOf(l.a));
           const c1 = paint(colorOf(l.b));
           const alpha = !fs ? style.opacity : on ? Math.min(1, style.opacity + 0.35) : style.opacity * dim;
@@ -367,6 +374,20 @@ export const bundle: MarkDefinition = {
           color: !fs ? theme.text.secondary : lit.has(n.id) ? theme.text.primary : theme.text.muted,
         });
       }
+      if (radial) {
+        // Where the leaves are too close for every name, the most connected ones are placed first and stay.
+        for (const l of [...lay.leaves].sort((p, q) => degree(q.id) - degree(p.id))) {
+          const right = Math.sin(l.angle) >= 0;
+          const deg = (l.angle * 180) / Math.PI;
+          labels.push({
+            tx: tx(cx + Math.sin(l.angle) * Rl), ty: ty(cy - Math.cos(l.angle) * Rl), text: known.get(l.id)!.label, size,
+            // Read from the circle outwards on the right, towards it on the left: never upside down.
+            rotate: right ? deg - 90 : deg + 90, align: right ? 'left' : 'right', baseline: 'middle', maxWidth: radialRoom,
+            weight: fs?.has(l.id) ? 700 : 500,
+            color: !fs ? theme.text.secondary : lit.has(l.id) ? theme.text.primary : theme.text.muted,
+          });
+        }
+      }
       // The focused names first: they win where two names collide.
       if (fs) labels.sort((p, q) => Number(q.weight === 700) - Number(p.weight === 700));
     };
@@ -376,7 +397,7 @@ export const bundle: MarkDefinition = {
       const x = px * W - cx;
       const y = cy - (1 - py) * H;
       const r = Math.hypot(x, y);
-      if (r < R - 6 || r > Rl + (names.length ? widest : 6)) return undefined;
+      if (r < R - 6 || r > Rl + (radial ? radialRoom : names.length ? widest : 6)) return undefined;
       const a = (Math.atan2(x, y) + TAU) % TAU;
       return lay.leaves.find((l) => a >= l.a0 && a <= l.a1);
     };
@@ -394,6 +415,13 @@ export const bundle: MarkDefinition = {
         ];
         if (l.path.length) rows.unshift({ label: 'Groupe', value: l.path.join(' › ') });
         return { title: known.get(l.id)!.label, rows };
+      },
+      hover(at) {
+        const next = at ? leafAt(at.tx, at.ty)?.id : undefined;
+        if (next === hovered) return false;
+        hovered = next;
+        write();
+        return true;
       },
       click(px, py) {
         const l = leafAt(px, py);

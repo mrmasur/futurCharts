@@ -26,6 +26,8 @@ export interface AnnotationContext {
   categories: Map<string, number>;
   bandX: boolean;
   bandY: boolean;
+  /** The band axis is an ordinal axis of dates: its dates (sorted epoch ms), one per position. */
+  dates?: number[];
   pixel: [number, number];
 }
 
@@ -41,6 +43,20 @@ export function annotationRaw(v: AnnotationValue, band: boolean, categories: Map
   return Date.parse(v);
 }
 
+/**
+ * Position of a date on an ordinal axis of dates: the index of its session, or half-way
+ * before the next one when no session falls on that day (a week-end, a holiday).
+ */
+export function sessionPosition(v: AnnotationValue, dates: ArrayLike<number>): number {
+  const e = annotationRaw(v, false, new Map());
+  if (!Number.isFinite(e)) return NaN;
+  // Same day, whatever the hour: "2026-03-16" is read as UTC midnight, the data as local midnight.
+  const HALF_DAY = 43200000;
+  let i = 0;
+  while (i < dates.length && dates[i] < e - HALF_DAY) i++;
+  return i < dates.length && dates[i] <= e + HALF_DAY ? i : i - 0.5;
+}
+
 /** `under`: the bands, drawn before the data; `over`: lines and notes, drawn after. */
 export function buildAnnotations(list: AnnotationSpec[], ctx: AnnotationContext, part: 'under' | 'over'): BuiltMark {
   const { theme, pixel } = ctx;
@@ -48,8 +64,9 @@ export function buildAnnotations(list: AnnotationSpec[], ctx: AnnotationContext,
   const rects: number[] = [];
   const dots: number[] = [];
   const labels: MarkLabel[] = [];
-  const nx = (v: AnnotationValue) => ctx.x.norm(annotationRaw(v, ctx.bandX, ctx.categories));
-  const ny = (v: AnnotationValue) => ctx.y.norm(annotationRaw(v, ctx.bandY, ctx.categories));
+  const raw = (v: AnnotationValue, band: boolean) => (band && ctx.dates ? sessionPosition(v, ctx.dates) : annotationRaw(v, band, ctx.categories));
+  const nx = (v: AnnotationValue) => ctx.x.norm(raw(v, ctx.bandX));
+  const ny = (v: AnnotationValue) => ctx.y.norm(raw(v, ctx.bandY));
   const color = (c: string | undefined, fallback: string): RGBA => parseColor(themeColor(theme, c ?? fallback));
   const ink = (c: string | undefined) => (c ? themeColor(theme, c) : theme.text.secondary);
   const surface = theme.background;

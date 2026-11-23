@@ -150,6 +150,15 @@ export const heatmap: MarkDefinition = {
       if (style.labels) labels.push({ tx: cx, ty: cy, text: ctx.format(values[i], vf), on: fill, align: 'center', baseline: 'middle', box });
     }
     const label = ctx.fields[vf]?.label ?? vf;
+    // The ramp the cells are colored with, for the legend (a diverging one is symmetric around zero, like the cells).
+    const legendRamp = style.colorLegend && !style.circles && hi > lo
+      ? {
+          colors: Array.from({ length: 9 }, (_, i) => valueColor(ctx, (style.diverging ? -amax : lo) + ((style.diverging ? 2 * amax : hi - lo) * i) / 8, lo, hi, style.diverging)),
+          min: ctx.format(style.diverging ? -amax : lo, vf),
+          max: ctx.format(style.diverging ? amax : hi, vf),
+          title: label,
+        }
+      : undefined;
     const draws = batches(ctx, rects, [], [], false);
     if (dots.length) {
       const b = ctx.renderer.createBatch('point');
@@ -160,6 +169,7 @@ export const heatmap: MarkDefinition = {
       draws,
       hit: emptyHit(),
       labels,
+      legendRamp,
       pick(tx, ty): ShapeHit | null {
         const xi = xs.invert(tx);
         const yi = ys.invert(ty);
@@ -594,7 +604,7 @@ export const treemap: MarkDefinition = {
         pushRect(rects, { x0: box[0], y0: box[1], x1: box[2], y1: box[3], fill, radii: [r, r, r, r] });
         tiles.push({ box, d: t });
         if (style.labels) {
-          labels.push({ tx: box[0], ty: box[3], text: t.key, on: fill, align: 'left', baseline: 'top', dx: 8, dy: 8, weight: 600, size: 12, box });
+          labels.push({ tx: box[0], ty: box[3], text: t.key, on: fill, align: 'left', baseline: 'top', dx: 8, dy: 8, weight: 600, size: 12, box, ellipsis: !!style.ellipsis });
           labels.push({ tx: box[0], ty: box[3], text: ctx.format(t.value, vf), on: fill, align: 'left', baseline: 'top', dx: 8, dy: 25, size: 11, box });
         }
       }

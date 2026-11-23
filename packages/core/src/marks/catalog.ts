@@ -352,7 +352,15 @@ export const candlestick: MarkDefinition = {
     }
     const draws = batches(ctx, rects, [], [], true);
     draws.unshift({ batch: batch(ctx, 'line', lines) });
-    return { draws, hit: buildHit(ctx) };
+    // Hover marker and tooltip swatch in the color of the session, not in a palette color the candles never use.
+    const hit = buildHit(ctx);
+    for (let k = 0; k < hit.n; k++) {
+      const r = hit.row[k];
+      if (Number.isFinite(open[r] + close[r])) hit.color.set(ctx.paint(close[r] >= open[r] ? up : down, r), k * 4);
+    }
+    // Same for the legend: a two-tone swatch, rising and falling.
+    const legend = data.series.map((s) => ({ key: s.key, color: up, color2: down }));
+    return { draws, hit, legend };
   },
 };
 

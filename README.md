@@ -146,13 +146,21 @@ Démo : `http://localhost:5273/gallery.html`, une application de tableau de bord
 | Parts (pyramide) | `pyramid` (étages empilés depuis la pointe, hauteur selon la valeur) |
 | Animation | `motion` (nuage animé façon Gapminder : `key`, `time`, `x`, `y`, `size`, `color` ; barre de lecture, traînée sur les points de `highlight`) |
 | Tableaux | `pivot` (tableau croisé : `key` en lignes, `x` en colonnes, `value` ; cellules teintées, total et tendance par ligne) |
+| Tableaux (mis en forme) | `table` (une ligne par ligne de données, colonnes dans `style.cols` : texte, nombre, barre autour de zéro, teinte, variation ▲▼, pastille de statut, note, rang ; tri, zébrage, total, « + n lignes », colonnes abandonnées par priorité sur petit écran) |
+| Matrices | `matrix` (matrice d'adjacence : `source` en lignes, `target` en colonnes, `value`, `group` pour regrouper ; totaux émis / reçus en barres dans les marges), `confusion` (matrice de confusion : `y` réel, `x` prédit, `value` facultatif ; diagonale mise en avant, rappel, précision, exactitude), `calendarMonth` (un mois en grille de semaines : `x` la date, `value` ; numéro du jour, valeur et teinte) |
 | Distributions (suite) | `ridgeline` (densités empilées par `key`), `beeswarm` (points sans chevauchement le long de `x`, un essaim par `key`) |
+| Distributions (statistiques) | `dotplot` (points empilés de Wilkinson le long de `x`, `color` par groupe ; la taille des points s'adapte), `ecdf` (fonction de répartition en escalier, une courbe par `color`, `style.quantiles` projetés sur les axes), `qq` (quantile-quantile : `x` seul contre la loi normale avec droite des quartiles et bande de confiance, `x` et `y` entre deux échantillons), `contour` (densité 2D de `x`, `y` en bandes de niveau, un jeu par `color`, points par-dessus), `raincloud` (par `key` : demi-violon, boîte et points) |
 | Évolution (suite) | `difference` (`y` contre `y2` : aire colorée selon le signe de l'écart, croisements exacts), `fan` (éventail de prévision : quantiles par `key` ou calculés sur plusieurs `y` par `x`, historique en trait plein), `cycle` (cycle plot : un panneau par mois, trimestre, jour de semaine ou heure, moyenne en trait), `sparktable` (une ligne par `key` : dernière valeur, variation, mini-courbe, barre de comparaison), `bumpArea` (classement en rubans d'épaisseur proportionnelle à la valeur) |
 | Grilles | `tilemap` (tuiles hexagonales ou carrées en colonne `x` / ligne `y`), `surface` (grille interpolée + courbes de niveau), `horizon` (séries repliées en bandes) |
 | Unités | `pictorial` (une rangée de symboles par catégorie, `style.unit` par symbole) |
 | Arbres (suite) | `tree` avec `style.radial` (arbre radial) |
 | Jauges (suite) | `gauge` avec `zones` (seuils colorés), `needle`, `ticks`, `sweep` (ouverture en degrés), `rounded` |
 | Puces | `bullet` (par ligne : mesure, trait d'objectif `encode.target`, plages qualitatives `ranges` ou `rangeFields` ; `shared` pour une échelle commune, `tinted`) |
+| Échelle de Likert | `likert` (une ligne par `key`, un segment par réponse `color`, pile centrée sur le milieu de l'échelle ; `answers` fixe l'ordre, `neutral: 'aside'` sort la réponse neutre, `totals`, `sorted`) |
+| Tornade, papillon | `tornado` (deux séries `color`, ou deux champs `x` / `x2`, de part et d'autre des libellés écrits au milieu ; `style.base` : analyse de sensibilité autour d'une valeur de base ; `sorted`, `shared`) |
+| Barres à largeur variable | `variwide` (hauteur `value`, largeur `encode.size`, noms décalés sous les barres étroites ; `encode.color` pour des familles) |
+| Classement avant / après | `barRank` (rang, places gagnées ou perdues, barre actuelle, trait à `encode.previous`, variation colorée ; `top`, `upIsGood`) |
+| Barre dans la barre | `barInBar` (barre fine `value` dans une barre large `encode.target`, part atteinte en bout de ligne) |
 | Jauge à remplissage | `liquid` (un contenant par ligne rempli à valeur / `encode.target` ou `max`, surface en vague, `container` rond ou arrondi, `zones` ; `animated` pour une vague en mouvement) |
 | Anneaux d'activité | `activity` (un anneau par objectif, piste teintée, bouts arrondis, second tour au-delà de 100 % ; un seul anneau : la part au centre) |
 | Compteur à segments | `led` (segments allumés jusqu'à la valeur, `zones` : couleur par niveau) |
@@ -164,6 +172,10 @@ Démo : `http://localhost:5273/gallery.html`, une application de tableau de bord
 | Bourse (indicateurs) | transforms `sma`, `ema`, `bollinger` (`middle`, `upper`, `lower`), `rsi`, `macd` (`macd`, `signal`, `histogram`) et `heikinAshi` : ils ajoutent des colonnes, à tracer avec `line`, `area` ou `bar` |
 | Bourse (sans axe du temps) | `renko` (`x` date, `y` clôture ; briques de `style.brick`), `kagi` (`x` date, `y` clôture ; retournement de `style.reversal`, trait épais au-dessus du sommet précédent) |
 | Cartes (suite) | `route` (de `x`, `y` à `x2`, `y2`, courbée ; épaisseur avec `size`) |
+| Cartogramme | `dorling` (un cercle par lieu, aire selon `value`, écarté de ses voisins sans chevauchement ; lieu par `x` / `y` ou par jointure de `key` sur `layer.geo` ; `color` catégorie ou mesure ; `coverage`, `label`, `shortLabel`) |
+| Camemberts sur carte | `mapPie` (un camembert ou anneau par lieu `key` en `x` longitude / `y` latitude, parts par `color`, aire selon le total ; `sizeRange`, `innerRadius`) |
+| Carte à pics | `spike` (un triangle effilé par lieu, hauteur selon `value` ; `color` catégorie ou mesure, nom des `top` plus hauts) |
+| Barres sur carte | `mapBars` (petites colonnes par lieu `key`, une par valeur de `color`, sur une échelle commune ; `height`, `thickness`) |
 | Arbres | `tree` (`path` ; dendrogramme, ou organigramme avec `boxes` et `direction: "TB"`), `icicle` (partition en lignes, zoom au clic ; `orientation: "BT"` pour un flame chart) |
 | Ensembles | `venn` (2 ou 3 ensembles ; `key` vaut `A`, `A&B` ou `A&B&C`, aires proportionnelles) |
 | UpSet | `upset` (au-delà de 3 ensembles : matrice de points reliés, barres par intersection et par ensemble ; `key` vaut `A&B`, `value` optionnelle, `style.mode: 'inclusive'` pour des données de type `venn`) |

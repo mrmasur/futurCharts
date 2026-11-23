@@ -1,7 +1,7 @@
 import type { Table } from '../data/table';
 import type { Batch, Renderer, RGBA } from '../render/types';
 import type { Scale } from '../scale/scales';
-import type { FieldSpec, LayerSpec } from '../spec/types';
+import type { ChartSpec, FieldSpec, LayerSpec } from '../spec/types';
 import type { Theme } from '../theme/theme';
 import type { LayerData, SeriesData } from './prepare';
 
@@ -85,6 +85,30 @@ export interface MarkLabel {
   series?: string;
   /** Background text (a race's date): drawn whatever overlaps it, and never pushes another label out. */
   free?: boolean;
+  /** Widest the text may be, px: past it the text is cut and ends with "…". */
+  maxWidth?: number;
+  /**
+   * With a `box`: a text too long for it is cut with "…" instead of being left out. It still
+   * disappears (or gives way to `fallback`) when not even one character and the ellipsis fit.
+   */
+  ellipsis?: boolean;
+  /**
+   * Turn the text around its anchor, degrees, clockwise on screen (`-90` reads bottom to top,
+   * `-45` leans column headers). `align` / `baseline` apply along the turned text; the box test
+   * and the anti-overlap use the bounding box of the turned text.
+   */
+  rotate?: number;
+}
+
+/** A color ramp shown in the legend for a continuous color (instead of one entry per value). */
+export interface LegendRamp {
+  /** Colors from the low end to the high end (two or more; drawn as a smooth gradient). */
+  colors: RGBA[];
+  /** Labels of both ends, already formatted (`ctx.format`). */
+  min: string;
+  max: string;
+  /** What the color measures (a field label), written before the ramp. */
+  title?: string;
 }
 
 /** A mark that plays through time: the chart shows a play button and a scrubber for it. */
@@ -162,10 +186,25 @@ export interface BuiltMark {
   draws: MarkDraw[];
   hit: HitData;
   labels?: MarkLabel[];
-  /** Legend entries of a standalone mark (pie slices, treemap groups). */
-  legend?: { key: string; color: RGBA }[];
+  /**
+   * Legend entries of a standalone mark (pie slices, treemap groups). On a cartesian mark, an
+   * entry named like one of its series replaces that series' swatch (candlesticks: rising color,
+   * with `color2` the falling one, instead of a palette color the drawing never uses).
+   */
+  legend?: { key: string; color: RGBA; color2?: RGBA }[];
+  /**
+   * A ramp for the legend, when the mark colors by a number. Shown unless `spec.legend` is false.
+   * Cartesian marks colored through `ctx.color` get one from the chart when `spec.legend` is true.
+   */
+  legendRamp?: LegendRamp;
   /** Hit-test a position in scale space, for marks that are areas rather than data points. */
   pick?(tx: number, ty: number): ShapeHit | null;
+  /**
+   * The pointer moved over the chart (`at`, in scale space) or left it (`null`; also sent when it
+   * is outside the plot). A mark that brings out what is under the pointer updates its batches
+   * and labels here and returns true: the chart then redraws. Return false when nothing changed.
+   */
+  hover?(at: { tx: number; ty: number } | null): boolean;
   /**
    * A click at a position in scale space. Return the new focus path (`[]` for
    * everything) when the mark handled it, `undefined` otherwise.
@@ -208,9 +247,21 @@ export interface MarkDefinition {
   standalone?: boolean;
   /** Theme entry to style the mark from, when it differs from the mark name (`pie` and `donut` use `arc`). */
   themeKey?: string;
-  /** Standalone marks: the scales (and axes) the chart should use. */
-  /** `size`: the chart's box, px (a mark may lay itself out differently on a narrow screen). */
-  scales?(input: { layer: LayerSpec; table: Table; fields: Record<string, FieldSpec>; size?: { width: number; height: number } }): MarkScales;
+  /**
+   * Standalone marks: the scales (and axes) the chart should use.
+   * `size`: the chart's box, px (a mark may lay itself out differently on a narrow screen).
+   * `style`: `theme.marks[mark]` merged with the layer's `style`, as `build` gets it (an option set
+   * in a theme is honored). `scales`: the spec's `scales` (domains, `reverse`…). `theme`: the resolved theme.
+   */
+  scales?(input: {
+    layer: LayerSpec;
+    table: Table;
+    fields: Record<string, FieldSpec>;
+    size?: { width: number; height: number };
+    style?: Record<string, any>;
+    scales?: ChartSpec['scales'];
+    theme?: Theme;
+  }): MarkScales;
   /** The layout depends on the chart size (treemap): rebuild on resize. A function decides per layer. */
   sizeDependent?: boolean | ((layer: LayerSpec) => boolean);
   /** Legend and hover symbol. */

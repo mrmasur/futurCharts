@@ -22,3 +22,4 @@ export const EnsemblesParallelesResiliationsMisesEnAvant: StoryObj = { name: "En
 export const TicketsDeSupportEnEnsemblesParalleles: StoryObj = { name: "Tickets de support en ensembles parallèles", ...entryStory("Tickets de support en ensembles parallèles") };
 export const CompetencesPartageesEntreEquipesUpSet: StoryObj = { name: "Compétences partagées entre équipes (UpSet)", ...entryStory("Compétences partagées entre équipes (UpSet)") };
 export const UpSetCombinaisonsDeCanauxDAchat: StoryObj = { name: "UpSet : combinaisons de canaux d’achat", ...entryStory("UpSet : combinaisons de canaux d’achat") };
+export const FaisceauxAuxNomsRayonnants: StoryObj = { name: "Faisceaux aux noms rayonnants", ...entryStory("Faisceaux aux noms rayonnants") };

@@ -13,6 +13,38 @@ export interface TextStyle {
   weight: number | string;
 }
 
+/** One column of the `table` mark (plain JSON, in `style.cols`). */
+export interface TableColumn {
+  /** Field shown in the column (not needed by `rank`). */
+  field?: string;
+  /** Column title; defaults to the catalog label of the field. */
+  label?: string;
+  /**
+   * How a cell is drawn: `text`, `number` (catalog format), `bar` (a bar from zero, negative values the other way),
+   * `heat` (background shaded by the value), `change` (▲▼ in the good or bad color), `status` (a dot colored by the
+   * category), `rating` (filled and empty dots or stars), `rank` (position of the row after sorting).
+   * Default: `text` for a string field, `number` otherwise.
+   */
+  type?: 'text' | 'number' | 'bar' | 'heat' | 'change' | 'status' | 'rating' | 'rank';
+  align?: 'left' | 'right' | 'center';
+  /** Fixed width, px (default: what the content needs). */
+  width?: number;
+  /** Lower stays longer on a narrow screen (default: the position of the column; the first one goes last). */
+  priority?: number;
+  /** `rating`: number of dots or stars (default 5). */
+  max?: number;
+  /** `rating`: `dots` (default) or `stars`. */
+  shape?: 'dots' | 'stars';
+  /** `status`: color per value: `good`, `bad`, `warn`, a theme token (`$2`, `$muted`) or a CSS color. */
+  colors?: Record<string, string>;
+  /** `heat`: one hue below zero, another above, instead of the sequential ramp. */
+  diverging?: boolean;
+  /** `change`, `bar`: a rise is bad news in this column (costs, delays): positive bars take the bad color, negative ones the good color. */
+  downIsGood?: boolean;
+  /** Total row: `sum`, `mean` or `none` (default: `sum` for `number`, `bar` and `heat`). */
+  total?: 'sum' | 'mean' | 'none';
+}
+
 /**
  * Every visual decision of a chart lives here. A spec can override any leaf
  * (`theme: { extends: 'dark', marks: { bar: { radius: 0 } } }`), and each layer
@@ -109,8 +141,9 @@ export interface Theme {
     /**
      * `circles`: a dot per cell sized by the value (punch card) instead of a filled cell.
      * `diverging`: colors from one hue (negative) through neutral (0) to another (positive), symmetric around zero (correlations).
+     * `colorLegend`: the color ramp with its two ends in the legend.
      */
-    heatmap: { radius: number; labels: boolean; gap: number; circles: boolean; diverging: boolean };
+    heatmap: { radius: number; labels: boolean; gap: number; circles: boolean; diverging: boolean; colorLegend: boolean };
     /** Globe: `layer.geo` outlines, points (`x` lon, `y` lat) and routes (to `x2`, `y2`). Drag to turn; `spin` until then. */
     globe: { spin: boolean; size: number; graticule: boolean; ocean: string; land: string };
     /** Scatter plot matrix: every pair of `path` fields, histograms on the diagonal. `size`: dot px. */
@@ -131,7 +164,8 @@ export interface Theme {
       /** Rounded corners on every slice, px. */
       cornerRadius: number;
     };
-    treemap: { gap: number; radius: number; labels: boolean; header: number };
+    /** `ellipsis`: a name too long for its tile is cut with "…" instead of being left out. */
+    treemap: { gap: number; radius: number; labels: boolean; header: number; ellipsis: boolean };
     funnel: { gap: number; radius: number; labels: boolean; connector: number };
     /** `thickness`: share of the radius. `track`: empty part of the arc (`auto` follows the grid color). */
     gauge: {
@@ -185,8 +219,145 @@ export interface Theme {
     ridgeline: { overlap: number; opacity: number; bandwidth: number };
     /** Dots that do not overlap: `size` px; `label`: field naming each dot in the tooltip. */
     beeswarm: { size: number; opacity: number; label: string };
+    /** Stacked dot plot (Wilkinson): one dot per row along `x`, piled where values fall within a dot's width. */
+    dotplot: {
+      /** Largest dot diameter, px: the dots shrink from there until the tallest pile fits the height. */
+      size: number;
+      /** Smallest dot diameter, px: below it the piles are squeezed (dots overlap) instead. */
+      minSize: number;
+      /** Space left between neighbouring dots, px. */
+      gap: number;
+      /** Opacity of the dots. */
+      opacity: number;
+      /** `dotdensity`: piles centered on the values they hold (Wilkinson). `histodot`: fixed, evenly spaced bins. */
+      binning: 'dotdensity' | 'histodot';
+    };
+    /** Empirical cumulative distribution: a staircase per `color`, the share of rows at or below each `x`. */
+    ecdf: {
+      /** Width of the curves, px. */
+      width: number;
+      /** Quantile levels (0 to 1) projected on both axes: 0.5 is the median, 0.9 the 90th percentile. `[]`: none. */
+      quantiles: number[];
+      /** Write the name of each quantile and its value at the foot of its marker. */
+      labels: boolean;
+      /** A dot on every step (small samples). */
+      points: boolean;
+    };
+    /** Quantile-quantile plot: against the normal law (`x` alone) or between two samples (`x` and `y`). */
+    qq: {
+      /** Dot diameter, px. */
+      size: number;
+      /** Opacity of the dots. */
+      opacity: number;
+      /** Confidence band around the reference line (normal law only). */
+      band: boolean;
+      /** Confidence level of the band, 0 to 1. */
+      level: number;
+      /** Reference line: `auto` is the secondary ink (the group's color when there are several groups). */
+      referenceColor: string;
+      /** Width of the reference line, px. */
+      referenceWidth: number;
+      /** Dash of the reference line, px; `[]` for a solid line. */
+      referenceDash: number[];
+    };
+    /** 2D density of a cloud of points in filled iso-density bands, one set per `color`. */
+    contour: {
+      /** Number of density levels (bands). */
+      levels: number;
+      /** Kernel width, as a multiple of the automatic one (Scott's rule): above 1 smoother, below 1 more detailed. */
+      smoothing: number;
+      /** Opacity of the densest band. */
+      opacity: number;
+      /** A line along each level. */
+      lines: boolean;
+      /** Draw the points themselves over the bands. */
+      points: boolean;
+      /** Diameter of those points, px. */
+      size: number;
+    };
+    /** Raincloud: per `key`, a half violin (density of `x`), a slim box plot and every row as a dot below. */
+    raincloud: {
+      /** Opacity of the density shape. */
+      opacity: number;
+      /** Kernel bandwidth in data units (0: automatic, Silverman's rule). */
+      bandwidth: number;
+      /** Box plot (quartiles, median, whiskers at 1.5 interquartile ranges) under the density. */
+      box: boolean;
+      /** The rows as dots under the box. */
+      points: boolean;
+      /** Dot diameter, px. */
+      size: number;
+      /** How much of the room under the box the dots spread over, 0 (one line) to 1. */
+      jitter: number;
+    };
     /** Grid of tiles: hexagons (`hex`) or squares, `gap` px. */
     tilemap: { hex: boolean; gap: number; labels: boolean };
+    /** Dorling cartogram: one circle per place, area by `value`, pushed apart from its neighbours. */
+    dorling: {
+      /** Share of the map's area covered by the circles (0–1): higher means larger circles, moved further. */
+      coverage: number;
+      /** Relaxation steps (fixed, so the layout is the same on every load). */
+      iterations: number;
+      /** px left between two touching circles. */
+      gap: number;
+      /** Name inside the circles large enough to hold it. */
+      labels: boolean;
+      /** Field holding the name written in a circle (default: `encode.key`). */
+      label: string;
+      /** Field holding a short name (a country code), used where the full one does not fit. */
+      shortLabel: string;
+      /** The value under the name, in the circles with room for two lines. */
+      values: boolean;
+      /** Fill opacity. */
+      opacity: number;
+    };
+    /** Pies on a map: one per place, its area by the total of its slices. */
+    mapPie: {
+      /** Diameters in px of the smallest and the largest pie. */
+      sizeRange: [number, number];
+      /** Share of the radius left empty in the middle (0: pies, 0.5: rings). */
+      innerRadius: number;
+      /** px separator between slices. */
+      gap: number;
+      /** px rim in the surface color around each pie, to detach it from the map. */
+      outline: number;
+      /** Name of the place under its pie. */
+      labels: boolean;
+      /** Fill opacity. */
+      opacity: number;
+    };
+    /** Spike map: one thin triangle per place, as tall as its value. */
+    spike: {
+      /** Height of the tallest spike, px. */
+      height: number;
+      /** Width of a spike at its foot, px. */
+      width: number;
+      /** Fill opacity (fainter at the foot than at the tip). */
+      opacity: number;
+      /** Outline width, px (0: none). */
+      strokeWidth: number;
+      /** Name of the place (`encode.key`) at the tip of the tallest spikes. */
+      labels: boolean;
+      /** How many spikes get their name (the tallest ones). */
+      top: number;
+    };
+    /** Small column charts on a map: one column per `color` value at each place, all on one scale. */
+    mapBars: {
+      /** Height of the tallest column of the map, px. */
+      height: number;
+      /** Width of a column, px. */
+      thickness: number;
+      /** px between two columns of a place. */
+      gap: number;
+      /** Corner radius at the top of a column, px. */
+      radius: number;
+      /** px rim in the surface color around each column. */
+      outline: number;
+      /** Name of the place under its columns. */
+      labels: boolean;
+      /** Fill opacity. */
+      opacity: number;
+    };
     /** Rows of symbols: one `icon` per `unit` of value, `gap` share of a symbol's slot. */
     pictorial: { unit: number; icon: PointShape; gap: number };
     /** Smooth color field over a grid with `contours` iso-lines (`auto` ink). */
@@ -278,6 +449,74 @@ export interface Theme {
       rowHeight: number;
       /** One value scale for every sparkline (levels compare) instead of one per row (shapes compare). */
       sharedScale: boolean;
+    };
+    /** Formatted data table (read only): one line per data row, each cell drawn by the type of its column. */
+    table: {
+      /** Columns, left to right: `{ field, label?, type?, align?, width?, priority? … }` (see `TableColumn`). Empty: every field. */
+      cols: TableColumn[];
+      /** Field the rows are sorted by at first ('' keeps the order of the data). */
+      orderBy: string;
+      /** Sort from the largest down. */
+      descending: boolean;
+      /** Shade one row in two instead of ruling a line under each. */
+      zebra: boolean;
+      /** A last row with the sum (or the mean) of the numeric columns, over every row. */
+      total: boolean;
+      /** Name of the total row, in the first column. */
+      totalLabel: string;
+      /** Column titles above the rows. */
+      headers: boolean;
+      /** Tallest a row gets, px (rows shrink to 22 px, then the last ones give way to "+ n lignes"). */
+      rowHeight: number;
+      /** Whether a rise is good news (it picks the color of `change` cells; a column can say otherwise). */
+      upIsGood: boolean;
+      /** Color of a good change or status (`auto`: the KPI good color). */
+      good: string;
+      /** Color of a bad change, a bad status or a negative bar (`auto`: the KPI bad color). */
+      bad: string;
+      /** Color of a status to watch and of rating stars. */
+      warn: string;
+    };
+    /** Adjacency matrix: `source` in rows, `target` in columns, cells shaded by `value`, entities gathered by `group`. */
+    matrix: {
+      /** Space between two cells, px. */
+      gap: number;
+      /** Corner radius of a cell, px. */
+      radius: number;
+      /** The value in each cell, when it fits. */
+      labels: boolean;
+      /** Row totals as bars on the right, column totals as bars underneath. */
+      totals: boolean;
+      /** Order inside a group: as in the data, by decreasing total (sent + received) or by name. */
+      ordering: 'data' | 'total' | 'name';
+    };
+    /** Confusion matrix of a classifier: actual class (`y`) in rows, predicted class (`x`) in columns. */
+    confusion: {
+      /** Space between two cells, px. */
+      gap: number;
+      /** Corner radius of a cell, px. */
+      radius: number;
+      /** Count (and share, when the cell is tall enough) in each cell. */
+      labels: boolean;
+      /** Recall per class on the right, precision per class underneath, accuracy in the corner. */
+      margins: boolean;
+      /** What a cell's share and shade are relative to: its actual class (row), its predicted class (column) or everything. */
+      normalize: 'row' | 'column' | 'total';
+      /** Color of the errors, off the diagonal (`auto`: the KPI bad color). */
+      bad: string;
+    };
+    /** One month as a grid of weeks: day number, value and shade in each day. */
+    calendarMonth: {
+      /** Space between two days, px. */
+      gap: number;
+      /** Corner radius of a day, px. */
+      radius: number;
+      /** The value in each day, when it fits. */
+      labels: boolean;
+      /** First day of the week: 0 Sunday, 1 Monday… */
+      weekStart: number;
+      /** Month to show, `YYYY-MM` ('' for the latest month of the data). */
+      month: string;
     };
     /** Bump area: ribbons as thick as the values, sorted at each step from the largest down. */
     bumpArea: {
@@ -501,6 +740,8 @@ export interface Theme {
       groupGap: number;
       /** Leaf names around the circle. */
       labels: boolean;
+      /** Names turned along the radius, every leaf named (instead of level names on both sides). */
+      radialLabels: boolean;
       /** Opacity factor of the links left out by a focus (click or `highlight`). */
       dim: number;
       /** Splits a name (or a group) into its hierarchy: `core.render.batch`. Empty: no split. */
@@ -614,6 +855,95 @@ export interface Theme {
     route: { curvature: number; opacity: number; ends: boolean };
     /** `reverse`: grow right to left (LR) or bottom to top (TB). */
     tree: { direction: 'LR' | 'TB'; reverse: boolean; radial: boolean; boxes: boolean; nodeSize: number; linkWidth: number; boxWidth: number; boxHeight: number };
+    /** Likert scale: one diverging stack per question, centered on the middle of the scale. */
+    likert: {
+      /** The answers in order, from the most unfavourable to the most favourable (empty: the order of the data). */
+      answers: string[];
+      /** Where the neutral answer of an odd scale goes: astride the middle (`center`) or in its own column (`aside`). */
+      neutral: 'center' | 'aside';
+      /** Share of each answer inside its segment, when it fits. */
+      labels: boolean;
+      /** Totals of the unfavourable and favourable answers at both ends of each row. */
+      totals: boolean;
+      /** Largest thickness of a row, px. */
+      thickness: number;
+      /** Corner radius of the ends of a row, px. */
+      radius: number;
+      /** Space between two segments, px. */
+      gap: number;
+      /** Hue of the unfavourable answers (`auto`: the second color of the palette). */
+      negative: string;
+      /** Hue of the favourable answers (`auto`: the first color of the palette). */
+      positive: string;
+      /** Caption under the unfavourable side; empty: none. */
+      negativeLabel: string;
+      /** Caption under the favourable side; empty: none. */
+      positiveLabel: string;
+      /** Questions sorted by their share of favourable answers instead of the order of the data. */
+      sorted: boolean;
+    };
+    /** Tornado / butterfly: two measures on both sides of the names, or around a base value. */
+    tornado: {
+      /** Base value both bars start from (sensitivity analysis: names on the left, one shared axis). Unset: butterfly. */
+      base: number;
+      /** Rows sorted from the widest to the narrowest. */
+      sorted: boolean;
+      /** Values at the ends of the bars. */
+      labels: boolean;
+      /** Both sides on the same scale (butterfly); otherwise each side fills its half. */
+      shared: boolean;
+      /** Largest thickness of a bar, px. */
+      thickness: number;
+      /** Corner radius of the bar ends, px. */
+      radius: number;
+    };
+    /** Variable-width bars: height from `value`, width from `size`. */
+    variwide: {
+      /** Space between two bars, px. */
+      gap: number;
+      /** Corner radius of the top of the bars, px. */
+      radius: number;
+      /** Value above each bar and width at its foot. */
+      labels: boolean;
+      /** Bars sorted from the tallest to the shortest instead of the order of the data. */
+      sorted: boolean;
+    };
+    /** Ranking with its history: rank, places moved, bar with a tick at the previous value, value and change. */
+    barRank: {
+      /** Number of rows kept from the top of the ranking (0: all that fit). */
+      top: number;
+      /** Whether a rise is good news (it picks the color of the moves and changes). */
+      upIsGood: boolean;
+      /** Color of a good change (`auto`: the KPI good color). */
+      good: string;
+      /** Color of a bad change (`auto`: the KPI bad color). */
+      bad: string;
+      /** Largest thickness of a bar, px. */
+      thickness: number;
+      /** Corner radius of the bar ends, px. */
+      radius: number;
+      /** Value and change at the end of each row. */
+      labels: boolean;
+    };
+    /** Bar-in-bar: a slim bar (actual) inside a wide pale one (goal). */
+    barInBar: {
+      /** Thickness of the slim bar, as a share of the wide one. */
+      inner: number;
+      /** Largest thickness of the wide bar, px. */
+      thickness: number;
+      /** Corner radius of the bar ends, px. */
+      radius: number;
+      /** Value and share of the goal reached at the end of each row. */
+      labels: boolean;
+      /** Rows sorted by value instead of the order of the data. */
+      sorted: boolean;
+      /** Whether reaching the goal is good news (it picks the color of the share). */
+      upIsGood: boolean;
+      /** Color of a goal reached (`auto`: the KPI good color). */
+      good: string;
+      /** Color of a goal missed (`auto`: the KPI bad color). */
+      bad: string;
+    };
     flow: {
       variant: 'pipeline' | 'boxes';
       /** Steps can be dragged; the chart then emits `layout` with every position. */
@@ -707,13 +1037,13 @@ export const lightTheme: Theme = {
     geoshape: { fill: '#e9e8e2', missing: '#e9e8e2', stroke: '#fcfcfb', strokeWidth: 0.75 },
     rule: { width: 1.5, opacity: 1 },
     tick: { width: 2, length: 0.6, maxWidth: 0, opacity: 1 },
-    heatmap: { radius: 3, labels: true, gap: 2, circles: false, diverging: false },
+    heatmap: { radius: 3, labels: true, gap: 2, circles: false, diverging: false, colorLegend: false },
     polarHeatmap: { innerRadius: 0.22, gap: 1.5, labels: true },
     splom: { size: 4, opacity: 0.7, bins: 14 },
     globe: { spin: true, size: 6, graticule: true, ocean: 'auto', land: 'auto' },
     scatter3d: { size: 7, opacity: 0.85, spin: true, perspective: 4 },
     arc: { innerRadius: 0, gap: 2, labels: true, center: true, startAngle: 0, endAngle: 360, cornerRadius: 0 },
-    treemap: { gap: 2, radius: 4, labels: true, header: 22 },
+    treemap: { gap: 2, radius: 4, labels: true, header: 22, ellipsis: false },
     funnel: { gap: 6, radius: 4, labels: true, connector: 0.14 },
     gauge: { min: 0, max: 100, thickness: 0.24, track: 'auto', target: NaN, sweep: 180, zones: [], needle: false, ticks: 0, rounded: false },
     radar: { levels: 4, fillOpacity: 0.14, width: 2, points: true },
@@ -729,7 +1059,16 @@ export const lightTheme: Theme = {
     pivot: { heat: true, totals: true, sparkline: true },
     ridgeline: { overlap: 1.8, opacity: 0.8, bandwidth: 0 },
     beeswarm: { size: 7, opacity: 0.85, label: '' },
+    dotplot: { size: 14, minSize: 3, gap: 1.5, opacity: 1, binning: 'dotdensity' },
+    ecdf: { width: 2, quantiles: [0.5], labels: true, points: false },
+    qq: { size: 6, opacity: 0.8, band: true, level: 0.95, referenceColor: 'auto', referenceWidth: 1.5, referenceDash: [] },
+    contour: { levels: 6, smoothing: 1, opacity: 0.9, lines: true, points: true, size: 3.5 },
+    raincloud: { opacity: 0.5, bandwidth: 0, box: true, points: true, size: 3.5, jitter: 1 },
     tilemap: { hex: true, gap: 2, labels: true },
+    dorling: { coverage: 0.36, iterations: 140, gap: 1.5, labels: true, label: '', shortLabel: '', values: true, opacity: 1 },
+    mapPie: { sizeRange: [16, 46], innerRadius: 0, gap: 1, outline: 1.5, labels: true, opacity: 1 },
+    spike: { height: 90, width: 9, opacity: 0.4, strokeWidth: 1.25, labels: true, top: 6 },
+    mapBars: { height: 44, thickness: 7, gap: 1, radius: 1.5, outline: 1, labels: true, opacity: 1 },
     pictorial: { unit: 1, icon: 'circle', gap: 0.18 },
     surface: { contours: 8, contourColor: 'auto' },
     horizon: { bands: 3, gap: 2 },
@@ -738,6 +1077,10 @@ export const lightTheme: Theme = {
     cycle: { period: 'month', aggregate: 'sum', width: 2, mean: true, meanWidth: 1.5, meanColor: 'auto', points: true, panels: true, inset: 0.16, zero: false },
     sparktable: { show: ['value', 'change', 'spark', 'bar'], spark: 'line', change: 'previous', sortBy: 'data', upIsGood: true, good: 'auto', bad: 'auto', headers: true, rowHeight: 38, sharedScale: false },
     bumpArea: { opacity: 0.88, gap: 3, flat: 0.3, labels: true },
+    table: { cols: [], orderBy: '', descending: false, zebra: false, total: false, totalLabel: 'Total', headers: true, rowHeight: 34, upIsGood: true, good: 'auto', bad: 'auto', warn: '#b26a00' },
+    matrix: { gap: 2, radius: 3, labels: true, totals: true, ordering: 'data' },
+    confusion: { gap: 3, radius: 4, labels: true, margins: true, normalize: 'row', bad: 'auto' },
+    calendarMonth: { gap: 3, radius: 4, labels: true, weekStart: 1, month: '' },
     radialBar: { innerRadius: 0.3, gap: 0.28, endAngle: 270, track: 'auto', labels: true, labelColor: 'auto' },
     spiral: { turn: 'auto', turnCount: 0, innerRadius: 0.2, gap: 1.5, labels: true, diverging: false },
     polarLine: { width: 2, smooth: true, closed: true, fillOpacity: 0, points: false, levels: 4, angleMax: 0, compass: false, labels: true },
@@ -752,7 +1095,7 @@ export const lightTheme: Theme = {
     venn: { opacity: 0.3, labels: true },
     parsets: { nodeWidth: 12, nodePadding: 10, linkOpacity: 0.5, radius: 2, labels: true, values: true, titles: true, categoryOrder: 'data' },
     upset: { mode: 'distinct', order: 'size', setOrder: 'size', maxIntersections: 0, setBars: true, labels: true },
-    bundle: { tension: 0.85, opacity: 0.6, linkWidth: 1.25, nodeSize: 6, groupGap: 1, labels: true, dim: 0.2, separator: '.' },
+    bundle: { tension: 0.85, opacity: 0.6, linkWidth: 1.25, nodeSize: 6, groupGap: 1, labels: true, radialLabels: false, dim: 0.2, separator: '.' },
     wordcloud: { minSize: 11, maxSize: 46, weight: 650 },
     timeline: { proportional: false, markerSize: 12, minImportance: NaN },
     gantt: { barHeight: 0.62, maxBarHeight: 22, radius: 4, milestoneSize: 14, labels: true, dependencies: true, linkColor: 'auto', linkWidth: 1.25, today: '', todayLabel: 'Aujourd’hui', todayColor: 'auto', collapsed: false, rowLines: true },
@@ -767,6 +1110,11 @@ export const lightTheme: Theme = {
     kagi: { reversal: 0, rising: 'auto', falling: 'auto', yang: 3.5, yin: 1.5 },
     route: { curvature: 0.25, opacity: 0.6, ends: true },
     tree: { direction: 'LR', reverse: false, radial: false, boxes: false, nodeSize: 9, linkWidth: 1.5, boxWidth: 132, boxHeight: 46 },
+    likert: { answers: [], neutral: 'center', labels: true, totals: true, thickness: 26, radius: 3, gap: 1, negative: 'auto', positive: 'auto', negativeLabel: 'Défavorable', positiveLabel: 'Favorable', sorted: false },
+    tornado: { base: NaN, sorted: true, labels: true, shared: true, thickness: 24, radius: 3 },
+    variwide: { gap: 2, radius: 3, labels: true, sorted: false },
+    barRank: { top: 0, upIsGood: true, good: 'auto', bad: 'auto', thickness: 18, radius: 3, labels: true },
+    barInBar: { inner: 0.42, thickness: 24, radius: 3, labels: true, sorted: false, upIsGood: true, good: 'auto', bad: 'auto' },
     flow: { variant: 'pipeline', editable: true, direction: 'LR', rankGap: 56, nodeGap: 28, fontSize: 13, edge: 'auto', edgeWidth: 1.5, tint: 0.16, radius: 6 },
   },
   tooltip: {
@@ -829,8 +1177,9 @@ export type ThemeSpec = string | (DeepPartial<Theme> & { extends?: string });
 
 /**
  * Colors that follow the theme, usable anywhere a spec takes a color:
- * `$ink`, `$ink-2`, `$muted`, `$grid`, `$axis`, `$surface`, and `$1`…`$8`
- * for the categorical slots. A spec written with them reads in light and dark.
+ * `$ink`, `$ink-2`, `$muted`, `$grid`, `$axis`, `$surface`, `$up` / `$down` (the
+ * good / bad colors of `marks.kpi`: a rise, a fall), and `$1`…`$8` for the
+ * categorical slots. A spec written with them reads in light and dark.
  */
 export function themeColor(theme: Theme, value: string): string {
   if (!value.startsWith('$')) return value;
@@ -843,6 +1192,8 @@ export function themeColor(theme: Theme, value: string): string {
     $grid: theme.grid.y.color,
     $axis: theme.axis.line.color,
     $surface: theme.background,
+    $up: theme.marks.kpi.good,
+    $down: theme.marks.kpi.bad,
   };
   return tokens[value] ?? value;
 }

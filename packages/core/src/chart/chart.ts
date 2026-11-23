@@ -5,13 +5,14 @@ import { prefersReducedMotion } from '../marks/animate';
 import { luminance } from '../marks/primitives';
 import { annotationRaw, buildAnnotations } from './annotations';
 import { layerExtents, linearValueDomain } from './domains';
-import { broadcast, joinGroup, leaveGroup, type SyncMember } from './sync';
+import { fitText, polygonsOverlap, rotatedBounds, rotatedCorners, truncateText } from './labels';
+import { broadcast, groupMargins, joinGroup, leaveGroup, reportMargins, type SyncMargins, type SyncMember } from './sync';
 import { prepareLayer, standaloneLayer, type LayerData, type SeriesData } from '../marks/prepare';
-import { emptyHit, getMark, type BuildContext, type BuiltMark, type MarkDefinition, type MarkDraw, type MarkLabel, type ShapeHit, type Timeline } from '../marks/registry';
+import { emptyHit, getMark, type BuildContext, type BuiltMark, type LegendRamp, type MarkDefinition, type MarkDraw, type MarkLabel, type ShapeHit, type Timeline } from '../marks/registry';
 import { createRenderer, type RendererChoice } from '../render';
 import { LAYOUTS } from '../render/layouts';
 import type { Batch, ClipRect, DrawCall, Renderer, RGBA, ViewTransform } from '../render/types';
-import { BandScale, LinearScale, LogScale, MercatorScale, TimeScale, niceDomain, type Scale, type Tick } from '../scale/scales';
+import { BandScale, DateBandScale, LinearScale, LogScale, MercatorScale, TimeScale, niceDomain, type Scale, type Tick } from '../scale/scales';
 import type { AxisSpec, ChartSpec, LayerSpec, ProjectionSpec, ScaleSpec, StyleOverride } from '../spec/types';
 import { resolveTheme, resolveThemeColors, themeColor, type Theme } from '../theme/theme';
 import { parseColor, sampleRamp, toCss } from '../util/color';
@@ -82,6 +83,8 @@ interface Zoom {
 interface LegendEntry {
   key: string;
   color: RGBA;
+  /** Second half of the swatch (candlesticks: falling color beside the rising one). */
+  color2?: RGBA;
   symbol: MarkDefinition['symbol'];
   rect?: ClipRect;
 }
@@ -214,6 +217,11 @@ export class Chart implements SyncMember {
   private xScale: Scale = new LinearScale(0, 1);
   private yScale: Scale = new LinearScale(0, 1);
   private legend: LegendEntry[] = [];
+  /** Ramp of a continuous color, drawn on the legend row (after the entries when there are some). */
+  private legendRamp?: LegendRamp;
+  private rampRect?: ClipRect;
+  /** Room this chart needs beside its plot, before aligning with its sync group. */
+  private ownMargins?: SyncMargins;
   private hidden = new Set<string>();
   private zoom: Zoom = { kx: 1, ky: 1, tx: 0, ty: 0 };
   private layout?: Layout;
@@ -505,7 +513,10 @@ export class Chart implements SyncMember {
   }
 
   destroy(): void {
-    if (this.syncGroup) leaveGroup(this.syncGroup, this);
+    if (this.syncGroup) {
+      this.withdrawMargins(this.syncGroup);
+      leaveGroup(this.syncGroup, this);
+    }
     this.destroyed = true;
     cancelAnimationFrame(this.frame);
     this.abort.abort();
@@ -568,6 +579,7 @@ export class Chart implements SyncMember {
     if (spec.layers.length === 0) {
       this.val2 = undefined;
       this.legend = [];
+      this.legendRamp = undefined;
       this.requestRender();
       return;
     }
@@ -603,16 +615,30 @@ export class Chart implements SyncMember {
     const valField = valRef ? (horizontal ? valRef.encode.x : valRef.encode.y) : undefined;
 
     let catType: NonNullable<ScaleSpec['type']> = 'linear';
+    // A band axis asked over dates: an ordinal axis of sessions (no room for the days without data).
+    let dateBand = false;
     if (!geo && ref && catField) {
       const c = tableOf(refIndex).column(catField);
       catType = catSpec.type ?? (c.type === 'string' ? 'band' : c.type === 'time' ? 'time' : 'linear');
+      dateBand = catType === 'band' && c.type === 'time';
     }
 
     // 1. Prepare each layer: grouping into series, stacking, ranges.
     const categories = new Map<string, number>();
     // An explicit order (also how small multiples share one) comes first.
-    for (const c of catSpec.categories ?? []) if (!categories.has(c)) categories.set(c, categories.size);
-    const prep = { band: catType === 'band', horizontal, categories, fields, hidden: this.hidden };
+    for (const c of dateBand ? [] : (catSpec.categories ?? [])) if (!categories.has(c)) categories.set(c, categories.size);
+    if (dateBand) {
+      // Every date of every layer, in chronological order whatever the order of the rows.
+      const dates = new Set<number>();
+      spec.layers.forEach((l, i) => {
+        const f = defs[i].standalone ? undefined : horizontal ? l.encode.y : l.encode.x;
+        const col = f && tableOf(i).has(f) ? tableOf(i).column(f) : undefined;
+        if (!col || col.type === 'string') return;
+        for (const v of col.values as Float64Array) if (Number.isFinite(v)) dates.add(v);
+      });
+      for (const v of [...dates].sort((a, b) => a - b)) categories.set(String(v), categories.size);
+    }
+    const prep = { band: catType === 'band', dates: dateBand, horizontal, categories, fields, hidden: this.hidden };
     const layers = spec.layers.map((layer, i) => ({
       data: defs[i].standalone ? standaloneLayer(layer, i, tableOf(i)) : prepareLayer(layer, i, tableOf(i), prep),
       def: defs[i],
@@ -620,15 +646,25 @@ export class Chart implements SyncMember {
 
     // 2. Color slots: fixed by entity, never by rank, so filters don't repaint survivors.
     const slots = new Map<string, number>();
-    for (const key of spec.scales?.color?.domain ?? []) slots.set(key, slots.size);
+    // Legend order: every entity given a color, in the order met. An entity with an explicit color
+    // (`scales.color.colors`) takes no palette slot (the others keep theirs) but is listed all the same.
+    const known = new Set<string>();
+    for (const key of spec.scales?.color?.domain ?? []) {
+      slots.set(key, slots.size);
+      known.add(key);
+    }
     for (const { data } of layers) {
       if (data.colorMode !== 'series') continue;
-      for (const s of data.series) if (!slots.has(s.key)) slots.set(s.key, slots.size);
+      for (const s of data.series) {
+        if (!slots.has(s.key)) slots.set(s.key, slots.size);
+        known.add(s.key);
+      }
     }
     const palette = theme.palette.categorical.map(parseColor);
     const ramp = theme.palette.sequential.map(parseColor);
     const explicit: Record<string, string> = { ...(spec.scales?.color?.colors ?? {}) };
     const categorical = (key: string): RGBA => {
+      known.add(key);
       if (explicit[key]) return parseColor(explicit[key]);
       if (!slots.has(key)) slots.set(key, slots.size);
       return palette[slots.get(key)! % palette.length];
@@ -653,7 +689,16 @@ export class Chart implements SyncMember {
       this.val = this.yScale;
     } else if (!ref) {
       const owner = layers.find((l) => l.def.scales);
-      const ms = owner?.def.scales?.({ layer: owner.data.layer, table: owner.data.table, fields, size: { width: this.width, height: this.height } });
+      const ms = owner?.def.scales?.({
+        layer: owner.data.layer,
+        table: owner.data.table,
+        fields,
+        size: { width: this.width, height: this.height },
+        // What `build` will get as `ctx.style`: an option set in the theme counts here too.
+        style: deepMerge((theme.marks as Record<string, any>)[owner.def.themeKey ?? owner.data.layer.mark] ?? {}, owner.data.layer.style ?? {}),
+        scales: spec.scales,
+        theme,
+      });
       this.xScale = ms?.x ?? new LinearScale(0, 1);
       this.yScale = ms?.y ?? new LinearScale(0, 1);
       this.aspect = ms?.aspect;
@@ -696,7 +741,9 @@ export class Chart implements SyncMember {
       if (catType === 'band') {
         const pad = theme.marks.bar.bandPadding;
         // Horizontal charts list categories top-down; `reverse` flips either way.
-        cat = new BandScale([...categories.keys()], pad, pad / 2, horizontal !== !!catSpec.reverse);
+        cat = dateBand
+          ? new DateBandScale([...categories.keys()].map(Number), pad, pad / 2, horizontal !== !!catSpec.reverse)
+          : new BandScale([...categories.keys()], pad, pad / 2, horizontal !== !!catSpec.reverse);
       } else {
         if (banded) {
           c0 -= step / 2;
@@ -757,6 +804,7 @@ export class Chart implements SyncMember {
         categories,
         bandX: bandCat && !horizontal,
         bandY: bandCat && horizontal,
+        dates: dateBand ? [...categories.keys()].map(Number) : undefined,
         pixel: [1 / Math.max(1, view.width), 1 / Math.max(1, view.height)] as [number, number],
       };
       const val2 = this.val2;
@@ -831,15 +879,42 @@ export class Chart implements SyncMember {
 
     // 5. Legend: series and mark entries, in slot order.
     const entries = new Map<string, LegendEntry>();
+    const owner = new Map<string, number>();
     for (const { data, def, mark } of this.built) {
       if (data.colorMode === 'series') {
         for (const s of data.series) {
-          if (!entries.has(s.key)) entries.set(s.key, { key: s.key, color: seriesColor(data, s), symbol: def.symbol });
+          if (entries.has(s.key)) continue;
+          entries.set(s.key, { key: s.key, color: seriesColor(data, s), symbol: def.symbol });
+          owner.set(s.key, data.index);
         }
       }
-      for (const e of mark.legend ?? []) if (!entries.has(e.key)) entries.set(e.key, { key: e.key, color: e.color, symbol: def.symbol });
+      for (const e of mark.legend ?? []) {
+        if (!entries.has(e.key)) entries.set(e.key, { key: e.key, color: e.color, color2: e.color2, symbol: def.symbol });
+        // A cartesian mark that does not draw with its series color (candlesticks) says what its swatch shows.
+        else if (!def.standalone && owner.get(e.key) === data.index) entries.set(e.key, { key: e.key, color: e.color, color2: e.color2, symbol: def.symbol });
+      }
     }
-    this.legend = [...slots.keys()].map((k) => entries.get(k)!).filter(Boolean);
+    this.legend = [...known].map((k) => entries.get(k)!).filter(Boolean);
+    // Continuous color: the mark's own ramp, or (when the spec asks for a legend) the theme ramp over the extent of a cartesian layer.
+    this.legendRamp = undefined;
+    if (spec.legend !== false) {
+      for (const { data, def, mark } of this.built) {
+        if (mark.legendRamp) {
+          this.legendRamp = mark.legendRamp;
+          break;
+        }
+        const field = data.layer.encode.color;
+        if (spec.legend !== true || def.standalone || data.index < 0 || data.colorMode !== 'continuous' || !field || data.layer.style?.color) continue;
+        const f = numberFormatter(fields[field]?.format);
+        this.legendRamp = {
+          colors: Array.from({ length: 9 }, (_, i) => sampleRamp(ramp, i / 8)),
+          min: f(data.colorExtent[0]),
+          max: f(data.colorExtent[1]),
+          title: fields[field]?.label ?? field,
+        };
+        break;
+      }
+    }
 
     this.syncTimeline();
     if (this.built.some((b) => sizeDependent(b))) {
@@ -924,9 +999,41 @@ export class Chart implements SyncMember {
   private joinSync(): void {
     const name = this.spec.interactions?.sync || (this.spec.interactions?.navigator ? 'default' : undefined);
     if (name === this.syncGroup) return;
-    if (this.syncGroup) leaveGroup(this.syncGroup, this);
+    if (this.syncGroup) {
+      this.withdrawMargins(this.syncGroup);
+      leaveGroup(this.syncGroup, this);
+    }
     this.syncGroup = name;
     if (name) joinGroup(name, this);
+  }
+
+  /** Plots of a sync group share their left and right edges: only cartesian charts take part. */
+  private alignsWithGroup(): boolean {
+    return !!this.syncGroup && !this.geo && !this.markScales && !this.aspect;
+  }
+
+  /** Tell the group the room this chart needs beside its plot; the others lay out again when it changed. */
+  private shareMargins(): void {
+    const g = this.syncGroup;
+    if (!g) return;
+    const own = this.alignsWithGroup() ? (this.ownMargins ?? null) : null;
+    if (reportMargins(g, this, own)) broadcast(g, this, (m) => m.syncLayout?.());
+  }
+
+  private withdrawMargins(group: string): void {
+    if (reportMargins(group, this, null)) broadcast(group, this, (m) => m.syncLayout?.());
+  }
+
+  /** @internal Another chart of the group changed the room it needs beside its plot. */
+  syncLayout(): void {
+    if (this.destroyed) return;
+    if (this.built.some((b) => sizeDependent(b))) {
+      // Size-dependent marks were built for the old plot width.
+      this.layout = undefined;
+      this.compile();
+      return;
+    }
+    this.requestRender();
   }
 
   private navigator(): boolean {
@@ -1176,7 +1283,7 @@ export class Chart implements SyncMember {
   }
 
   private showLegend(): boolean {
-    return (this.spec.legend ?? this.theme.legend.visible) && this.legend.length >= 2 && this.compact < 3;
+    return (this.spec.legend ?? this.theme.legend.visible) && (this.legend.length >= 2 || !!this.legendRamp) && this.compact < 3;
   }
 
   /**
@@ -1194,6 +1301,7 @@ export class Chart implements SyncMember {
       L = this.layoutAt();
       if (L.plot.width >= 120 && L.plot.height >= 90) break;
     }
+    this.shareMargins();
     return L;
   }
 
@@ -1215,7 +1323,8 @@ export class Chart implements SyncMember {
       const rowH = l.label.size * 1.7;
       let x = pad;
       let y = top;
-      for (const e of this.legend) {
+      // A single entry says nothing (it shows only beside a ramp, which brings the legend on its own).
+      for (const e of this.legend.length >= 2 ? this.legend : []) {
         const w = l.symbolSize + 6 + ctx.measureText(e.key).width;
         if (x > pad && x + w > this.width - pad) {
           x = pad;
@@ -1223,6 +1332,16 @@ export class Chart implements SyncMember {
         }
         e.rect = { x, y, width: w, height: rowH };
         x += w + l.itemGap;
+      }
+      this.rampRect = undefined;
+      const ramp = this.legendRamp;
+      if (ramp) {
+        const w = this.rampParts(ramp).width;
+        if (x > pad && x + w > this.width - pad) {
+          x = pad;
+          y += rowH;
+        }
+        this.rampRect = { x, y, width: w, height: rowH };
       }
       // The top graduation of the value axis is centered on the plot's edge: room for its upper half.
       top = y + rowH + 8 + (this.axis('y') ? Math.ceil(theme.axis.label.size / 2) : 0);
@@ -1278,7 +1397,18 @@ export class Chart implements SyncMember {
       }
       if (axis2.title && this.compact < 2) right += ttl.size + ttl.padding;
     }
-    const plotW = Math.max(10, this.width - left - pad - 4 - endRoom - right);
+    let plotW = Math.max(10, this.width - left - pad - 4 - endRoom - right);
+    // Stacked charts of a sync group: the widest margins of the group, so that the plots share their edges.
+    this.ownMargins = { left, right: this.width - left - plotW, width: this.width };
+    if (this.alignsWithGroup()) {
+      const g = groupMargins(this.syncGroup!, this, this.width);
+      const moreLeft = Math.max(0, g.left - left);
+      const moreRight = Math.max(0, g.right - this.ownMargins.right);
+      if (moreLeft || moreRight) {
+        left += moreLeft;
+        plotW = Math.max(10, plotW - moreLeft - moreRight);
+      }
+    }
     const plot = { x: left, y: top, width: plotW, height: plotH };
 
     const vx0 = -zoom.tx / zoom.kx;
@@ -1440,13 +1570,13 @@ export class Chart implements SyncMember {
     if (spec.title) {
       ctx.font = font(theme.title.weight, theme.title.size, ff);
       ctx.fillStyle = theme.title.color;
-      ctx.fillText(spec.title, pad, ty);
+      ctx.fillText(this.headline(spec.title), pad, ty);
       ty += theme.title.size * 1.3;
     }
     if (spec.subtitle && this.compact < 1) {
       ctx.font = font(theme.subtitle.weight, theme.subtitle.size, ff);
       ctx.fillStyle = theme.subtitle.color;
-      ctx.fillText(spec.subtitle, pad, ty + theme.subtitle.size * 0.2);
+      ctx.fillText(this.headline(spec.subtitle), pad, ty + theme.subtitle.size * 0.2);
     }
 
     // Legend.
@@ -1455,7 +1585,7 @@ export class Chart implements SyncMember {
       ctx.font = font(l.label.weight, l.label.size, ff);
       ctx.textBaseline = 'middle';
       const muted = new Set(this.built.flatMap((b) => b.mark.muted?.() ?? []));
-      for (const e of this.legend) {
+      for (const e of this.legend.length >= 2 ? this.legend : []) {
         const r = e.rect!;
         const cy = r.y + r.height / 2;
         ctx.globalAlpha = this.hidden.has(e.key) || muted.has(e.key) ? l.hiddenOpacity : 1;
@@ -1466,6 +1596,13 @@ export class Chart implements SyncMember {
           ctx.beginPath();
           ctx.roundRect(r.x, cy - l.symbolSize / 2, l.symbolSize, l.symbolSize, 2);
           ctx.fill();
+          if (e.color2) {
+            // Two-tone swatch: the second color on the right half.
+            ctx.fillStyle = toCss(e.color2);
+            ctx.beginPath();
+            ctx.roundRect(r.x + l.symbolSize / 2, cy - l.symbolSize / 2, l.symbolSize / 2, l.symbolSize, [0, 2, 2, 0]);
+            ctx.fill();
+          }
         } else {
           ctx.beginPath();
           ctx.arc(r.x + l.symbolSize / 2, cy, l.symbolSize / 2, 0, Math.PI * 2);
@@ -1475,6 +1612,7 @@ export class Chart implements SyncMember {
         ctx.fillText(e.key, r.x + l.symbolSize + 6, cy + 0.5);
       }
       ctx.globalAlpha = 1;
+      if (this.legendRamp && this.rampRect) this.drawRamp(this.legendRamp, this.rampRect);
     }
 
     const lab = theme.axis.label;
@@ -1734,7 +1872,7 @@ export class Chart implements SyncMember {
   }
 
   /** Boxes of the labels drawn this frame: a label overlapping one of them is left out. */
-  private placed: { x0: number; y0: number; x1: number; y1: number }[] = [];
+  private placed: { x0: number; y0: number; x1: number; y1: number; quad?: [number, number][] }[] = [];
 
   private drawLabel(l: MarkLabel, L: Layout): void {
     const { ctx, theme } = this;
@@ -1752,52 +1890,70 @@ export class Chart implements SyncMember {
     ctx.font = font(l.weight ?? 500, size, theme.font.family);
     const align = l.align ?? 'center';
     const baseline = l.baseline ?? 'middle';
-    const w = ctx.measureText(l.text).width;
+    const measure = (t: string) => ctx.measureText(t).width;
+    let text = l.maxWidth !== undefined ? truncateText(l.text, l.maxWidth * k, measure) : l.text;
+    let w = measure(text);
+    const rot = l.rotate ?? 0;
+    // Top-left corner of the text for an anchor, as its alignment puts it (before any rotation).
+    const corner = (cx: number, cy: number, tw: number): [number, number] => [
+      align === 'center' ? cx - tw / 2 : align === 'right' || align === 'end' ? cx - tw : cx,
+      baseline === 'middle' ? cy - size / 2 : baseline === 'top' || baseline === 'hanging' ? cy : cy - size,
+    ];
+    // What the text covers on screen: its rectangle, or the bounding box of the turned rectangle.
+    const bounds = (cx: number, tw: number) => {
+      const [left, top] = corner(cx, y, tw);
+      if (!rot) return { x0: left, y0: top, x1: left + tw, y1: top + size };
+      const b = rotatedBounds(left - cx, top - y, tw, size, rot);
+      return { x0: cx + b.x0, y0: y + b.y0, x1: cx + b.x1, y1: y + b.y1 };
+    };
     if (l.box) {
       const bx0 = Math.min(T.ox + l.box[0] * T.sx, T.ox + l.box[2] * T.sx);
       const bx1 = Math.max(T.ox + l.box[0] * T.sx, T.ox + l.box[2] * T.sx);
       const by0 = Math.min(T.oy + l.box[1] * T.sy, T.oy + l.box[3] * T.sy);
       const by1 = Math.max(T.oy + l.box[1] * T.sy, T.oy + l.box[3] * T.sy);
-      const left = align === 'center' ? x - w / 2 : align === 'right' || align === 'end' ? x - w : x;
-      const top = baseline === 'middle' ? y - size / 2 : baseline === 'top' || baseline === 'hanging' ? y : y - size;
-      // Measure first: a label that does not fit is never clipped, it moves out or disappears.
-      if (left < bx0 + 4 || left + w > bx1 - 4 || top < by0 + 2 || top + size > by1 - 2) {
-        if (l.fallback) this.drawLabel(l.fallback, L);
-        return;
+      const inside = (tw: number) => {
+        const b = bounds(x, tw);
+        return !(b.x0 < bx0 + 4 || b.x1 > bx1 - 4 || b.y0 < by0 + 2 || b.y1 > by1 - 2);
+      };
+      // Measure first: a label that does not fit is never clipped. It is cut with "…" when it
+      // asks for it (`ellipsis`), else it moves out (`fallback`) or disappears.
+      if (!inside(w)) {
+        const cut = l.ellipsis ? fitText(text, (t) => inside(measure(t))) : null;
+        if (cut === null) {
+          if (l.fallback) this.drawLabel(l.fallback, L);
+          return;
+        }
+        text = cut;
+        w = measure(text);
       }
     }
     // Kept inside the chart: a label running a little off an edge slides back in; one far off
     // (it would land on the drawing it labels) is left out.
     let x1 = x;
     {
-      const left = align === 'center' ? x - w / 2 : align === 'right' || align === 'end' ? x - w : x;
-      const over = !l.box ? Math.max(0, 2 - left, left + w - (this.width - 2)) : 0;
-      if (over > w / 3 && !l.free) return;
-      if (!l.box && left < 2) x1 += 2 - left;
-      else if (!l.box && left + w > this.width - 2) x1 -= left + w - (this.width - 2);
+      const b = bounds(x, w);
+      const over = !l.box ? Math.max(0, 2 - b.x0, b.x1 - (this.width - 2)) : 0;
+      if (over > (rot ? b.x1 - b.x0 : w) / 3 && !l.free) return;
+      if (!l.box && b.x0 < 2) x1 += 2 - b.x0;
+      else if (!l.box && b.x1 > this.width - 2) x1 -= b.x1 - (this.width - 2);
     }
     // Never on top of another label: the first placed wins (marks list the important ones first),
     // the others are left out, their value is still in the tooltip. Background text (`free`) is exempt.
     if (!l.free) {
-      const left = align === 'center' ? x1 - w / 2 : align === 'right' || align === 'end' ? x1 - w : x1;
-      const top = baseline === 'middle' ? y - size / 2 : baseline === 'top' || baseline === 'hanging' ? y : y - size;
+      const b = bounds(x1, w);
       const pad = l.background ? 5 * k : 1.5;
-      const r = { x0: left - pad, y0: top - (l.background ? 2.5 * k : 1), x1: left + w + pad, y1: top + size + (l.background ? 2.5 * k : 1) };
-      if (this.placed.some((p) => r.x0 < p.x1 && r.x1 > p.x0 && r.y0 < p.y1 && r.y1 > p.y0)) return;
+      const padY = l.background ? 2.5 * k : 1;
+      const r: (typeof this.placed)[number] = { x0: b.x0 - pad, y0: b.y0 - padY, x1: b.x1 + pad, y1: b.y1 + padY };
+      if (rot) {
+        // The outline of the turned text (with the same margins), for an exact test against its neighbours.
+        const [left, top] = corner(x1, y, w);
+        r.quad = rotatedCorners(left - x1 - pad, top - y - padY, w + 2 * pad, size + 2 * padY, rot).map(([qx, qy]) => [x1 + qx, y + qy]);
+      }
+      const quadOf = (p: (typeof this.placed)[number]): [number, number][] => p.quad ?? [[p.x0, p.y0], [p.x1, p.y0], [p.x1, p.y1], [p.x0, p.y1]];
+      // Bounding boxes first; two boxes that meet are a collision unless a turned outline says otherwise.
+      if (this.placed.some((p) => r.x0 < p.x1 && r.x1 > p.x0 && r.y0 < p.y1 && r.y1 > p.y0 && (!(r.quad || p.quad) || polygonsOverlap(quadOf(r), quadOf(p))))) return;
       this.placed.push(r);
     }
-    if (l.background) {
-      const left = align === 'center' ? x1 - w / 2 : align === 'right' || align === 'end' ? x1 - w : x1;
-      const top = baseline === 'middle' ? y - size / 2 : baseline === 'top' || baseline === 'hanging' ? y : y - size;
-      const px = 5 * k;
-      const py = 2.5 * k;
-      ctx.fillStyle = l.background;
-      ctx.beginPath();
-      ctx.roundRect(left - px, top - py, w + 2 * px, size + 2 * py, (size + 2 * py) / 2);
-      ctx.fill();
-    }
-    ctx.textAlign = align;
-    ctx.textBaseline = baseline;
     let ink = theme.text.secondary;
     if (l.on) {
       // A faded fill (highlight, focus) shows the surface through: judge the color actually seen.
@@ -1806,8 +1962,81 @@ export class Chart implements SyncMember {
       const seen: RGBA = [l.on[0] * a + bg[0] * (1 - a), l.on[1] * a + bg[1] * (1 - a), l.on[2] * a + bg[2] * (1 - a), 1];
       ink = luminance(seen) > 0.4 ? '#0b0b0b' : '#ffffff';
     }
-    ctx.fillStyle = l.color ?? ink;
-    ctx.fillText(l.text, x1, y);
+    // Pill and text around an anchor: the label's own, or the origin of the turned frame.
+    const paint = (cx: number, cy: number) => {
+      if (l.background) {
+        const [left, top] = corner(cx, cy, w);
+        const px = 5 * k;
+        const py = 2.5 * k;
+        ctx.fillStyle = l.background;
+        ctx.beginPath();
+        ctx.roundRect(left - px, top - py, w + 2 * px, size + 2 * py, (size + 2 * py) / 2);
+        ctx.fill();
+      }
+      ctx.textAlign = align;
+      ctx.textBaseline = baseline;
+      ctx.fillStyle = l.color ?? ink;
+      ctx.fillText(text, cx, cy);
+    };
+    if (!rot) {
+      paint(x1, y);
+      return;
+    }
+    ctx.save();
+    ctx.translate(x1, y);
+    ctx.rotate((rot * Math.PI) / 180);
+    paint(0, 0);
+    ctx.restore();
+  }
+
+  /** A title or subtitle too long for the chart ends with "…" instead of running off its edge. */
+  private headline(text: string): string {
+    const { ctx } = this;
+    return truncateText(text, this.width - this.theme.padding - 4, (t) => ctx.measureText(t).width);
+  }
+
+  /** Widths of the parts of the legend's ramp: `title`, `min` label, the `bar`, `max` label (legend font set). */
+  private rampParts(r: LegendRamp): { title: number; min: number; max: number; bar: number; width: number } {
+    const { ctx } = this;
+    const min = ctx.measureText(r.min).width;
+    const max = ctx.measureText(r.max).width;
+    const bar = this.width < 420 ? 64 : 96;
+    const body = min + 6 + bar + 6 + max;
+    // The title gives way first when the row is too short for everything.
+    let title = r.title ? ctx.measureText(r.title).width + 10 : 0;
+    if (title + body > this.width - 2 * this.theme.padding) title = 0;
+    return { title, min, max, bar, width: title + body };
+  }
+
+  private drawRamp(r: LegendRamp, rect: ClipRect): void {
+    const { ctx, theme } = this;
+    const l = theme.legend;
+    ctx.font = font(l.label.weight, l.label.size, theme.font.family);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    const p = this.rampParts(r);
+    const cy = rect.y + rect.height / 2;
+    let x = rect.x;
+    ctx.fillStyle = l.label.color;
+    if (p.title) {
+      ctx.fillText(r.title!, x, cy + 0.5);
+      x += p.title;
+    }
+    ctx.fillText(r.min, x, cy + 0.5);
+    x += p.min + 6;
+    const g = ctx.createLinearGradient(x, 0, x + p.bar, 0);
+    const n = r.colors.length;
+    r.colors.forEach((c, i) => g.addColorStop(n > 1 ? i / (n - 1) : 0, toCss(c)));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.roundRect(x, cy - l.symbolSize / 2, p.bar, l.symbolSize, 2);
+    ctx.fill();
+    // A hairline around it: the pale end of a ramp would vanish into the surface.
+    ctx.strokeStyle = theme.grid.y.color;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = l.label.color;
+    ctx.fillText(r.max, x + p.bar + 6, cy + 0.5);
   }
 
   private drawHover(L: Layout): void {
@@ -2050,6 +2279,7 @@ export class Chart implements SyncMember {
       this.requestRender();
       return;
     }
+    this.hoverMarks(p);
     const overLegend = this.legendAt(p);
     const zoomed = this.zoom.kx > 1 || this.zoom.ky > 1;
     this.root.style.cursor = overLegend
@@ -2072,9 +2302,22 @@ export class Chart implements SyncMember {
     if (picked.length) this.emit('hover', { items: this.describe(picked), x: p.x, y: p.y });
   }
 
+  /** Tell the marks that follow the pointer (`BuiltMark.hover`) where it is; redraw when one of them changed. */
+  private hoverMarks(p: Point | null): void {
+    const L = this.layout;
+    let changed = false;
+    for (const b of this.built) {
+      if (!b.mark.hover) continue;
+      const at = p && L && this.inPlot(p) ? { tx: (p.x - L.transform.ox) / L.transform.sx, ty: (p.y - L.transform.oy) / L.transform.sy } : null;
+      if (b.mark.hover(at)) changed = true;
+    }
+    if (changed) this.requestRender();
+  }
+
   private onLeave(): void {
     this.pointer = undefined;
     this.shape = undefined;
+    this.hoverMarks(null);
     this.setPicked([]);
     this.tip.style.opacity = '0';
     if (this.syncGroup) broadcast(this.syncGroup, this, (m) => m.syncHover(null));

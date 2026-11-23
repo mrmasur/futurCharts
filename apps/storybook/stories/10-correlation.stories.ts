@@ -16,3 +16,4 @@ export const NuageDePointsEtRegression: StoryObj = { name: "Nuage de points et r
 export const Bulles: StoryObj = { name: "Bulles", ...entryStory("Bulles") };
 export const DensiteHexagonale: StoryObj = { name: "Densité hexagonale", ...entryStory("Densité hexagonale") };
 export const CoordonneesParalleles: StoryObj = { name: "Coordonnées parallèles", ...entryStory("Coordonnées parallèles") };
+export const NuageEtLegendeDeDegrade: StoryObj = { name: "Nuage et légende de dégradé", ...entryStory("Nuage et légende de dégradé") };

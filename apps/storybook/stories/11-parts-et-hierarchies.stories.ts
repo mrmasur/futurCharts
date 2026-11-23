@@ -19,3 +19,4 @@ export const Sunburst: StoryObj = { name: "Sunburst", ...entryStory("Sunburst") 
 export const CerclesImbriques: StoryObj = { name: "Cercles imbriqués", ...entryStory("Cercles imbriqués") };
 export const Marimekko: StoryObj = { name: "Marimekko", ...entryStory("Marimekko") };
 export const Gaufre: StoryObj = { name: "Gaufre", ...entryStory("Gaufre") };
+export const TreemapAuxLibellesCoupes: StoryObj = { name: "Treemap aux libellés coupés", ...entryStory("Treemap aux libellés coupés") };
