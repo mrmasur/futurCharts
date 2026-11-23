@@ -19,3 +19,6 @@ export const Entonnoir: StoryObj = { name: "Entonnoir", ...entryStory("Entonnoir
 export const Cascade: StoryObj = { name: "Cascade", ...entryStory("Cascade") };
 export const DependancesEntreModulesFaisceaux: StoryObj = { name: "Dépendances entre modules (faisceaux)", ...entryStory("Dépendances entre modules (faisceaux)") };
 export const FaisceauxUnePersonneMiseEnAvant: StoryObj = { name: "Faisceaux : une personne mise en avant", ...entryStory("Faisceaux : une personne mise en avant") };
+export const ProcessusDeCommandeEnCouloirs: StoryObj = { name: "Processus de commande en couloirs", ...entryStory("Processus de commande en couloirs") };
+export const CouloirsVerticaux: StoryObj = { name: "Couloirs verticaux", ...entryStory("Couloirs verticaux") };
+export const RoutageOrthogonal: StoryObj = { name: "Routage orthogonal", ...entryStory("Routage orthogonal") };

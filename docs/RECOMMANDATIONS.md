@@ -11,7 +11,7 @@ sont dans [REPRISE.md](REPRISE.md) § 4.
   WebGPU. C'est l'actif le plus précieux du projet ; le protéger.
 - La spec est entièrement JSON et très documentée (`spec/types.ts`, `Theme['marks']`) : idéale pour une IA ou un
   éditeur visuel.
-- Largeur fonctionnelle rare : 98 marques, transitions sur GPU, petits multiples, synchronisation, tableur.
+- Largeur fonctionnelle rare : 101 marques, transitions sur GPU, petits multiples, synchronisation, tableur.
 - Tests rapides, typecheck strict, build qui passe.
 
 **Faiblesses**
@@ -25,22 +25,24 @@ sont dans [REPRISE.md](REPRISE.md) § 4.
 - **Perte de contexte WebGL non gérée** : sur mobile ou après une mise en veille, un contexte perdu laisse tous
   les graphiques de la page vides (un seul contexte partagé : une perte touche tout).
 - **Bundle monolithique** : ~125 Ko gzip pour le cœur, même pour une simple courbe.
-- Le développement a été très rapide (une quarantaine de commits en 8 jours, dont 44 marques écrites en un après-midi par des agents en parallèle) : beaucoup de fonctionnalités, peu de
+- Le développement a été très rapide (une quarantaine de commits en 8 jours, dont 47 marques écrites en un après-midi par des agents en parallèle) : beaucoup de fonctionnalités, peu de
   consolidation. Certaines marques (`advanced.ts`, `more.ts`, `shapes.ts`) font 800 à 1 150 lignes.
 
 ## Priorité 0 — refermer la journée du 2026-11-23
 
-La branche `graphiques-2026-11-23` porte les tests visuels et 94 exemples nouveaux ; elle n'est pas fusionnée.
+La branche `graphiques-2026-11-23` porte les tests visuels et 100 exemples nouveaux ; elle n'est pas fusionnée.
 
 - **Décider de la fusion dans `main`** après avoir parcouru la galerie (les captures ne voient pas le survol, le
   zoom ni les animations : aucune des nouvelles marques n'a été essayée à la main).
-- **Passe de finition** (lancée puis interrompue, rien n'a été fait) : relire les 94 nouveaux exemples dans les
+- **Passe de finition** (lancée puis interrompue, rien n'a été fait) : relire les 100 nouveaux exemples dans les
   quatre variantes. Défauts déjà vus : Likert terne, cercles du Dorling Europe peu visibles et piste des anneaux
   d'activité trop vive en sombre ; matrice de flux, puces, polaires et planning des salles pauvres en 343 × 260 ;
-  bande basse de la densité 2D coupée au bord ; petits pics réduits à des chevrons ; noms de cellules du Voronoï coupés trop court (« Cars i… », « Rout… »).
-- **Vague 3 non faite** : couloirs et routage orthogonal des flux, transitions des lignes et des aires et sortie
-  animée (point 11), arbre de décomposition, barres d'incertitude sur un nuage. (Voronoï, arbre indenté, quadrants,
-  nuage connecté et distributions marginales ont été faits ensuite, le même jour.)
+  bande basse de la densité 2D coupée au bord ; petits pics réduits à des chevrons ; noms de cellules du Voronoï coupés trop court (« Cars i… », « Rout… ») ; grand vide sous l'arbre de décomposition.
+- **Reste de la vague 3** : transitions des lignes et des aires et sortie animée (point 11), barres d'incertitude
+  sur un nuage. (Voronoï, arbre indenté, quadrants, nuage connecté, distributions marginales, couloirs et routage
+  orthogonal des flux, cohortes, arbre de décomposition et entonnoir comparé ont été faits ensuite, le même jour.)
+- **Jamais essayé à la main** : les clics (repli de l'arbre indenté, déploiement de l'arbre de décomposition) et
+  les infobulles des marques ajoutées ; seule leur logique est testée.
 - **Manques du contrat encore ouverts**, signalés par les agents : une marque à un seul champ ne peut pas être
   cartésienne (elle perd survol et lasso standard) ; `HitData.series` empêche d'exposer des points de survol nommés
   librement (`difference`, `fan`) ; pas de titre d'axe par défaut ni de marge en px dans `MarkScales` ; pas de

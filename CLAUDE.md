@@ -35,14 +35,15 @@ Mettre ces documents à jour quand un chantier avance.
   pouvoir garder une identité stable d'un état à l'autre, et l'interpolation doit pouvoir se faire sur GPU
   (deux états de buffer + un uniform de progression), sans reconstruire les batches à chaque image.
 - **Diagrammes de flux** (`mark: 'flow'`, `marks/flow.ts` + `marks/flowLayout.ts`) : placement en couches maison
-  (rupture des cycles, plus long chemin, nœuds intermédiaires, barycentres). Pas encore : couloirs (swimlanes),
-  routage orthogonal, édition à la souris.
+  (rupture des cycles, plus long chemin, nœuds intermédiaires, barycentres). Couloirs (`lanes`) et routage
+  orthogonal (`routing`) faits le 2026-11-23 en style `boxes` (`marks/flowRoute.ts`). Pas encore : édition à la souris
+  en `boxes`.
 - **Galerie** (demandée le 2026-11-17, modèle : la page de démos Highcharts, sans en reprendre ni la marque ni les
   textes) : `#/galerie` en vignettes vivantes par famille avec recherche, `#/demo/<nom>` en page détail. Chaque
   nouveau type de graphique y reçoit un exemple (`library.ts` : `entries` et `GROUPS`). Depuis le 2026-11-23 un
   nouvel exemple va dans `apps/demo/src/examples/<famille>.ts`.
 - **État au 2026-11-23** : la branche `graphiques-2026-11-23` (non fusionnée dans `main`) porte les tests visuels,
-  44 marques et 94 exemples nouveaux (208 en tout), le double axe (`scales.secondary`) et un contrat des marques
+  47 marques et 100 exemples nouveaux (214 en tout), le double axe (`scales.secondary`) et un contrat des marques
   complété (`MarkLabel.rotate` / `ellipsis`, `BuiltMark.hover`, `legendRamp`). Reste à faire, dans l'ordre :
   `docs/RECOMMANDATIONS.md` § Priorité 0.
 - **Sources d'inspiration** pour les nouveaux graphiques (rappelées le 2026-11-23) : Tableau, Apache ECharts et

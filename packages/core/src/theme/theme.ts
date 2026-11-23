@@ -930,6 +930,47 @@ export interface Theme {
       /** Siblings from the largest value down instead of the order of the data. */
       sorted: boolean;
     };
+    /** Cohort retention table: a line per cohort (`y`), a column per period elapsed (`x`), cells shaded by the rate. */
+    cohort: {
+      /** The values are already rates (0 to 1, or 0 to 100) instead of head counts measured against the first period. */
+      asRate: boolean;
+      /** A last line with the retention of all cohorts together (weighted by their size). */
+      average: boolean;
+      /** A column with the size of each cohort, when the chart is wide enough. */
+      sizes: boolean;
+      /** Written before the period number in the column headers ("M" for months, "S" for weeks). */
+      periodPrefix: string;
+      /** The rate inside each cell. */
+      labels: boolean;
+      /** Space between cells, px. */
+      gap: number;
+      /** Corner radius of the cells, px. */
+      radius: number;
+    };
+    /** Decomposition tree: the levels of `path` in columns, one node expanded per level. Click a node to expand it. */
+    decomposition: {
+      /** Name of the node expanded at each level, from the first one (missing or unknown: the largest). */
+      expanded: string[];
+      /** Height of a node (name, value and bar), px; never under 26. */
+      rowHeight: number;
+      /** Width of the links between a node and its children, px. */
+      linkWidth: number;
+      /** Name of the node that holds the total, shown as a first column when there is room. */
+      rootLabel: string;
+    };
+    /** Compared funnel: steps (`key`) in lines, one centered bar per segment (`color`), pass rates in between. */
+    funnelCompare: {
+      /** Each segment on its own scale (its first step fills the column) instead of one scale for all. */
+      relative: boolean;
+      /** The value inside each bar. */
+      labels: boolean;
+      /** Largest height of a bar, px. */
+      thickness: number;
+      /** Corner radius of the bars, px. */
+      radius: number;
+      /** A last line with the conversion from the first step to the last one. */
+      overall: boolean;
+    };
     /** Likert scale: one diverging stack per question, centered on the middle of the scale. */
     likert: {
       /** The answers in order, from the most unfavourable to the most favourable (empty: the order of the data). */
@@ -1031,6 +1072,12 @@ export interface Theme {
       edgeWidth: number;
       tint: number;
       radius: number;
+      /** Swimlanes (boxes look): one band per node `group`, across the flow, with a named header. */
+      lanes: boolean;
+      /** Order of the lanes, by group name; groups left out follow in order of appearance. */
+      laneOrder: string[];
+      /** Links (boxes look): `curved` (default), or `orthogonal` runs with rounded corners that go round the boxes. */
+      routing: 'curved' | 'orthogonal';
     };
     /** Map shapes (basemap, choropleth). */
     geoshape: {
@@ -1190,12 +1237,15 @@ export const lightTheme: Theme = {
     tree: { direction: 'LR', reverse: false, radial: false, boxes: false, nodeSize: 9, linkWidth: 1.5, boxWidth: 132, boxHeight: 46 },
     voronoi: { gap: 1.5, groupGap: 4, labels: true, iterations: 120 },
     indentedTree: { rowHeight: 26, indent: 18, bars: true, expand: 'first', sorted: true },
+    cohort: { asRate: false, average: true, sizes: true, periodPrefix: 'M', labels: true, gap: 2, radius: 3 },
+    decomposition: { expanded: [], rowHeight: 36, linkWidth: 1.5, rootLabel: 'Total' },
+    funnelCompare: { relative: false, labels: true, thickness: 30, radius: 4, overall: true },
     likert: { answers: [], neutral: 'center', labels: true, totals: true, thickness: 26, radius: 3, gap: 1, negative: 'auto', positive: 'auto', negativeLabel: 'Défavorable', positiveLabel: 'Favorable', sorted: false },
     tornado: { base: NaN, sorted: true, labels: true, shared: true, thickness: 24, radius: 3 },
     variwide: { gap: 2, radius: 3, labels: true, sorted: false },
     barRank: { top: 0, upIsGood: true, good: 'auto', bad: 'auto', thickness: 18, radius: 3, labels: true },
     barInBar: { inner: 0.42, thickness: 24, radius: 3, labels: true, sorted: false, upIsGood: true, good: 'auto', bad: 'auto' },
-    flow: { variant: 'pipeline', editable: true, direction: 'LR', rankGap: 56, nodeGap: 28, fontSize: 13, edge: 'auto', edgeWidth: 1.5, tint: 0.16, radius: 6 },
+    flow: { variant: 'pipeline', editable: true, direction: 'LR', rankGap: 56, nodeGap: 28, fontSize: 13, edge: 'auto', edgeWidth: 1.5, tint: 0.16, radius: 6, lanes: false, laneOrder: [], routing: 'curved' },
   },
   tooltip: {
     background: '#ffffff',

@@ -92,7 +92,7 @@ Le builder ne produit qu'une `ChartSpec`. Tout ce qu'il exprime peut s'écrire d
 |---|---|
 | `render/` | Contrat de rendu indépendant du moteur (`types.ts`, `layouts.ts`) et moteur `webgl2/` |
 | `scale/` | Échelles linéaire, log, temps, bandes, Mercator. Elles produisent des positions normalisées, jamais des pixels |
-| `marks/` | Les 97 marques du cœur (`geoshape` est dans `@futurcharts/geo`), contrat dans `registry.ts`, enregistrées par `ensureBuiltinMarks` ; `registerMark` pour les vôtres |
+| `marks/` | Les 100 marques du cœur (`geoshape` est dans `@futurcharts/geo`), contrat dans `registry.ts`, enregistrées par `ensureBuiltinMarks` ; `registerMark` pour les vôtres |
 | `data/` | `Table` (colonnes typées) et transformations de la spec |
 | `theme/` | Thèmes `light` / `dark`, `registerTheme`, surcharge feuille par feuille ; options de style documentées dans `Theme['marks']` |
 | `spec/` | Types de la spec (référence commentée de toutes les options) et builder |
@@ -180,6 +180,9 @@ Démo : `http://localhost:5273/gallery.html`, une application de tableau de bord
 | Arbres | `tree` (`path` ; dendrogramme, ou organigramme avec `boxes` et `direction: "TB"`), `icicle` (partition en lignes, zoom au clic ; `orientation: "BT"` pour un flame chart) |
 | Treemap de Voronoï | `voronoi` (`path` à deux niveaux, `value` : une cellule polygonale par feuille dans un cercle, aire proportionnelle, regroupées et colorées par branche ; `gap`, `groupGap`, `iterations`) |
 | Arbre indenté | `indentedTree` (`path`, `value` : une ligne par nœud, sous-totaux, barre de part, clic pour replier ; `expand: "all" \| "none" \| "first"`, `rowHeight`, `indent`, `bars`, `sorted`) |
+| Rétention par cohorte | `cohort` (`y` cohorte, `x` période écoulée, `value` effectif ou taux avec `asRate` : cases teintées par le taux, taille de la cohorte, ligne moyenne ; `average`, `sizes`, `periodPrefix`, `labels`, `gap`, `radius`) |
+| Arbre de décomposition | `decomposition` (`path`, `value` : les niveaux en colonnes, un nœud déployé par niveau relié à ses enfants, clic pour déployer une autre branche ; `expanded`, `rowHeight`, `linkWidth`, `rootLabel`) |
+| Entonnoir comparé | `funnelCompare` (`key` étape, `color` segment, `value` : une barre centrée par segment, taux de passage entre les étapes, perte en clair et plus forte perte signalée ; `relative`, `overall`, `thickness`, `radius`, `labels`) |
 | Ensembles | `venn` (2 ou 3 ensembles ; `key` vaut `A`, `A&B` ou `A&B&C`, aires proportionnelles) |
 | UpSet | `upset` (au-delà de 3 ensembles : matrice de points reliés, barres par intersection et par ensemble ; `key` vaut `A&B`, `value` optionnelle, `style.mode: 'inclusive'` pour des données de type `venn`) |
 | Ensembles parallèles | `parsets` (diagramme alluvial : une colonne par champ de `path`, rubans colorés par `color` ou la première dimension, `value` ou comptage des lignes) |
@@ -470,6 +473,12 @@ Des boîtes reliées pour tracer un processus de bout en bout, embranchements et
 - Le texte suit la taille du diagramme ; trop petit pour être lu (75 % en pipeline, 85 % en boîtes), le diagramme
   s'ouvre à taille lisible et se parcourt en le glissant.
 - Les boucles (et seulement elles) portent une pointe de flèche, pour montrer qu'elles remontent le flux.
+- **Couloirs** (style `boxes`, `style.lanes: true`) : une bande par `group`, horizontale en `LR`, verticale en `TB`,
+  avec un en-tête nommé et un fond alterné ; `style.laneOrder` fixe l'ordre (sinon l'ordre d'apparition). Un nœud
+  ne sort jamais de sa bande ; la légende disparaît (les en-têtes la remplacent).
+- **Routage orthogonal** (style `boxes`, `style.routing: 'orthogonal'`, défaut `curved`) : segments droits à coins
+  arrondis qui contournent les boîtes, un port par lien sur chaque boîte, boucles par un couloir libre, étiquette
+  posée sur le plus long segment. Conseillé avec les couloirs.
 - **Disposition à la main** (style pipeline) : glisser une étape la déplace (grille de 4 px), ses liens suivent.
   Au lâcher, l'événement `layout` (`onLayout`, `@layout`, `chart-layout`) donne la position de chaque étape ;
   l'app l'enregistre en `x` / `y` sur les nœuds du JSON, et la disposition revient telle quelle au prochain

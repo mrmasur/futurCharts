@@ -301,6 +301,9 @@ export type MarkStyle = { color?: string } & DeepPartial<
     Theme['marks']['tree'] &
     Theme['marks']['voronoi'] &
     Theme['marks']['indentedTree'] &
+    Theme['marks']['cohort'] &
+    Theme['marks']['decomposition'] &
+    Theme['marks']['funnelCompare'] &
     Theme['marks']['vector'] &
     Theme['marks']['bubbles'] &
     Theme['marks']['arcDiagram'] &
@@ -375,7 +378,7 @@ export interface FlowNode {
   shape?: FlowShape;
   /** A figure shown under the label (count, duration…), formatted with `fields[valueField]` if given. */
   value?: number;
-  /** Groups color the boxes and form the legend (team, system, lane…). */
+  /** Groups color the boxes and form the legend (team, system…); with `style.lanes`, the swimlane of the node. */
   group?: string;
   /** Explicit color (theme tokens allowed). */
   color?: string;

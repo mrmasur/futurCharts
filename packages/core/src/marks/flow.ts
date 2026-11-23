@@ -12,6 +12,7 @@ import type { FlowEdge, FlowNode, FlowShape, LayerSpec } from '../spec/types';
 import { lightTheme, themeColor } from '../theme/theme';
 import { mix, parseColor, toCss, withAlpha } from '../util/color';
 import { layoutFlow, type FlowLayout } from './flowLayout';
+import { fitRoutes, labelAnchor, layoutLanes, roundCorners, routeOrthogonal, type FlowLane } from './flowRoute';
 import { pushArc, pushRect, pushSegment, pushVertex } from './primitives';
 import { emptyHit, type BuildContext, type BuiltMark, type MarkDefinition, type MarkLabel, type ShapeHit } from './registry';
 
@@ -56,6 +57,28 @@ interface Model {
   layout: FlowLayout;
   /** Some positions come from the spec: links are routed directly between glyphs. */
   manual?: boolean;
+  /** Swimlanes (boxes look, `style.lanes`): bands across the flow, and the size of their header strip. */
+  lanes?: FlowLane[];
+  header?: number;
+  /** Orthogonal routes (boxes look, `style.routing: 'orthogonal'`): corners of each link. */
+  routes?: [number, number][][];
+}
+
+/** How far inside its bounding box the outline of a shape is, `offset` px from its center across the flow. */
+function outlineInset(shape: FlowShape, side: 'in' | 'out', offset: number, w: number, h: number, TB: boolean): number {
+  const [main, cross] = TB ? [h, w] : [w, h];
+  if (shape === 'decision') return (main / 2) * Math.min(1, Math.abs(offset) / (cross / 2));
+  if (shape === 'start' || shape === 'end') {
+    // A pill: half circles on its short sides.
+    const r = Math.min(w, h) / 2;
+    const d = TB ? Math.max(0, Math.abs(offset) - (w / 2 - r)) : Math.abs(offset);
+    return r - Math.sqrt(Math.max(0, r * r - d * d));
+  }
+  if (shape === 'io' && !TB) {
+    const t = (offset + h / 2) / h;
+    return 14 * (side === 'out' ? t : 1 - t);
+  }
+  return 0;
 }
 
 /** Grow (or shift) the drawing area so every node fits with a margin. */
@@ -121,8 +144,31 @@ function model(layer: LayerSpec, style: { direction?: string; rankGap?: number; 
     if (shape === 'io') w += 24;
     return { id: n.id, w, h };
   });
-  const layout = layoutFlow(sized, graph.edges, { direction: s.direction, rankGap: s.rankGap, nodeGap: s.nodeGap });
-  const m = { nodes, edges: graph.edges, layout };
+  const options = { direction: s.direction, rankGap: s.rankGap, nodeGap: s.nodeGap };
+  if (!s.lanes && s.routing !== 'orthogonal') {
+    const m = { nodes, edges: graph.edges, layout: layoutFlow(sized, graph.edges, options) };
+    cache.set(layer, m);
+    return m;
+  }
+  const TB = s.direction !== 'LR';
+  const laned = s.lanes ? layoutLanes(sized.map((n, i) => ({ ...n, lane: nodes[i].group })), graph.edges, { ...options, order: s.laneOrder }) : undefined;
+  const layout = laned ?? layoutFlow(sized, graph.edges, options);
+  const m: Model = { nodes, edges: graph.edges, layout, lanes: laned?.lanes, header: laned?.header };
+  if (s.routing === 'orthogonal') {
+    const shapes = new Map(nodes.map((n) => [n.id, n.shape ?? 'step']));
+    m.routes = routeOrthogonal(layout.nodes, graph.edges, {
+      direction: s.direction,
+      bounds: laned ? [laned.lanes[0].start + 6, (TB ? laned.width : laned.height) - 6] : undefined,
+      inset: (id, side, offset) => {
+        const p = layout.nodes.get(id)!;
+        return outlineInset(shapes.get(id)!, side, offset, p.w, p.h, TB);
+      },
+    });
+    // Loops that go round the first or last rank need room; lanes keep their header clear.
+    const head = (laned?.header ?? 0) + (laned ? 8 : 16);
+    const side = laned ? 0 : 16;
+    fitRoutes(layout, m.routes, TB ? [side, head] : [head, side], laned ? 8 : 16);
+  }
   cache.set(layer, m);
   return m;
 }
@@ -191,7 +237,7 @@ export const flow: MarkDefinition = {
     const { layer } = ctx.data;
     if (ctx.style.variant !== 'boxes') return buildPipeline(ctx, layer, model(layer));
     const { style, theme } = ctx;
-    const { nodes, edges, layout } = model(layer);
+    const { nodes, edges, layout, lanes, header = 0, routes } = model(layer);
     const TB = style.direction !== 'LR';
     const W = layout.width;
     const H = layout.height;
@@ -201,7 +247,8 @@ export const flow: MarkDefinition = {
 
     // Colors: by group when nodes have groups (and a legend), else by shape.
     const groups = [...new Set(nodes.map((n) => n.group).filter((g): g is string => !!g))];
-    const legend = groups.map((g) => ({ key: g, color: ctx.categorical(g) }));
+    // Lanes already name the groups: no legend then (colors are still taken, in the same order).
+    const legend = groups.map((g) => ({ key: g, color: ctx.categorical(g) })).filter(() => !lanes);
     const palette = theme.palette.categorical.map(parseColor);
     const colorOf = (n: FlowNode): RGBA =>
       n.color ? parseColor(themeColor(theme, n.color)) : n.group ? ctx.categorical(n.group) : palette[SHAPE_SLOT[n.shape ?? 'step'] % palette.length];
@@ -220,6 +267,38 @@ export const flow: MarkDefinition = {
     const muted = parseColor(themeColor(theme, style.edge === 'auto' ? '$muted' : style.edge));
     const maxValue = Math.max(0, ...edges.map((e) => e.value ?? 0));
 
+    // Swimlanes: one band per group under everything, every other one tinted, and a header strip with its name.
+    const laneRects: number[] = [];
+    const inkTone = parseColor(theme.text.primary);
+    const laneFill = (k: number): RGBA => mix(ctx.surface, inkTone, k % 2 ? 0.045 : 0);
+    const laneAt = (x: number, y: number) => (lanes ? lanes.findIndex((l) => (TB ? x : y) >= l.start && (TB ? x : y) < l.start + l.size) : -1);
+    if (lanes) {
+      const rule = withAlpha(inkTone, 0.14);
+      lanes.forEach((l, k) => {
+        const [bx0, by0, bx1, by1] = TB ? [l.start, 0, l.start + l.size, H] : [0, l.start, W, l.start + l.size];
+        if (k % 2) pushRect(laneRects, { x0: tx(bx0), y0: ty(by1), x1: tx(bx1), y1: ty(by0), fill: laneFill(k) });
+        const [hx0, hy0, hx1, hy1] = TB ? [bx0, 0, bx1, header] : [0, by0, header, by1];
+        pushRect(laneRects, { x0: tx(hx0), y0: ty(hy1), x1: tx(hx1), y1: ty(hy0), fill: mix(ctx.surface, inkTone, 0.09) });
+        if (k > 0) {
+          if (TB) pushSegment(lines, tx(bx0), ty(0), tx(bx0), ty(H), rule, 1);
+          else pushSegment(lines, tx(0), ty(by0), tx(W), ty(by0), rule, 1);
+        }
+        labels.push({
+          tx: tx((hx0 + hx1) / 2), ty: ty((hy0 + hy1) / 2), text: l.name, color: theme.text.secondary, size: 12, weight: 600,
+          align: 'center', baseline: 'middle', rotate: TB ? 0 : -90, maxWidth: l.size - 8, fontScale: fs, free: true,
+        });
+      });
+      if (TB) pushSegment(lines, tx(0), ty(header), tx(W), ty(header), rule, 1);
+      else pushSegment(lines, tx(header), ty(0), tx(header), ty(H), rule, 1);
+    }
+
+    // Orthogonal links: each label on a straight run, the links with the fewest runs choosing first.
+    const anchors = new Map<number, [number, number]>();
+    if (routes) {
+      const labelled = edges.map((e, i) => i).filter((i) => edges[i].label && routes[i]?.length);
+      for (const i of labelled.sort((a, b) => routes[a].length - routes[b].length || a - b)) anchors.set(i, labelAnchor(routes[i], [...anchors.values()]));
+    }
+
     // Arrows first, so boxes sit on top of them.
     const sampled: { e: FlowEdge; pts: [number, number][] }[] = [];
     for (const placed of layout.edges) {
@@ -228,7 +307,17 @@ export const flow: MarkDefinition = {
       const b = layout.nodes.get(e.to);
       if (!a || !b) continue;
       let pts: [number, number][];
-      if (placed.self) {
+      const corners = routes?.[placed.index];
+      if (corners?.length) {
+        pts = roundCorners(corners, 7);
+        // Dashes are cut per piece of the path: straight runs need short pieces.
+        if (e.dashed) pts = pts.flatMap((p, k) => {
+          if (k === 0) return [p];
+          const q = pts[k - 1];
+          const n = Math.ceil(Math.hypot(p[0] - q[0], p[1] - q[1]) / 3);
+          return Array.from({ length: n }, (_, j) => [q[0] + ((p[0] - q[0]) * (j + 1)) / n, q[1] + ((p[1] - q[1]) * (j + 1)) / n] as [number, number]);
+        });
+      } else if (placed.self) {
         // A small loop on the outer side of the box.
         const [x0, y0] = TB ? [a.x + a.w / 2, a.y - 8] : [a.x + 8, a.y + a.h / 2];
         const [x1, y1] = TB ? [a.x + a.w / 2, a.y + 8] : [a.x - 8, a.y + a.h / 2];
@@ -276,11 +365,13 @@ export const flow: MarkDefinition = {
       pushVertex(mesh, tx(bx - uy * half), ty(by + ux * half), color);
       pushVertex(mesh, tx(bx + uy * half), ty(by - ux * half), color);
       if (e.label) {
-        const mid = pts[Math.floor(pts.length / 2)];
+        // Orthogonal: on the longest straight run. Curved: half-way along.
+        const mid = anchors.get(placed.index) ?? pts[Math.floor(pts.length / 2)];
+        const under = lanes ? laneFill(Math.max(0, laneAt(mid[0], mid[1]))) : ctx.surface;
         labels.push({
           tx: tx(mid[0]), ty: ty(mid[1]), text: e.label, align: 'center', baseline: 'middle', size: 11, weight: 600,
           color: on ? theme.text.secondary : toCss(withAlpha(parseColor(theme.text.muted), dim)),
-          background: toCss(withAlpha(ctx.surface, on ? 1 : dim)), fontScale: fs,
+          background: toCss(withAlpha(under, on ? 1 : dim)), fontScale: fs,
         });
       }
       sampled.push({ e, pts });
@@ -333,6 +424,11 @@ export const flow: MarkDefinition = {
 
     // Boxes over arrows: rects (rounded boxes) then the mesh holds arrowheads and polygon boxes.
     const draws = [];
+    if (lanes) {
+      const laneBatch = ctx.renderer.createBatch('rect');
+      laneBatch.update(new Float32Array(laneRects), laneRects.length / LAYOUTS.rect.stride);
+      draws.push({ batch: laneBatch, enter: 'fade' as const });
+    }
     const lineBatch = ctx.renderer.createBatch('line');
     lineBatch.update(new Float32Array(lines), lines.length / LAYOUTS.line.stride);
     const meshBatch = ctx.renderer.createBatch('mesh');
