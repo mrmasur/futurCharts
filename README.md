@@ -10,6 +10,10 @@ npm run typecheck
 npm run build      # dist/ de chaque paquet
 ```
 
+**Reprise du projet** : [docs/REPRISE.md](docs/REPRISE.md) (démarrage, plan du dépôt, règles, état des chantiers),
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (trajet d'une spec, contrat des marques, recettes),
+[docs/RECOMMANDATIONS.md](docs/RECOMMANDATIONS.md) (priorités, risques, pièges).
+
 ## Storybook
 
 `npm run storybook` (port 6006) : une page par famille de graphiques, une story par exemple de la galerie. L'onglet
@@ -86,11 +90,15 @@ Le builder ne produit qu'une `ChartSpec`. Tout ce qu'il exprime peut s'écrire d
 | Dossier (`packages/core/src`) | Rôle |
 |---|---|
 | `render/` | Contrat de rendu indépendant du moteur (`types.ts`, `layouts.ts`) et moteur `webgl2/` |
-| `scale/` | Échelles linéaire, log, temps, bandes. Elles produisent des positions normalisées, jamais des pixels |
-| `marks/` | Marques `line`, `area`, `bar`, `point`, enregistrées via `registerMark` |
-| `theme/` | Thèmes `light` / `dark`, `registerTheme`, surcharge feuille par feuille |
-| `spec/` | Types de la spec et builder |
-| `chart/` | Mise en page, axes, légende, survol, zoom |
+| `scale/` | Échelles linéaire, log, temps, bandes, Mercator. Elles produisent des positions normalisées, jamais des pixels |
+| `marks/` | Les 53 marques du cœur (`geoshape` est dans `@futurcharts/geo`), contrat dans `registry.ts`, enregistrées par `ensureBuiltinMarks` ; `registerMark` pour les vôtres |
+| `data/` | `Table` (colonnes typées) et transformations de la spec |
+| `theme/` | Thèmes `light` / `dark`, `registerTheme`, surcharge feuille par feuille ; options de style documentées dans `Theme['marks']` |
+| `spec/` | Types de la spec (référence commentée de toutes les options) et builder |
+| `chart/` | Mise en page, axes, légende, survol, zoom, sélection, transitions, petits multiples, wrappers (`mount.ts`) |
+| `sheet/` | Tableur : modèle sans DOM, formules, vue virtualisée, classeur |
+
+Détail du trajet d'une spec jusqu'à l'image : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 Les agrégations lourdes restent dans la base (ClickHouse, Elasticsearch). La librairie reçoit des colonnes
 (tableaux typés) ou des lignes, et ne fait que les transformations de présentation (empilement, tri).
@@ -384,14 +392,12 @@ sa série et son `encode.key` (sinon son x). Les deux états sont dans deux buff
 selon un uniform de progression (`Batch.setPrevious`, `DrawCall.morph`) : aucun buffer n'est reconstruit pendant
 l'animation. Les filtres des tableaux de bord et le masquage d'une série par la légende en profitent.
 
-## Prévu : transitions et évolution dans le temps
+## Reste à faire en animation
 
-- **Transitions** : passage fluide d'un état de données à un autre (filtre, série masquée, nouvelle période).
-- **Évolution dans le temps** pour d'autres graphiques (nuage de points animé façon Gapminder), sur le modèle de la
-  course de barres et de son `timeline`.
-
-Conséquences sur l'architecture : une clé d'identité par donnée pour apparier deux états, et une interpolation
-faite sur GPU entre deux états de buffer, pilotée par un uniform de progression.
+Les transitions des barres, points et parts et le nuage animé (`motion`) sont faits. Restent les transitions des
+lignes et des aires, et la sortie animée des données qui disparaissent. Même mécanique : une clé d'identité par
+donnée pour apparier deux états, et une interpolation faite sur GPU entre deux états de buffer, pilotée par un
+uniform de progression.
 
 ## Diagrammes de flux
 
@@ -441,5 +447,6 @@ Des boîtes reliées pour tracer un processus de bout en bout, embranchements et
 ## Pas encore fait
 
 Lecture du format Arrow, moteur WebGPU, publication sur npm,
-export SVG/PDF, gestion de la perte de contexte WebGL. Les tirets sont découpés à la construction : un zoom les
-étire avec les données.
+export SVG/PDF, gestion de la perte de contexte WebGL, accessibilité (lecteur d'écran, clavier), CI et tests
+visuels. Les tirets sont découpés à la construction : un zoom les étire avec les données. Ordre conseillé :
+[docs/RECOMMANDATIONS.md](docs/RECOMMANDATIONS.md).

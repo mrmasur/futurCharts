@@ -1,6 +1,9 @@
 # futurCharts
 
 Librairie de graphiques GPU pour une future app de BI (sources : Elasticsearch, ClickHouse, dbt). Voir README.md.
+Projet repris par un autre compte, sur le même Mac et dans le même dossier, le 2026-11-23 : lire d'abord `docs/REPRISE.md` (règles, état), `docs/ARCHITECTURE.md`
+(trajet d'une spec, recettes : ajouter une marque, une primitive) et `docs/RECOMMANDATIONS.md` (priorités).
+Mettre ces documents à jour quand un chantier avance.
 
 - Démo et Storybook écoutent sur le réseau local (`--host`) : accessibles depuis un autre poste par l'IP du Mac.
 - `npm run dev` (démo, port 5273 ; `/wrappers.html` pour React, Vue, Web Component), `npm test`, `npm run typecheck`, `npm run build`.
