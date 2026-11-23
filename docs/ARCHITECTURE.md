@@ -45,6 +45,14 @@ Points clés :
   (`px = t * s + o`) les place en pixels. Zoom et déplacement ne changent que ce uniform.
 - **Hit-testing en CPU** : `HitData` (tableaux typés, une entrée par donnée) sert au survol, aux infobulles, au
   lasso, aux événements. Les marques « surfaces » (carte, treemap) fournissent `pick(tx, ty)`.
+- **Double axe des valeurs** (`scales.secondary`, `axes.secondary`, `axis: 'secondary'` sur un calque) : les
+  calques du second axe ont leur propre domaine mais écrivent dans le même espace normalisé, donc une seule
+  transformation de vue sert les deux axes et le zoom ne touche toujours aucun batch. Calcul des domaines dans
+  `chart/domains.ts`.
+- **Axe du temps par séance** : `scales.x.type: 'band'` sur un champ de dates (`DateBandScale`) : pas de trous
+  les week-ends, graduations de dates lisibles.
+- **Graphiques synchronisés** (`interactions.sync`) : ils partagent survol et plage visible, et alignent les bords
+  de leurs zones de tracé (`chart/sync.ts`).
 - **Marques dépendant de la taille** (`sizeDependent`) : reconstruites au redimensionnement seulement
   (treemap, frise, diagrammes). Les autres ne sont jamais reconstruites par un resize.
 
@@ -70,8 +78,18 @@ interface MarkDefinition {
 `paint` (applique `overrides` / `highlight`), `format`, `pixel` (taille d'un px en espace d'échelle), `state`
 (survit aux reconstructions : focus d'un sunburst…).
 
-`BuiltMark` rend : `draws` (batches), `hit`, et en option `labels`, `legend`, `pick`, `click`, `link`, `view`,
-`animate`, `muted`, `timeline`, `drag`.
+`BuiltMark` rend : `draws` (batches), `hit`, et en option `labels`, `legend`, `legendRamp`, `pick`, `click`,
+`hover`, `link`, `view`, `animate`, `muted`, `timeline`, `drag`.
+
+Ajouts du 2026-11-23 (commentés dans `registry.ts`) :
+
+- `MarkLabel.maxWidth` / `ellipsis` : un texte trop long est coupé par « … » au lieu de disparaître ;
+  `MarkLabel.rotate` (degrés) pour des étiquettes radiales ou des en-têtes de colonnes inclinés.
+- `BuiltMark.hover(at)` : la marque met en avant ce qui est sous le pointeur ; renvoyer vrai redessine.
+- `BuiltMark.legendRamp` : légende de dégradé (min, max) pour une couleur continue.
+- `scales(input)` d'une marque standalone reçoit aussi `style` (fusionné avec le thème), `scales` et `theme`.
+- Jetons de couleur `$up` / `$down` (hausse / baisse), en plus de `$ink`, `$1`…
+- Mesure de texte : `textWidth` (`marks/shapes.ts`), `fitText` / `truncateText` (`chart/labels.ts`).
 
 Les primitives disponibles et leurs dispositions mémoire sont dans `render/layouts.ts` :
 
@@ -90,19 +108,25 @@ Aides d'écriture : `pushRect`, `pushSegment`, `pushVertex` (`marks/primitives.t
 
 ### Ajouter une marque
 
-1. Écrire la `MarkDefinition` dans le fichier de sa famille (`marks/charts.ts`, `shapes.ts`, `advanced.ts`…) ou un
-   nouveau fichier. Partir d'un modèle proche : `tick` (`builtin.ts`) pour une marque cartésienne simple,
+1. Écrire la `MarkDefinition` dans le fichier de sa famille. Depuis le 2026-11-23, une famille = un fichier
+   `marks/<famille>.ts` qui exporte une table `<FAMILLE>_MARKS` (les calculs purs dans un fichier voisin, testé),
+   plutôt que d'allonger `charts.ts`, `shapes.ts` ou `advanced.ts`. Partir d'un modèle proche : `tick` (`builtin.ts`) pour une marque cartésienne simple,
    `waffle` (`extra.ts`) pour une marque standalone.
 2. L'ajouter à la table exportée du fichier (`ADVANCED_MARKS`…) ; elle est alors enregistrée par
    `ensureBuiltinMarks`. **Pas d'enregistrement au chargement du module.**
 3. Déclarer ses options de style dans le type `Theme['marks']` (`theme/theme.ts`) avec un commentaire par option,
    et leurs valeurs par défaut dans `lightTheme.marks` (le thème sombre n'a besoin que de ce qui diffère).
 4. Si elle introduit une encodage ou un champ de spec, le documenter dans `spec/types.ts`.
-5. Ajouter un exemple dans `apps/demo/src/library.ts` (`entries`) et son titre dans `GROUPS`, puis
-   `npm run stories`.
+5. Ajouter un exemple dans `apps/demo/src/examples/<famille>.ts` (`FAMILIES` : une famille de galerie existante
+   ou nouvelle, et ses `entries`), branché une fois dans `examples/index.ts` ; `library.ts` les ajoute à `entries`
+   et `GROUPS`. Puis `npm run stories`. (Les 114 exemples d'origine restent dans `library.ts`.)
 6. Écrire un test si la marque a une mise en page calculée (voir `test/shapes.test.ts`, `flowLayout.test.ts`).
-7. Vérifier dans la galerie, en clair et en sombre, puis `fcAudit(343, 260)` et `fcAudit(375, 520)`.
-8. Ajouter une ligne au tableau « Types de graphiques » du README.
+7. `npm run test:visual -- -g "Titre de l'exemple"` écrit ses quatre captures (bureau, sombre, deux tailles de
+   téléphone) : les **regarder**, corriger, régénérer avec `--update-snapshots`. Puis la galerie pour les
+   interactions (survol, zoom), que les captures ne voient pas.
+8. Piège : `MarkStyle` (`spec/types.ts`) est l'intersection des styles de toutes les marques. Une option de même
+   nom avec un autre type dans une autre marque devient `never` : garder le même type ou changer de nom.
+9. Ajouter une ligne au tableau « Types de graphiques » du README.
 
 Pour qu'elle profite des transitions : exposer `perDatum`, `data` et `keys` sur ses draws (rect, point, arc).
 
@@ -178,7 +202,7 @@ ouvre chaque exemple seul et compare une capture à sa référence, au pixel pr�
 | `apps/demo/visual.html` + `src/visual.ts` | Un exemple seul, à taille fixe : `visual.html?nom=<slug>&l=800&h=480&theme=dark`. Tuiles, piles et petits multiples suivent les règles d'une carte de galerie. `window.__pret` et `window.__erreurs` renseignent le test |
 | `tests/visual/liste.ts` | Écrit `exemples.json` (non commité) depuis `library.ts` : Playwright doit connaître les noms des tests avant d'ouvrir une page. Refuse deux exemples de même adresse ou un exemple absent de `GROUPS` |
 | `tests/visual/galerie.pw.ts` | Un test par exemple ; échoue aussi sur une erreur de console ou de création |
-| `playwright.config.ts` | Quatre variantes : `bureau` (800 × 480, clair), `sombre`, `mobile` (343 × 260, ×2), `mobile-haut` (375 × 520, ×2) ; lance la démo si elle ne tourne pas |
+| `playwright.config.ts` | Quatre variantes : `bureau` (800 × 480, clair), `sombre`, `mobile` (343 × 260, ×2), `mobile-haut` (375 × 520, ×2) ; navigateur en `fr-FR`, fuseau de Paris (la librairie formate nombres et dates dans la langue du navigateur) ; serveur dédié sur le port 5274, sans rechargement à chaud (`npm run dev:test -w @futurcharts/demo`), lancé s'il ne tourne pas |
 | `tests/visual/captures/<plateforme>/<variante>/<slug>.png` | Les références, commitées (16 Mo). Elles dépendent de la plateforme (polices, lissage) : celles de `darwin` ne valent pas sous Linux |
 
 - **Le temps est figé** (horloge Playwright, `performance.now()` recalé sur la date) puis avancé par sauts : les
