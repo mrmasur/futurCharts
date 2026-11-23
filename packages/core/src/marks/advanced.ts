@@ -648,6 +648,8 @@ export const horizon: MarkDefinition = {
  */
 export const polarHeatmap: MarkDefinition = {
   standalone: true,
+  // Which labels fit depends on the size in px.
+  sizeDependent: true,
   symbol: 'square',
   scales: () => ({ x: new LinearScale(-1.16, 1.16), y: new LinearScale(-1.16, 1.16), aspect: 1 }),
   build(ctx) {
@@ -678,15 +680,38 @@ export const polarHeatmap: MarkDefinition = {
       const fill = ctx.paint(valueColor(ctx, vals[i], lo, hi, false), i);
       pushArc(arcs, cx, cy, (r0 + ring * b) * unit, (r0 + ring * (b + 1)) * unit, a * step, (a + 1) * step, style.gap, fill, 2);
     }
-    // Categories around the outside; rings named along 12 o'clock.
-    xc.forEach((name, a) => {
-      const m = (a + 0.5) * step;
-      labels.push({ tx: ctx.x.norm(Math.sin(m) * 1.08), ty: ctx.y.norm(Math.cos(m) * 1.08), text: name, color: theme.text.muted, size: 10, align: 'center', baseline: 'middle' });
-    });
-    yc.forEach((name, b) => {
-      const r = r0 + ring * (b + 0.5);
-      labels.push({ tx: ctx.x.norm(0), ty: ctx.y.norm(r), text: name, color: theme.text.secondary, size: 10, weight: 600, align: 'right', baseline: 'middle', dx: -4, background: theme.background });
-    });
+    // Categories around the outside; rings named along 12 o'clock. Small, only as many as fit:
+    // one in k (a label needs its height for a ring, its width around the circle), none when even that fails.
+    const px = unit / ctx.pixel[0];
+    const size = px < 140 ? 9 : 10;
+    const ringPx = ring * px;
+    // A ring label is its text plus the pill behind it (2.5 px above and below).
+    const ringEvery = Math.ceil((size + 6) / Math.max(ringPx, 0.01));
+    const longest = Math.max(...xc.map((n) => textWidth(n, `${size}px ${theme.font.family}`)), 1);
+    const arcPx = step * 1.08 * px;
+    const aroundEvery = Math.ceil((longest + 6) / Math.max(arcPx, 0.01));
+    const ringsNamed = ringEvery <= Math.max(2, yc.length / 2);
+    if (aroundEvery <= Math.max(2, xc.length / 4)) {
+      xc.forEach((name, a) => {
+        if (a % aroundEvery) return;
+        const m = (a + 0.5) * step;
+        // The ring names run up the left of 12 o'clock: no category label there to collide with.
+        if (ringsNamed && m > Math.PI * 2 - 0.5) return;
+        labels.push({ tx: ctx.x.norm(Math.sin(m) * 1.08), ty: ctx.y.norm(Math.cos(m) * 1.08), text: name, color: theme.text.muted, size, align: 'center', baseline: 'middle' });
+      });
+    }
+    // In the hole: what the colors measure, from the lowest value to the highest.
+    if (r0 * px * 2 >= 64) {
+      labels.push({ tx: ctx.x.norm(0), ty: ctx.y.norm(0), text: fieldLabel(ctx, vf), color: theme.text.muted, size, align: 'center', baseline: 'bottom', dy: -1 });
+      labels.push({ tx: ctx.x.norm(0), ty: ctx.y.norm(0), text: `${ctx.format(lo, vf)} – ${ctx.format(hi, vf)}`, color: theme.text.primary, size, weight: 650, align: 'center', baseline: 'top', dy: 2 });
+    }
+    if (ringsNamed) {
+      yc.forEach((name, b) => {
+        if (b % ringEvery) return;
+        const r = r0 + ring * (b + 0.5);
+        labels.push({ tx: ctx.x.norm(0), ty: ctx.y.norm(r), text: name, color: theme.text.secondary, size, weight: 600, align: 'right', baseline: 'middle', dx: -4, background: theme.background });
+      });
+    }
     return {
       draws: [{ batch: batch(ctx, 'arc', arcs) }],
       hit: emptyHit(),
