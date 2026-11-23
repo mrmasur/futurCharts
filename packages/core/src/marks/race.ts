@@ -92,7 +92,10 @@ export const race: MarkDefinition = {
       }
     }
     // Rank of every entity at every frame; those past the top wait just below it.
-    const top = Math.max(1, Math.min(style.top, E));
+    // As many bars as the height allows (16 px each at least), up to `top`.
+    const py0 = ctx.pixel[1];
+    const roomRows = Math.floor((1 - 22 * py0 - 46 * py0) / py0 / 16);
+    const top = Math.max(1, Math.min(style.top, E, roomRows));
     const rank = new Float64Array(F * E);
     for (let f = 0; f < F; f++) {
       const order = entities.map((_, e) => e).sort((a, b) => value[f * E + b] - value[f * E + a]);
@@ -150,7 +153,9 @@ export const race: MarkDefinition = {
       const rectData: number[] = [];
       const lineData: number[] = [];
       labels.length = 0;
-      const step = niceStep(axisMax, 4);
+      // As many graduations as their labels allow across the width.
+      const labelW = textWidth(fmtValue(axisMax), `10px ${theme.font.family}`) + 16;
+      const step = niceStep(axisMax, Math.max(2, Math.min(4, Math.floor((right - left) / px / labelW))));
       for (let v = 0; v <= axisMax; v += step) {
         pushSegment(lineData, x(v), bottomM, x(v), topM + 6 * py, grid, 1);
         labels.push({ tx: x(v), ty: topM, text: fmtValue(v), color: theme.text.muted, size: 10, align: 'center', baseline: 'bottom', dy: -8 });
@@ -172,7 +177,7 @@ export const race: MarkDefinition = {
       }
       // The date, large, in the bottom-right corner.
       const label = frames[Math.min(F - 1, Math.round(t))];
-      labels.push({ tx: right, ty: 0, text: label, color: theme.text.muted, size: dateSize, weight: 700, align: 'right', baseline: 'bottom', dy: -4 });
+      labels.push({ tx: right, ty: 0, text: label, color: theme.text.muted, size: dateSize, weight: 700, align: 'right', baseline: 'bottom', dy: -4, free: true });
       rects.update(new Float32Array(rectData), rectData.length / LAYOUTS.rect.stride);
       lines.update(new Float32Array(lineData), lineData.length / LAYOUTS.line.stride);
     };

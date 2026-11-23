@@ -1193,7 +1193,8 @@ export class Chart implements SyncMember {
         e.rect = { x, y, width: w, height: rowH };
         x += w + l.itemGap;
       }
-      top = y + rowH + 8;
+      // The top graduation of the value axis is centered on the plot's edge: room for its upper half.
+      top = y + rowH + 8 + (this.axis('y') ? Math.ceil(theme.axis.label.size / 2) : 0);
     }
 
     const xAxis = this.axis('x');
@@ -1527,6 +1528,7 @@ export class Chart implements SyncMember {
     // Labels fade in at the end of the entry animation, and come back after a transition
     // (they are placed for the new state: drawn while bars move, they would point at nothing).
     if (this.enterProgress < 0.75 || this.morphProgress < 1) return;
+    this.placed = [];
     ctx.save();
     ctx.globalAlpha = Math.min(1, (this.enterProgress - 0.75) / 0.25);
     const avoid: { l: MarkLabel; ax: number; ay: number; y: number }[] = [];
@@ -1605,6 +1607,9 @@ export class Chart implements SyncMember {
     };
   }
 
+  /** Boxes of the labels drawn this frame: a label overlapping one of them is left out. */
+  private placed: { x0: number; y0: number; x1: number; y1: number }[] = [];
+
   private drawLabel(l: MarkLabel, L: Layout): void {
     const { ctx, theme } = this;
     const { plot, transform: T } = L;
@@ -1635,8 +1640,28 @@ export class Chart implements SyncMember {
         return;
       }
     }
-    if (l.background) {
+    // Kept inside the chart: a label running a little off an edge slides back in; one far off
+    // (it would land on the drawing it labels) is left out.
+    let x1 = x;
+    {
       const left = align === 'center' ? x - w / 2 : align === 'right' || align === 'end' ? x - w : x;
+      const over = !l.box ? Math.max(0, 2 - left, left + w - (this.width - 2)) : 0;
+      if (over > w / 3 && !l.free) return;
+      if (!l.box && left < 2) x1 += 2 - left;
+      else if (!l.box && left + w > this.width - 2) x1 -= left + w - (this.width - 2);
+    }
+    // Never on top of another label: the first placed wins (marks list the important ones first),
+    // the others are left out, their value is still in the tooltip. Background text (`free`) is exempt.
+    if (!l.free) {
+      const left = align === 'center' ? x1 - w / 2 : align === 'right' || align === 'end' ? x1 - w : x1;
+      const top = baseline === 'middle' ? y - size / 2 : baseline === 'top' || baseline === 'hanging' ? y : y - size;
+      const pad = l.background ? 5 * k : 1.5;
+      const r = { x0: left - pad, y0: top - (l.background ? 2.5 * k : 1), x1: left + w + pad, y1: top + size + (l.background ? 2.5 * k : 1) };
+      if (this.placed.some((p) => r.x0 < p.x1 && r.x1 > p.x0 && r.y0 < p.y1 && r.y1 > p.y0)) return;
+      this.placed.push(r);
+    }
+    if (l.background) {
+      const left = align === 'center' ? x1 - w / 2 : align === 'right' || align === 'end' ? x1 - w : x1;
       const top = baseline === 'middle' ? y - size / 2 : baseline === 'top' || baseline === 'hanging' ? y : y - size;
       const px = 5 * k;
       const py = 2.5 * k;
@@ -1656,7 +1681,7 @@ export class Chart implements SyncMember {
       ink = luminance(seen) > 0.4 ? '#0b0b0b' : '#ffffff';
     }
     ctx.fillStyle = l.color ?? ink;
-    ctx.fillText(l.text, x, y);
+    ctx.fillText(l.text, x1, y);
   }
 
   private drawHover(L: Layout): void {

@@ -516,7 +516,9 @@ export const motion: MarkDefinition = {
       }
       lines.update(new Float32Array(trail), trail.length / LAYOUTS.line.stride);
       // The current frame, large, behind the points' labels at the bottom right.
-      labels.unshift({ tx: 1, ty: 0, text: frames[Math.min(F - 1, Math.round(t))], color: theme.grid.y.color, size: 56, weight: 750, align: 'right', baseline: 'bottom', dx: -10, dy: -6 });
+      // The year, behind everything, as large as the plot allows.
+      const yearSize = Math.round(Math.max(14, Math.min(56, 0.3 / ctx.pixel[1])));
+      labels.unshift({ tx: 1, ty: 0, text: frames[Math.min(F - 1, Math.round(t))], color: theme.grid.y.color, size: yearSize, weight: 750, align: 'right', baseline: 'bottom', dx: -10, dy: -6, free: true });
     };
     render();
 

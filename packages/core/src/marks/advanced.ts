@@ -764,8 +764,9 @@ export const splom: MarkDefinition = {
     };
     // Room for the field names: left column and bottom row.
     const [px, py] = ctx.pixel;
-    const left = 0.0 + 18 * px;
-    const bottom = 18 * py;
+    // The names sit on the diagonal: no room needed along the edges.
+    const left = 0;
+    const bottom = 0;
     const cw = (1 - left) / n;
     const ch = (1 - bottom) / n;
     const gap = 6;
@@ -791,7 +792,7 @@ export const splom: MarkDefinition = {
             if (!k) return;
             pushRect(rects, { x0: b.x0 + q * bw, y0: b.y0, x1: b.x0 + (q + 1) * bw, y1: b.y0 + ((b.y1 - b.y0) * k) / max * 0.85, fill: withAlpha(c, 0.75), gap: 1, axis: 0 });
           });
-          labels.push({ tx: b.x0, ty: b.y1, text: fieldLabel(ctx, fields[i]), color: theme.text.primary, size: 11, weight: 650, align: 'left', baseline: 'top', dx: 5, dy: 4 });
+          labels.push({ tx: b.x0, ty: b.y1, text: fieldLabel(ctx, fields[i]), color: theme.text.primary, size: 11, weight: 650, align: 'left', baseline: 'top', dx: 5, dy: 4, box: [b.x0, b.y0, b.x1, b.y1] });
           continue;
         }
         const xs = cols[j], ys = cols[i];
@@ -802,11 +803,6 @@ export const splom: MarkDefinition = {
           pts.push(b.x0 + ((xs[r] - x0) / (x1 - x0)) * (b.x1 - b.x0), b.y0 + ((ys[r] - y0) / (y1 - y0)) * (b.y1 - b.y0), style.size, 0, c[0], c[1], c[2], c[3] * style.opacity, 0, 0, 0, 0, 0);
         }
       }
-      // Field names along the left edge and the bottom.
-      const row = cell(i, 0);
-      labels.push({ tx: 0, ty: (row.y0 + row.y1) / 2, text: fieldLabel(ctx, fields[i]), color: theme.text.muted, size: 10, align: 'center', baseline: 'middle', dx: 7 });
-      const col = cell(n - 1, i);
-      labels.push({ tx: (col.x0 + col.x1) / 2, ty: 0, text: fieldLabel(ctx, fields[i]), color: theme.text.muted, size: 10, align: 'center', baseline: 'bottom', dy: -2 });
     }
     const draws = batches(ctx, rects, [], [], false);
     draws.push({ batch: batch(ctx, 'point', pts), enter: 'fade' });

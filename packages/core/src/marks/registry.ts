@@ -83,6 +83,8 @@ export interface MarkLabel {
   background?: string;
   /** The series (or slice) it belongs to: its `labelColor` applies. */
   series?: string;
+  /** Background text (a race's date): drawn whatever overlaps it, and never pushes another label out. */
+  free?: boolean;
 }
 
 /** A mark that plays through time: the chart shows a play button and a scrubber for it. */

@@ -81,7 +81,14 @@ export const radialBar: MarkDefinition = {
       const at = fits ? a : room / (2 * mid) + 0.03;
       const [ex, ey] = [Math.sin(at) * mid, Math.cos(at) * mid];
       const pos = { tx: ctx.x.norm(ex), ty: ctx.y.norm(ey), text, align: 'center' as const, baseline: 'middle' as const, size: 10, weight: 600 };
-      labels.push(fits || style.labelColor !== 'auto' ? { ...pos, color: ink } : { ...pos, on: fill });
+      if (fits || style.labelColor !== 'auto') labels.push({ ...pos, color: ink });
+      else {
+        // Inside the bar, in white: only if it fits in the ring (a thin ring, a thumbnail: left out,
+        // the value stays in the tooltip). A white label must never spill onto the light background.
+        const halfW = room / 2 + 6 * ctx.pixel[0];
+        const halfH = ((g.outer - g.inner) / 2) * (ctx.y.norm(1) - ctx.y.norm(0));
+        labels.push({ ...pos, on: fill, box: [pos.tx - halfW, pos.ty - halfH, pos.tx + halfW, pos.ty + halfH] });
+      }
     }
     return {
       draws: [{ batch: batch(ctx, 'arc', arcs) }],
