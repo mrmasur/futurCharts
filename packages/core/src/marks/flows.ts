@@ -550,11 +550,26 @@ function calendarModel(table: Table, dateField: string, valueField: string): Cal
 }
 
 /** `calendar`: one square per day (`x`: date), weeks as columns, colored by `value` (or `color`). */
+/** Weeks down the page when asked, or when it gives bigger cells (a year across a phone makes cells of a few px). */
+const calendarVertical = (layer: { style?: unknown }, size: { width: number; height: number } | undefined, weeks: number) => {
+  const d = (layer.style as { direction?: string } | undefined)?.direction;
+  if (d) return d === 'TB';
+  if (!size) return false;
+  const across = Math.min(size.width / weeks, size.height / 7);
+  const down = Math.min(size.width / 7, size.height / weeks);
+  return down > across * 1.15;
+};
+
 export const calendar: MarkDefinition = {
   standalone: true,
   symbol: 'square',
-  scales({ layer, table }) {
+  // The orientation follows the width.
+  sizeDependent: true,
+  scales({ layer, table, size }) {
     const m = calendarModel(table, need(layer, 'x', 'calendar'), layer.encode.value ?? need(layer, 'color', 'calendar'));
+    if (calendarVertical(layer, size, m.weeks)) {
+      return { x: new BandScale(m.dayLabels, 0, 0), y: new BandScale(m.weekLabels, 0, 0, true), aspect: 7 / m.weeks, axes: { x: true, y: true } };
+    }
     return {
       x: new BandScale(m.weekLabels, 0, 0),
       y: new BandScale(m.dayLabels, 0, 0, true),
@@ -568,8 +583,12 @@ export const calendar: MarkDefinition = {
     const { style, theme } = ctx;
     const vf = layer.encode.value ?? layer.encode.color!;
     const m = calendarModel(table, layer.encode.x!, vf);
-    const xs = ctx.x as BandScale;
-    const ys = ctx.y as BandScale;
+    // Vertical: days across, weeks down. Same cells, axes swapped.
+    const vertical = (ctx.x as BandScale).categories.length === 7 && m.weeks !== 7;
+    const xs = (vertical ? ctx.y : ctx.x) as BandScale;
+    const ys = (vertical ? ctx.x : ctx.y) as BandScale;
+    const at = (w: number, d: number): [number, number] => (vertical ? [ys.norm(d), xs.norm(w)] : [xs.norm(w), ys.norm(d)]);
+    const half: [number, number] = vertical ? [ys.band / 2, xs.band / 2] : [xs.band / 2, ys.band / 2];
     const empty = parseColor(style.empty === 'auto' ? theme.grid.y.color : style.empty);
     const gx = (style.gap / 2) * ctx.pixel[0];
     const gy = (style.gap / 2) * ctx.pixel[1];
@@ -583,10 +602,9 @@ export const calendar: MarkDefinition = {
       const d = (n - m.first) % 7;
       const v = m.values.get(n);
       const fill = v === undefined ? empty : ctx.paint(ctx.ramp(m.hi > m.lo ? (v - m.lo) / (m.hi - m.lo) : 0.5), m.rows.get(n));
-      const cx = xs.norm(w);
-      const cy = ys.norm(d);
+      const [cx, cy] = at(w, d);
       const r = style.radius;
-      pushRect(rects, { x0: cx - xs.band / 2 + gx, y0: cy - ys.band / 2 + gy, x1: cx + xs.band / 2 - gx, y1: cy + ys.band / 2 - gy, fill, radii: [r, r, r, r] });
+      pushRect(rects, { x0: cx - half[0] + gx, y0: cy - half[1] + gy, x1: cx + half[0] - gx, y1: cy + half[1] - gy, fill, radii: [r, r, r, r] });
     }
     const longDate = new Intl.DateTimeFormat(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const label = ctx.fields[vf]?.label ?? vf;
@@ -594,9 +612,10 @@ export const calendar: MarkDefinition = {
       draws: batches(ctx, rects, [], [], false),
       hit: emptyHit(),
       pick(tx, ty): ShapeHit | null {
-        const w = xs.invert(tx);
-        const d = ys.invert(ty);
-        if (Math.abs(xs.norm(w) - tx) > xs.band / 2 || Math.abs(ys.norm(d) - ty) > ys.band / 2) return null;
+        const w = vertical ? xs.invert(ty) : xs.invert(tx);
+        const d = vertical ? ys.invert(tx) : ys.invert(ty);
+        const [cx, cy] = at(w, d);
+        if (Math.abs(cx - tx) > half[0] || Math.abs(cy - ty) > half[1]) return null;
         const n = m.first + w * 7 + d;
         if (n < minKnown || n > maxKnown) return null;
         const v = m.values.get(n);

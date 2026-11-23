@@ -200,7 +200,8 @@ export interface MarkDefinition {
   /** Theme entry to style the mark from, when it differs from the mark name (`pie` and `donut` use `arc`). */
   themeKey?: string;
   /** Standalone marks: the scales (and axes) the chart should use. */
-  scales?(input: { layer: LayerSpec; table: Table; fields: Record<string, FieldSpec> }): MarkScales;
+  /** `size`: the chart's box, px (a mark may lay itself out differently on a narrow screen). */
+  scales?(input: { layer: LayerSpec; table: Table; fields: Record<string, FieldSpec>; size?: { width: number; height: number } }): MarkScales;
   /** The layout depends on the chart size (treemap): rebuild on resize. A function decides per layer. */
   sizeDependent?: boolean | ((layer: LayerSpec) => boolean);
   /** Legend and hover symbol. */

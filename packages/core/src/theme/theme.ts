@@ -157,7 +157,8 @@ export interface Theme {
     /** `innerRadius`: share of the radius left empty in the middle; `gap`: px between segments. */
     sunburst: { innerRadius: number; gap: number; labels: boolean };
     /** `empty`: color of days without data (`auto` follows the grid). */
-    calendar: { radius: number; gap: number; empty: string };
+    /** `direction`: weeks across (LR) or down (TB); by default, down when the chart is narrow (a phone). */
+    calendar: { radius: number; gap: number; empty: string; direction?: 'LR' | 'TB' };
     /** Stat tile: last value, change against the previous one, sparkline. */
     kpi: { upIsGood: boolean; sparkline: boolean; good: string; bad: string; size: number };
     /** 10 × 10 grid of squares: one per percent. */

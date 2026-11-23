@@ -300,6 +300,28 @@ Un panneau par valeur du champ, avec le même ordre de catégories, les mêmes c
 (`shared: false` pour des échelles libres) et une seule légende, qui masque une série dans tous les panneaux.
 `createChart()` choisit la bonne vue ; les wrappers l'utilisent.
 
+## Petits écrans
+
+La bibliothèque s'adapte seule, et la spec dit le reste :
+
+- **Compaction automatique** : quand la zone de dessin deviendrait trop petite (moins de 120 × 90 px), le graphique
+  renonce, dans l'ordre, au sous-titre, aux titres d'axes, puis à la légende (`autoCompact: false` pour l'empêcher).
+  Les noms de catégories trop longs (tâches d'un Gantt) sont coupés avec « … » au-delà d'un tiers de la largeur ;
+  les graduations trop serrées sont sautées.
+- **Petits multiples** : jamais de panneau de moins de 130 px de large ; si les panneaux ne tiennent pas lisiblement
+  dans le cadre, un seul panneau à la fois avec un bouton par valeur.
+- **Calendrier** : semaines en travers ou en hauteur, selon ce qui donne les plus grandes cases (`direction` pour imposer).
+- **Tactile** : un appui montre l'infobulle (pas de survol au doigt) ; elle reste jusqu'à l'appui suivant.
+- **Règles par taille** (`responsive`) : pour changer d'options, ou de graphique, selon la taille du cadre. C'est
+  à la spec (donc à l'application ou à l'IA qui l'écrit) de dire quoi montrer à la place :
+
+```json
+"responsive": [{ "maxWidth": 480, "spec": { "layers": [{ "mark": "bar", "encode": { "x": "users", "y": "target" } }] } }]
+```
+
+Audit : dans la console de `gallery.html`, `await fcAudit(343, 260)` monte chaque exemple à cette taille et signale
+ceux dont le dessin est trop à l'étroit.
+
 ## Annotations
 
 ```json

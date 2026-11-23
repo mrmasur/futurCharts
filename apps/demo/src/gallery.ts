@@ -1,5 +1,6 @@
 import { createChart, createSpreadsheet, type Chart, type ChartSpec, type ChartView, type Spreadsheet, type WorkbookSpec } from '@futurcharts/core';
 import { ordersSheet, projectWorkbook } from './sheets';
+import { auditCharts } from './audit';
 import { CATEGORIES, CHANNELS, COUNTRIES, DASHBOARDS, type Card, type Dashboard, type Filters } from './dashboards';
 import { entries, GROUPS, PALETTES, type Entry } from './library';
 
@@ -555,3 +556,6 @@ applyMode();
 buildNav();
 window.addEventListener('hashchange', render);
 render();
+
+// Mobile audit from the console: `await fcAudit(343, 260)`.
+(window as unknown as { fcAudit: typeof auditCharts }).fcAudit = auditCharts;

@@ -576,6 +576,34 @@ export type Entry = {
 };
 export const entries: Entry[] = [
   {
+    title: 'Graphique adaptatif',
+    caption: 'responsive · un Sankey sur grand écran, des barres sous 480 px de large (règle dans la spec) ; réduisez la fenêtre pour voir',
+    wide: true,
+    spec: {
+      title: 'Parcours des visiteurs',
+      subtitle: 'De la source d’acquisition à l’abonnement',
+      data: journeys,
+      fields: { users: { label: 'Visiteurs' } },
+      layers: [{ mark: 'sankey', encode: { source: 'source', target: 'target', value: 'users' } }],
+      responsive: [
+        {
+          maxWidth: 480,
+          spec: {
+            subtitle: 'Visiteurs par étape (vue mobile)',
+            layers: [
+              {
+                mark: 'bar',
+                encode: { x: 'users', y: 'target' },
+                transform: [{ type: 'aggregate', groupby: ['target'], ops: [{ op: 'sum', field: 'users', as: 'users' }] }, { type: 'sort', field: 'users', order: 'desc' }],
+                style: { labels: true },
+              },
+            ],
+          },
+        },
+      ],
+    },
+  },
+  {
     title: 'Une courbe mise en avant',
     caption: 'layer.series : une série par son nom, dans sa couleur, plus épaisse, avec ses points et ses étiquettes ; les autres en gris (style.color)',
     wide: true,
@@ -1995,7 +2023,7 @@ export const GROUPS: [string, string[]][] = [
   ['Texte et chronologie', ['Nuage de mots', 'Frise chronologique']],
   ['Indicateurs', ['Tuiles KPI', 'Jauge', 'Jauge à zones', 'Compteur', 'Barres sur piste', 'Pyramide', 'Graphique pictographique']],
   ['Cartes', ['Globe et routes aériennes', 'Points pulsants', 'Carte en tuiles hexagonales', 'Routes aériennes', 'Points sur une carte du monde', 'Choroplèthe mondiale', 'Bulles sur une carte', 'Zoom sur l’Europe et mise en avant']],
-  ['Mise en avant', ['Une courbe mise en avant', 'Étiquettes personnalisées', 'Mise en avant dans un camembert', 'Mise en avant dans un treemap', 'Mise en avant d’une série', 'Mise en avant sur une carte de chaleur']],
+  ['Mise en avant', ['Graphique adaptatif', 'Une courbe mise en avant', 'Étiquettes personnalisées', 'Mise en avant dans un camembert', 'Mise en avant dans un treemap', 'Mise en avant d’une série', 'Mise en avant sur une carte de chaleur']],
 ];
 
 // ----------------------------------------------------------- color themes

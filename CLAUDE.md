@@ -40,4 +40,9 @@ Librairie de graphiques GPU pour une future app de BI (sources : Elasticsearch, 
   GPU : saisie, sélection et presse-papiers l'exigent), formules maison (`formula.ts`), lignes virtualisées. Les données
   vivent dans `SheetModel` (sans DOM) : un classeur garde un modèle par feuille et une seule vue. Dates, fusions, mise en
   forme, classeur et wrappers faits. Les fusions sont ignorées pendant un tri. Pas encore : lien avec le catalogue dbt.
+- **Petits écrans** (demandé le 2026-11-23) : compaction automatique (sous-titre, titres d'axes, légende), règles
+  `responsive` dans la spec (le choix du graphique de remplacement revient à la spec), petits multiples en un panneau à
+  la fois, calendrier orienté au mieux, appui = infobulle. Vérifier avec `fcAudit(343, 260)` et `fcAudit(375, 520)` dans
+  la console de la galerie : seul le calendrier d'une année reste à l'étroit (cases de 5 à 8 px), c'est un cas pour
+  une règle `responsive`.
 - Les échelles produisent des positions normalisées ; le zoom ne modifie que la transformation de vue, jamais les batches.

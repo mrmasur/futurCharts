@@ -8,6 +8,7 @@ const meta: Meta = {
 };
 export default meta;
 
+export const GraphiqueAdaptatif: StoryObj = { name: "Graphique adaptatif", ...entryStory("Graphique adaptatif") };
 export const UneCourbeMiseEnAvant: StoryObj = { name: "Une courbe mise en avant", ...entryStory("Une courbe mise en avant") };
 export const EtiquettesPersonnalisees: StoryObj = { name: "Étiquettes personnalisées", ...entryStory("Étiquettes personnalisées") };
 export const MiseEnAvantDansUnCamembert: StoryObj = { name: "Mise en avant dans un camembert", ...entryStory("Mise en avant dans un camembert") };

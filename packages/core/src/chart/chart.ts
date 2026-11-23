@@ -115,6 +115,35 @@ interface Layout {
 
 const font = (weight: number | string, size: number, family: string) => `${weight} ${size}px ${family}`;
 
+/**
+ * A responsive rule over a spec: nested objects merged, layers merged one by one
+ * (a layer may change its mark), anything else replaced.
+ */
+function mergeSpec(base: ChartSpec, over: Partial<ChartSpec>): ChartSpec {
+  const out: Record<string, unknown> = { ...base };
+  for (const [k, v] of Object.entries(over)) {
+    if (k === 'layers' && Array.isArray(v)) {
+      const layers = [...base.layers];
+      (v as Partial<LayerSpec>[]).forEach((l, i) => {
+        const b = layers[i];
+        layers[i] = b ? ({ ...b, ...l, encode: { ...b.encode, ...l.encode }, style: l.style ? { ...b.style, ...l.style } : b.style } as LayerSpec) : (l as LayerSpec);
+      });
+      out.layers = layers;
+    } else if (v && typeof v === 'object' && !Array.isArray(v) && !ArrayBuffer.isView(v) && out[k] && typeof out[k] === 'object' && k !== 'data') {
+      out[k] = deepMerge(out[k] as Record<string, unknown>, v as Record<string, unknown>);
+    } else out[k] = v;
+  }
+  return out as unknown as ChartSpec;
+}
+
+/** Cut a text to a width, with "…". */
+function ellipsize(ctx: CanvasRenderingContext2D, text: string, max: number): string {
+  if (ctx.measureText(text).width <= max) return text;
+  let t = text;
+  while (t.length > 1 && ctx.measureText(`${t}…`).width > max) t = t.slice(0, -1);
+  return `${t}…`;
+}
+
 const withAlphaRGBA = (c: RGBA, a: number): RGBA => [c[0], c[1], c[2], a];
 
 const sizeDependent = (b: Built) =>
@@ -261,7 +290,8 @@ export class Chart implements SyncMember {
 
     const signal = this.abort.signal;
     root.addEventListener('pointermove', (e) => this.onMove(e), { signal });
-    root.addEventListener('pointerleave', () => this.onLeave(), { signal });
+    // A finger lifting off is not the pointer leaving: the tooltip of a tap stays until the next tap.
+    root.addEventListener('pointerleave', (e) => e.pointerType !== 'touch' && this.onLeave(), { signal });
     root.addEventListener('pointerdown', (e) => this.onDown(e), { signal });
     root.addEventListener('pointerup', (e) => this.onUp(e), { signal });
     root.addEventListener('wheel', (e) => this.onWheel(e), { signal, passive: false });
@@ -289,7 +319,10 @@ export class Chart implements SyncMember {
   // ---------------------------------------------------------------- public API
 
   /** Replace the spec and recompile. */
-  update(spec: ChartSpec): void {
+  update(input: ChartSpec): void {
+    this.base = input;
+    this.ruleKey = '\u0000';
+    const spec = this.effectiveSpec();
     // Keep drill-down states when the layers are the same marks (theme or data change).
     const same = spec.layers.length === this.spec.layers.length && spec.layers.every((l, i) => l.mark === this.spec.layers[i].mark);
     if (!same) this.layerState.clear();
@@ -306,8 +339,40 @@ export class Chart implements SyncMember {
     this.compile();
   }
 
+  /** The spec as given (before the responsive rules). */
   getSpec(): ChartSpec {
-    return this.spec;
+    return this.base ?? this.spec;
+  }
+
+  // ------------------------------------------------------------ responsive
+
+  private base?: ChartSpec;
+  /** Which rules matched last time: a resize that changes it rebuilds the chart. */
+  private ruleKey = '';
+
+  /** The spec with the responsive rules matching the current size applied. */
+  private effectiveSpec(): ChartSpec {
+    const base = this.base!;
+    const rules = base.responsive ?? [];
+    const w = this.width, h = this.height;
+    const hits = rules.filter((r) => (r.maxWidth === undefined || w <= r.maxWidth) && (r.minWidth === undefined || w >= r.minWidth) && (r.maxHeight === undefined || h <= r.maxHeight) && (r.minHeight === undefined || h >= r.minHeight));
+    this.ruleKey = hits.map((r) => rules.indexOf(r)).join(',');
+    let out: ChartSpec = base;
+    for (const r of hits) out = mergeSpec(out, r.spec);
+    return out;
+  }
+
+  /** On resize: re-apply the rules; true when the spec changed. */
+  private reapplyResponsive(): boolean {
+    if (!this.base?.responsive?.length) return false;
+    const before = this.ruleKey;
+    const spec = this.effectiveSpec();
+    if (this.ruleKey === before) return false;
+    const same = spec.layers.length === this.spec.layers.length && spec.layers.every((l, i) => l.mark === this.spec.layers[i].mark);
+    if (!same) this.layerState.clear();
+    this.spec = spec;
+    this.theme = resolveTheme(spec.theme);
+    return true;
   }
 
   /** Domains of the continuous axes as drawn (small multiples share them). */
@@ -404,7 +469,10 @@ export class Chart implements SyncMember {
   resize(): void {
     if (this.destroyed) return;
     this.measure();
-    if (this.built.some((b) => sizeDependent(b))) {
+    if (this.reapplyResponsive()) {
+      this.layout = undefined;
+      this.compile();
+    } else if (this.built.some((b) => sizeDependent(b))) {
       this.layout = undefined;
       this.compile();
     }
@@ -561,7 +629,7 @@ export class Chart implements SyncMember {
       this.val = this.yScale;
     } else if (!ref) {
       const owner = layers.find((l) => l.def.scales);
-      const ms = owner?.def.scales?.({ layer: owner.data.layer, table: owner.data.table, fields });
+      const ms = owner?.def.scales?.({ layer: owner.data.layer, table: owner.data.table, fields, size: { width: this.width, height: this.height } });
       this.xScale = ms?.x ?? new LinearScale(0, 1);
       this.yScale = ms?.y ?? new LinearScale(0, 1);
       this.aspect = ms?.aspect;
@@ -1077,18 +1145,36 @@ export class Chart implements SyncMember {
   }
 
   private showLegend(): boolean {
-    return (this.spec.legend ?? this.theme.legend.visible) && this.legend.length >= 2;
+    return (this.spec.legend ?? this.theme.legend.visible) && this.legend.length >= 2 && this.compact < 3;
   }
 
+  /**
+   * Small screens: when the drawing would be cramped, the chart gives up, in
+   * order, its subtitle, its axis titles, then its legend (`autoCompact: false` in
+   * the spec keeps everything). Each level is tried until the drawing is readable.
+   */
+  private compact = 0;
+
   private computeLayout(): Layout {
+    const auto = this.spec.autoCompact !== false;
+    let L!: Layout;
+    for (let level = 0; level <= (auto ? 3 : 0); level++) {
+      this.compact = level;
+      L = this.layoutAt();
+      if (L.plot.width >= 120 && L.plot.height >= 90) break;
+    }
+    return L;
+  }
+
+  private layoutAt(): Layout {
     const { theme, ctx, spec, zoom } = this;
     const pad = theme.padding;
     const ff = theme.font.family;
     let top = pad;
     const titleY = top;
     if (spec.title) top += theme.title.size * 1.3;
-    if (spec.subtitle) top += theme.subtitle.size * 1.5;
-    if (spec.title || spec.subtitle) top += theme.title.gap;
+    if (spec.subtitle && this.compact < 1) top += theme.subtitle.size * 1.5;
+    if (spec.title || (spec.subtitle && this.compact < 1)) top += theme.title.gap;
 
     // Legend: wraps to as many rows as needed.
     const legendY = top;
@@ -1117,7 +1203,7 @@ export class Chart implements SyncMember {
     let bottom = pad;
     if (this.timeline) bottom += 40;
     if (xAxis && xAxis.labels !== false) bottom += lab.size + lab.padding;
-    if (xAxis?.title) bottom += ttl.size + ttl.padding;
+    if (xAxis?.title && this.compact < 2) bottom += ttl.size + ttl.padding;
     const plotH = Math.max(10, this.height - top - bottom);
 
     const vy0 = -zoom.ty / zoom.ky;
@@ -1130,9 +1216,10 @@ export class Chart implements SyncMember {
       ctx.font = font(lab.weight, lab.size, ff);
       let w = 0;
       for (const t of yTicks) w = Math.max(w, ctx.measureText(t.label).width);
-      left += Math.ceil(w) + lab.padding;
+      // Long category names (a Gantt's tasks) never take more than a third of the width: they are cut with "…".
+      left += Math.ceil(this.yScale.type === 'band' ? Math.min(w, this.width * 0.32) : w) + lab.padding;
     }
-    if (yAxis?.title) left += ttl.size + ttl.padding;
+    if (yAxis?.title && this.compact < 2) left += ttl.size + ttl.padding;
     // Room on the right for direct labels at the end of lines.
     let endRoom = 0;
     for (const b of this.built) {
@@ -1304,7 +1391,7 @@ export class Chart implements SyncMember {
       ctx.fillText(spec.title, pad, ty);
       ty += theme.title.size * 1.3;
     }
-    if (spec.subtitle) {
+    if (spec.subtitle && this.compact < 1) {
       ctx.font = font(theme.subtitle.weight, theme.subtitle.size, ff);
       ctx.fillStyle = theme.subtitle.color;
       ctx.fillText(spec.subtitle, pad, ty + theme.subtitle.size * 0.2);
@@ -1378,7 +1465,7 @@ export class Chart implements SyncMember {
           lastRight = cx + w / 2;
         }
       }
-      if (xAxis.title) {
+      if (xAxis.title && this.compact < 2) {
         ctx.font = font(ttl.weight, ttl.size, ff);
         ctx.fillStyle = ttl.color;
         ctx.textAlign = 'center';
@@ -1411,11 +1498,11 @@ export class Chart implements SyncMember {
           const y = T.oy + t.t * T.sy;
           if (y < plot.y - 1 || y > bottom + 1) continue;
           if (Math.abs(lastY - y) < lab.size + 3) continue;
-          ctx.fillText(t.label, plot.x - lab.padding, y + 0.5);
+          ctx.fillText(this.yScale.type === 'band' ? ellipsize(ctx, t.label, this.width * 0.32) : t.label, plot.x - lab.padding, y + 0.5);
           lastY = y;
         }
       }
-      if (yAxis.title) {
+      if (yAxis.title && this.compact < 2) {
         ctx.save();
         ctx.font = font(ttl.weight, ttl.size, ff);
         ctx.fillStyle = ttl.color;
@@ -1839,6 +1926,8 @@ export class Chart implements SyncMember {
 
   private onDown(e: PointerEvent): void {
     const p = this.local(e);
+    // Touch has no hover: a tap shows what a mouse would show by passing over.
+    if (e.pointerType === 'touch' && !this.navigator()) this.onMove(e);
     const nav = e.button === 0 ? this.navAt(p) : null;
     if (nav) {
       const L = this.layout!;

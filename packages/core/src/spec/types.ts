@@ -29,6 +29,18 @@ export interface ChartSpec {
   projection?: ProjectionSpec;
   axes?: { x?: AxisSpec | false; y?: AxisSpec | false };
   /**
+   * On a small screen, give up the subtitle, then the axis titles, then the
+   * legend when the drawing would be cramped. Default true.
+   */
+  autoCompact?: boolean;
+  /**
+   * Rules by size, applied over the spec when the chart's box matches (the
+   * last matching rule wins). A rule's `spec` can change anything, the marks
+   * included: another chart on a phone.
+   * `[{ "maxWidth": 420, "spec": { "layers": [{ "mark": "bar", ... }] } }]`
+   */
+  responsive?: ResponsiveRule[];
+  /**
    * Reference lines, bands and notes, in data coordinates (cartesian charts).
    * `{ "y": 100, "text": "Objectif" }`, `{ "x": ["2024-03-01", "2024-04-15"], "text": "Campagne" }`,
    * `{ "x": "2024-06-01", "y": 120, "text": "Lancement" }`.
@@ -98,6 +110,15 @@ export interface Encoding {
   /** Opening and closing prices (`candlestick`; `y` is the high, `y2` the low). */
   open?: string;
   close?: string;
+}
+
+export interface ResponsiveRule {
+  maxWidth?: number;
+  minWidth?: number;
+  maxHeight?: number;
+  minHeight?: number;
+  /** Merged over the spec: objects merged deeply, `layers` merged layer by layer (a layer can change its mark). */
+  spec: Omit<Partial<ChartSpec>, 'responsive'>;
 }
 
 /** A number, a date (ISO string or epoch ms) or a category name. */

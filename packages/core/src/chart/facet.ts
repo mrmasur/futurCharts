@@ -115,12 +115,38 @@ export class FacetChart {
     const header = document.createElement('div');
     header.style.cssText = `padding:${theme.padding}px ${theme.padding}px 4px;`;
     if (spec.title) header.appendChild(text(spec.title, `font-weight:${theme.title.weight};font-size:${theme.title.size}px;color:${theme.title.color};`));
-    if (spec.subtitle) header.appendChild(text(spec.subtitle, `font-size:${theme.subtitle.size}px;color:${theme.subtitle.color};margin-top:2px;`));
+    if (spec.subtitle) header.appendChild(text(spec.subtitle, `font-size:${theme.subtitle.size}px;color:${theme.subtitle.color};margin-top:2px;`)).dataset.role = 'subtitle';
     if (series.length > 1 && spec.legend !== false) header.appendChild(this.legend(series, shared.color?.colors ?? {}, theme));
     this.root.appendChild(header);
 
+    const panelSpecOf = (v: string): ChartSpec => ({
+      ...spec,
+      facet: undefined,
+      title: v,
+      subtitle: undefined,
+      legend: false,
+      data: subset(spec.data!, indicesOf(table, facet.field, v)),
+      scales: shared,
+      theme: typeof spec.theme === 'object' ? { ...spec.theme, title: { size: 13 } } : { extends: spec.theme ?? 'light', title: { size: 13 } },
+    });
+
+    // Too small for every panel to be readable (a phone): one panel at a time, a button per value.
+    // A panel needs about 140 px: its title and axes take 60.
+    if (this.fixedHeight && values.length > 1) {
+      const W = this.container.clientWidth;
+      const cols = Math.max(1, Math.min(values.length, Math.floor(W / 130)));
+      const rows = Math.ceil(values.length / cols);
+      const avail = this.container.clientHeight - header.offsetHeight - 8;
+      if (avail / rows < 140) {
+        // The buttons name the panel: no title over it, and no subtitle over them.
+        header.querySelector('[data-role="subtitle"]')?.remove();
+        return this.buildCompact(values, header, (v) => ({ ...panelSpecOf(v), title: undefined }), theme);
+      }
+    }
+
     const grid = document.createElement('div');
-    const cols = facet.columns ?? Math.min(values.length, 3);
+    // Never so many columns that a panel gets narrower than 130 px (a phone).
+    const cols = Math.min(facet.columns ?? Math.min(values.length, 3), Math.max(1, Math.floor((this.container.clientWidth || 9999) / 130)));
     grid.style.cssText = `display:grid;grid-template-columns:repeat(${cols}, minmax(0, 1fr));gap:4px;padding:0 4px 4px;`;
     this.root.appendChild(grid);
     // A container of fixed height (a dashboard card, a thumbnail): every panel fits in it, no scrollbar,
@@ -165,6 +191,50 @@ export class FacetChart {
     }
   }
 
+  /** One panel and a row of buttons, one per facet value. */
+  private async buildCompact(values: string[], header: HTMLDivElement, specOf: (v: string) => ChartSpec, theme: ReturnType<typeof resolveTheme>): Promise<void> {
+    this.fit = undefined;
+    const chips = document.createElement('div');
+    chips.setAttribute('role', 'tablist');
+    chips.style.cssText = 'display:flex;gap:6px;overflow-x:auto;padding:8px 0 2px;scrollbar-width:none;';
+    header.appendChild(chips);
+    const box = document.createElement('div');
+    this.root.style.display = 'flex';
+    this.root.style.flexDirection = 'column';
+    this.root.style.overflow = 'hidden';
+    box.style.cssText = 'flex:1;min-height:0;';
+    this.root.appendChild(box);
+    const accent = theme.palette.categorical[0];
+    let active = values[0];
+    const paint = () => {
+      for (const b of chips.querySelectorAll<HTMLButtonElement>('button')) {
+        const on = b.textContent === active;
+        b.setAttribute('aria-selected', String(on));
+        b.style.background = on ? accent : 'transparent';
+        b.style.color = on ? '#fff' : theme.text.secondary;
+        b.style.borderColor = on ? accent : theme.grid.y.color;
+      }
+    };
+    for (const v of values) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('role', 'tab');
+      b.textContent = v;
+      b.style.cssText = `all:unset;cursor:pointer;flex:none;padding:3px 10px;border-radius:999px;border:1px solid;font-size:12px;`;
+      b.addEventListener('click', () => {
+        active = v;
+        paint();
+        this.panels[0]?.update(specOf(v));
+      });
+      chips.appendChild(b);
+    }
+    paint();
+    const chart = await Chart.create(box, specOf(active), this.options);
+    for (const k of this.hidden) chart.toggleSeries(k, true);
+    for (const l of this.listeners) chart.on(l.type, l.handler);
+    this.panels = [chart];
+  }
+
   /**
    * Fit the panels in the container: the fewest columns that leave each panel
    * readable (not too flat, not too narrow), all rows sharing the height left
@@ -179,8 +249,8 @@ export class FacetChart {
     const gap = 4;
     const minH = 110;
     const minW = 130;
-    let cols = f.columns ?? Math.min(f.count, 3);
-    // An explicit `columns` is kept.
+    // An explicit `columns` is kept, as long as each panel stays readable.
+    let cols = Math.min(f.columns ?? Math.min(f.count, 3), Math.max(1, Math.floor(W / minW)));
     if (!f.columns) {
       // Wider grids until the rows fit in height, as long as panels stay wide enough.
       while (cols < f.count && Math.ceil(f.count / cols) * (minH + gap) > H && W / (cols + 1) >= minW) cols++;
