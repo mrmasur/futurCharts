@@ -21,6 +21,8 @@ import { STATS_MARKS } from './stats';
 import { CARTO_MARKS } from './carto';
 import { COMPARE_MARKS } from './compare';
 import { TABLES_MARKS } from './tables';
+import { HIERARCHY_MARKS } from './hierarchy';
+import { SCATTER_MARKS } from './scatter';
 import type { SeriesData } from './prepare';
 import { dashed, pushRect, pushSegment, pushVertex } from './primitives';
 import { buildHit, hasMark, registerMark, type BuildContext, type BuiltMark, type MarkDefinition, type MarkLabel } from './registry';
@@ -427,7 +429,7 @@ const tick: MarkDefinition = {
   },
 };
 
-const builtins: Record<string, MarkDefinition> = { line, area, bar, point, rule, tick, ...STANDALONE_MARKS, ...FLOW_MARKS, ...EXTRA_MARKS, ...MORE_MARKS, ...SHAPE_MARKS, ...CATALOG_MARKS, ...ADVANCED_MARKS, ...STOCK_MARKS, ...GAUGES_MARKS, ...GANTT_MARKS, ...POLAR_MARKS, ...SETS_MARKS, ...SERIES_MARKS, ...STATS_MARKS, ...CARTO_MARKS, ...COMPARE_MARKS, ...TABLES_MARKS, flow, race };
+const builtins: Record<string, MarkDefinition> = { line, area, bar, point, rule, tick, ...STANDALONE_MARKS, ...FLOW_MARKS, ...EXTRA_MARKS, ...MORE_MARKS, ...SHAPE_MARKS, ...CATALOG_MARKS, ...ADVANCED_MARKS, ...STOCK_MARKS, ...GAUGES_MARKS, ...GANTT_MARKS, ...POLAR_MARKS, ...SETS_MARKS, ...SERIES_MARKS, ...STATS_MARKS, ...CARTO_MARKS, ...COMPARE_MARKS, ...TABLES_MARKS, ...HIERARCHY_MARKS, ...SCATTER_MARKS, flow, race };
 
 /**
  * Register the built-in marks. Called when a chart is created rather than at
