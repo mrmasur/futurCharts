@@ -10,6 +10,11 @@ import { FAMILIES as polaires } from './polaires';
 import { FAMILIES as ensembles } from './ensembles';
 import { FAMILIES as series } from './series';
 import { FAMILIES as axes } from './axes';
+import { FAMILIES as stats } from './stats';
+import { FAMILIES as cartes } from './cartes';
+import { FAMILIES as comparaison } from './comparaison';
+import { FAMILIES as tables } from './tables';
+import { FAMILIES as contrat } from './contrat';
 
 export interface Family {
   /** Gallery section: an existing one (its examples follow the others) or a new one. */
@@ -17,4 +22,4 @@ export interface Family {
   entries: Entry[];
 }
 
-export const EXTRA: Family[] = [...bourse, ...jauges, ...gantt, ...polaires, ...ensembles, ...series, ...axes];
+export const EXTRA: Family[] = [...bourse, ...jauges, ...gantt, ...polaires, ...ensembles, ...series, ...axes, ...stats, ...cartes, ...comparaison, ...tables, ...contrat];
