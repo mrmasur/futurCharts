@@ -38,7 +38,7 @@ Prérequis : Node 20 (testé en 20.20, npm 10.8). Pas de `.nvmrc` pour l'instant
 npm install
 npm run dev          # démo : http://localhost:5273 (gallery.html, wrappers.html, maps.html)
 npm run storybook    # http://localhost:6006
-npm test             # vitest, 353 tests, ~1 s
+npm test             # vitest, 378 tests, ~1 s
 npm run test:visual  # Playwright : 217 exemples × 4 variantes comparés à leurs captures, ~2 min
 npm run test:visual:update   # accepter le rendu actuel comme nouvelle référence (relire les images)
 npm run typecheck    # tsc sur chaque paquet et chaque app
@@ -96,7 +96,7 @@ Dans `packages/core/src` :
 | `data/` | `Table` (colonnes typées) et transformations (`bin`, `aggregate`, `boxplot`, `density`, `regression`…) |
 | `scale/` | Échelles linéaire, log, temps, bandes, Mercator ; elles rendent des positions **normalisées** |
 | `marks/` | Les marques : `registry.ts` (contrat), `builtin.ts` (enregistrement), puis une famille par fichier |
-| `chart/` | `chart.ts` (la classe `Chart` : mise en page, axes, légende, survol, zoom, sélection, animation), `facet.ts` (petits multiples), `mount.ts` (pour les wrappers), `sync.ts`, `annotations.ts` |
+| `chart/` | `chart.ts` (la classe `Chart` : état, cycle de vie, compilation, rendu, pointeur, synchronisation), et ses modules : `layout.ts` (mise en page, compaction), `axes.ts`, `legend.ts`, `labels.ts` (étiquettes, anti-chevauchement), `hover.ts`, `tooltip.ts`, `zoom.ts`, `selection.ts`, `navigator.ts`, `controls.ts` (barre de lecture), `morph.ts` (transitions), `frame.ts` (appels de dessin), `cartesian.ts` (échelles), `colors.ts`, `build.ts`, `overrides.ts`, `responsive.ts`, `types.ts` (voir ARCHITECTURE.md § 1) ; `facet.ts` (petits multiples), `mount.ts` (pour les wrappers), `sync.ts`, `annotations.ts`, `domains.ts` |
 | `render/` | Contrat de rendu (`types.ts`, `layouts.ts`) et moteur `webgl2/` (le seul endroit où WebGL existe) |
 | `theme/` | Thèmes clair / sombre, `Theme['marks']` = options de style de chaque marque (documentées en commentaire) |
 | `sheet/` | Tableur : `model.ts` (sans DOM), `formula.ts`, `sheet.ts` (vue DOM virtualisée), `workbook.ts` |
@@ -167,7 +167,7 @@ Elles sont aussi dans `CLAUDE.md`. Chacune a une raison ; la plupart ont été a
 | Tableur | Formules, dates, fusions, mise en forme, classeur, wrappers | Lien avec le catalogue dbt ; tri qui ignore les fusions |
 | Petits écrans | Compaction, `responsive`, petits multiples, calendrier, tactile | Calendrier d'une année trop serré (5-8 px) : cas pour une règle `responsive` |
 | Données | Adaptateurs ES / ClickHouse / dbt, rôles de champ (`importance`, `link`) | Format Arrow |
-| Tests | 353 tests unitaires ; captures (868) ; robustesse (données et tailles hostiles) et interactions sur chaque exemple ; schéma JSON de la spec (2026-11-24) | Tests de `Chart` sans GPU, tableur, tableaux de bord ; options de style hors schéma |
+| Tests | 378 tests unitaires ; captures (868) ; robustesse (données et tailles hostiles) et interactions sur chaque exemple ; schéma JSON de la spec (2026-11-24) | Tests de `Chart` sans GPU, tableur, tableaux de bord ; options de style hors schéma |
 | Distribution | `npm run build` produit `dist/` | Publication npm, CI, licence, changelog |
 
 ## 7. Passation (même Mac, autre compte)

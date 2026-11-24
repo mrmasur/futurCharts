@@ -14,25 +14,60 @@ Chart.create  ── ensureBuiltinMarks()                     marks/builtin.ts
   ▼
 Chart.update(spec) ── effectiveSpec()   applique les règles `responsive` à la taille du cadre
   ▼
-Chart.compile()                                           chart/chart.ts
-  1. jetons de thème ($ink, $1…) résolus dans style / overrides / highlight / series / labels
+Chart.compile()                                           chart/chart.ts (orchestre)
+  1. jetons de thème ($ink, $1…) résolus dans style / overrides / highlight / series / labels   chart/colors.ts
   2. Table.from(data, types du catalogue) puis layer.transform    data/table.ts, data/transforms.ts
-  3. orientation (catégories en y → barres horizontales), type d'échelle (bande, temps, linéaire)
+  3. orientation (catégories en y → barres horizontales), double axe, type d'échelle   chart/cartesian.ts
   4. préparation par calque : séries, empilement, intervalles    marks/prepare.ts
        – marque standalone : standaloneLayer (la marque lit le calque brut)
-  5. couleurs fixées par entité (jamais par rang : un filtre ne repeint pas les survivants)
-  6. domaines et échelles (ou MarkDefinition.scales() pour une marque standalone)
-  7. def.build(ctx) pour chaque calque → BuiltMark { draws, hit, labels, pick, click, … }
-  8. instantané de l'état précédent → transition (Batch.setPrevious + morph) si mêmes marques
+  5. couleurs fixées par entité (jamais par rang : un filtre ne repeint pas les survivants)   chart/colors.ts
+  6. domaines et échelles (ou MarkDefinition.scales() pour une marque standalone)   chart/cartesian.ts, domains.ts
+  7. def.build(ctx) pour chaque calque → BuiltMark { draws, hit, labels, pick, click, … }   chart/build.ts
+     (contexte de la marque, surcharges `highlight` / `overrides` : chart/overrides.ts ; annotations)
+  8. légende : entrées et rampe                               chart/legend.ts
+  9. instantané de l'état précédent → transition (Batch.setPrevious + morph) si mêmes marques   chart/morph.ts
   ▼
 requestRender() → renderNow()  (une image par requestAnimationFrame, rien hors écran)
-  – mise en page (titres, légende, axes, compaction si trop petit) → Layout { plot, view, transform }
+  – mise en page (titres, légende, axes, compaction si trop petit) → Layout { plot, view, transform }   chart/layout.ts
   – Frame { calls: DrawCall[] } : grille + batches de chaque marque, avec transform de vue, clip,
-    progress (animation d'entrée) et morph (transition)
+    progress (animation d'entrée) et morph (transition)   chart/frame.ts, grille : chart/axes.ts
   – renderer.render(frame)                                 render/webgl2/renderer.ts
-  – drawOverlay : axes, légende, étiquettes (MarkLabel), survol, lasso, sur un canvas 2D par-dessus
-  – infobulle : un <div> DOM
+  – drawOverlay, sur un canvas 2D par-dessus : titres (layout.ts), légende (legend.ts), axes (axes.ts),
+    étiquettes et anti-chevauchement (labels.ts), survol (hover.ts), lasso (selection.ts), navigateur (navigator.ts)
+  – infobulle : un <div> DOM                                chart/tooltip.ts ; barre de lecture : chart/controls.ts
 ```
+
+**Les modules de `chart/`.** `Chart` (`chart.ts`) garde l'état et l'orchestration : cycle de vie, `compile`,
+`renderNow`, gestionnaires du pointeur, synchronisation, perte de contexte. Le reste est fait de fonctions presque
+pures qui reçoivent ce qu'elles lisent (souvent un objet `…Input`) et sont testables sans DOM
+(`test/chart-modules.test.ts`) :
+
+| Module | Rôle |
+|---|---|
+| `types.ts` | Types publics (`ChartOptions`, `ChartEvents`, `HoverItem`…, réexportés par `chart.ts`) et internes (`Built`, `Layout`, `Zoom`) |
+| `responsive.ts` | Règles `responsive` : lesquelles s'appliquent à une taille, fusion d'une règle dans la spec |
+| `colors.ts` | Jetons de thème résolus dans la spec ; couleurs fixées par entité (palette, couleurs explicites) |
+| `cartesian.ts` | Orientation, double axe, ordre des catégories, échelles de catégories et de valeurs, échelles d'une carte |
+| `build.ts` | `BuildContext` d'une marque (style, couleurs, surcharges, tailles, formats) ; calques d'annotations |
+| `overrides.ts` | `highlight` et `overrides` compilés en une fonction ligne → style |
+| `legend.ts` | Entrées et rampe de la légende, placement sur des lignes qui se replient, dessin |
+| `layout.ts` | Mise en page et compaction (sous-titre, titres d'axes, légende), marges alignées d'un groupe, titres |
+| `axes.ts` | Lignes de grille (GPU) ; axes x, y et secondaire sur le canvas 2D |
+| `labels.ts` | Ajustement du texte (« … », texte tourné) ; dessin des `MarkLabel` sans chevauchement |
+| `frame.ts` | Clip des marques et `DrawCall` de chaque batch (entrée animée, transition, sélection) |
+| `morph.ts` | Instantané des instances identifiées et état précédent de chaque batch (transitions) |
+| `hover.ts` | Hit-testing (modes `x` et `nearest`, formes), `HoverItem`, dessin du survol |
+| `tooltip.ts` | Contenu et position de l'infobulle |
+| `zoom.ts` | Arithmétique du zoom et du déplacement, axe des valeurs recalé sur la plage visible (`fitY`) |
+| `selection.ts` | Lasso et rectangle : masques de sélection, batches des éléments choisis, dessin |
+| `navigator.ts` | Fenêtre du navigateur : prise, glisser, dessin |
+| `controls.ts` | Barre de lecture d'une marque animée dans le temps (`Timeline`) |
+| `domains.ts`, `annotations.ts`, `sync.ts` | Étendues des calques, annotations, groupes synchronisés |
+
+Ce qui reste dans `Chart`, et pourquoi : les gestionnaires `onMove` / `onDown` / `onUp` / `onWheel` (ils
+enchaînent navigateur, glisser de marque, lasso, déplacement, légende, liens et exploration, et changent presque tout
+l'état), la synchronisation (elle appelle les autres graphiques du groupe), et `restore` avec le batch de la grille (perte
+du contexte : tout batch créé hors de `compile()` doit être recréé dans `restore`).
 
 Points clés :
 
@@ -194,9 +229,10 @@ destruction. Le wrapper ne fait que relier le cycle de vie et les événements. 
 
 ## 6. Tests
 
-- `npm test` (Vitest, environnement Node, sans DOM) : 353 tests sur la logique pure (données, transformations,
+- `npm test` (Vitest, environnement Node, sans DOM) : 378 tests sur la logique pure (données, transformations,
   échelles, mises en page de flux / arbres / formes, formules et modèle du tableur, adaptateurs, géo).
-- Pas de test unitaire de `Chart` lui-même, ni des wrappers. L'audit mobile se fait avec `fcAudit`.
+- Pas de test unitaire de `Chart` lui-même, ni des wrappers ; ses modules purs (marges, zoom, navigateur,
+  sélection, transitions, règles `responsive`, surcharges…) sont testés dans `test/chart-modules.test.ts`. L'audit mobile se fait avec `fcAudit`.
 
 ### Tests visuels (`npm run test:visual`)
 
