@@ -58,6 +58,9 @@ export function dashed(out: number[], dash: number[], pixel: [number, number], c
       if (!(total > 0)) return pushSegment(out, x0, y0, x1, y1, color, width);
       const L = Math.hypot((x1 - x0) / pixel[0], (y1 - y0) / pixel[1]);
       if (!Number.isFinite(L)) return;
+      // A segment thousands of screens long (a value far outside a fixed domain) would make millions of
+      // dashes: draw it solid, it is clipped away anyway.
+      if (L / total > 20000) return pushSegment(out, x0, y0, x1, y1, color, width);
       let pos = 0;
       while (pos < L - 1e-6) {
         // Where we are in the pattern.

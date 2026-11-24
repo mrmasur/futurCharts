@@ -11,6 +11,10 @@ Mettre ces documents à jour quand un chantier avance.
   à lancer avant toute fusion dans `main`. Hooks versionnés dans `.githooks/` (activés par `npm install` via
   `prepare`) : `pre-commit` lance typecheck et tests unitaires, `pre-push` lance `npm run verif`. Ne pas les
   contourner par `--no-verify` sans le dire à l'utilisateur.
+- **Robustesse, interactions, schéma** (2026-11-24) : `npm run test:robustesse` (données et tailles hostiles),
+  `npm run test:interactions` (survol, clic, zoom), schéma JSON de la spec (`npm run schema` après tout changement
+  de `spec/types.ts`). Toute nouvelle marque doit passer les deux suites ; un plantage sur des données vides ou
+  trouées est un défaut, pas un cas limite. Détail : `docs/ARCHITECTURE.md` § 6.
 - **Tests visuels** (faits le 2026-11-23) : `npm run test:visual` (Playwright, ~1 min) compare chaque exemple de la
   galerie à sa capture de référence, en 4 variantes (bureau clair, bureau sombre, 343 × 260, 375 × 520), au pixel près.
   À lancer après tout changement de rendu ; si l'écart est voulu, `npm run test:visual:update` puis **regarder** les

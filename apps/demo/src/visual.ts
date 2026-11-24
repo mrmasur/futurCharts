@@ -12,6 +12,8 @@ declare global {
   interface Window {
     __pret?: boolean;
     __erreurs?: string[];
+    /** The charts created, for the interaction tests (tests/visual/interactions.pw.ts). */
+    __graphiques?: unknown[];
   }
 }
 
@@ -45,7 +47,7 @@ async function mount(): Promise<void> {
     cadre.appendChild(box);
     const themed: ChartSpec = dark ? { ...spec, theme: 'dark' } : spec;
     try {
-      await createChart(box, themed);
+      (window.__graphiques ??= []).push(await createChart(box, themed));
     } catch (error) {
       errors.push(String(error));
     }

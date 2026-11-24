@@ -292,6 +292,8 @@ export const icicle: MarkDefinition = {
 
 // --------------------------------------------------------------- parliament
 
+const MAX_SEATS = 2000;
+
 /** `parliament`: one dot per seat on a half circle, parties in blocks from left to right. */
 export const parliament: MarkDefinition = {
   standalone: true,
@@ -306,7 +308,10 @@ export const parliament: MarkDefinition = {
     const vf = layer.encode.value ?? need(layer, 'y', 'parliament');
     const all = totals(table, kf, vf).filter((d) => d.value > 0);
     const legend = all.map((d) => ({ key: d.key, color: ctx.categorical(d.key) }));
-    const parties = all.filter((d) => !ctx.hidden.has(d.key)).map((d) => ({ ...d, seats: Math.round(d.value) }));
+    // One dot per seat: beyond a few thousand, dots are scaled down (shares kept) rather than drawn by the million.
+    const raw = all.filter((d) => !ctx.hidden.has(d.key)).reduce((a, d) => a + d.value, 0);
+    const per = raw > MAX_SEATS ? MAX_SEATS / raw : 1;
+    const parties = all.filter((d) => !ctx.hidden.has(d.key)).map((d) => ({ ...d, seats: Math.round(d.value * per) }));
     const N = parties.reduce((a, d) => a + d.seats, 0);
     const ri = Math.min(0.9, Math.max(0, style.innerRadius));
     // Fewest rows whose seats, spaced one row-width apart, hold everyone.
@@ -660,7 +665,7 @@ export const timeline: MarkDefinition = {
       xcol.type === 'time'
         ? (() => {
             const f = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
-            return (v: number | string) => f.format(v as number);
+            return (v: number | string) => (Number.isFinite(v as number) ? f.format(v as number) : '—');
           })()
         : (v: number | string) => (typeof v === 'number' ? ctx.format(v, xf) : v);
     const n = rows.length;

@@ -57,7 +57,8 @@ export const race: MarkDefinition = {
       const yearly = ds.every((d) => d.getMonth() === 0 && d.getDate() === 1);
       const monthly = ds.every((d) => d.getDate() === 1);
       const f = new Intl.DateTimeFormat(undefined, yearly ? { year: 'numeric' } : monthly ? { month: 'short', year: 'numeric' } : { day: 'numeric', month: 'short', year: 'numeric' });
-      return (v: number | string) => f.format(v as number);
+      // A row without a date (a hole in the data) must not stop the chart: it gets a dash.
+      return (v: number | string) => (Number.isFinite(v as number) ? f.format(v as number) : '—');
     })();
     const frames = frameKeys.map(fmtDate);
     const frameIndex = new Map(frameKeys.map((k, i) => [String(k), i]));

@@ -25,7 +25,9 @@ function infer(sample: unknown): ColumnType {
 function build(name: string, n: number, get: (i: number) => unknown, forced?: ColumnType): Column {
   let type = forced;
   if (!type) {
-    type = 'string';
+    // A column with no value at all (no rows, or only holes) is numeric: an empty string column would
+    // stop every mark that needs a number, while an empty numeric one simply draws nothing.
+    type = 'number';
     for (let i = 0; i < n; i++) {
       const v = get(i);
       if (v !== null && v !== undefined) {
@@ -54,7 +56,11 @@ function build(name: string, n: number, get: (i: number) => unknown, forced?: Co
 }
 
 export class Table {
-  private constructor(readonly length: number, private cols: Map<string, Column>) {}
+  private constructor(
+    readonly length: number,
+    private cols: Map<string, Column>,
+    private hints: Record<string, ColumnType | undefined> = {},
+  ) {}
 
   static from(input: DataInput, types: Record<string, ColumnType | undefined> = {}): Table {
     if (input instanceof Table) return input;
@@ -63,7 +69,7 @@ export class Table {
       const names = new Set<string>();
       for (let i = 0; i < Math.min(input.length, 50); i++) for (const k of Object.keys(input[i])) names.add(k);
       for (const name of names) cols.set(name, build(name, input.length, (i) => input[i][name], types[name]));
-      return new Table(input.length, cols);
+      return new Table(input.length, cols, types);
     }
     let n = 0;
     for (const [name, arr] of Object.entries(input.columns)) {
@@ -74,7 +80,7 @@ export class Table {
         cols.set(name, build(name, arr.length, (i) => arr[i], types[name]));
       }
     }
-    return new Table(n, cols);
+    return new Table(n, cols, types);
   }
 
   has(name: string): boolean {
@@ -82,7 +88,13 @@ export class Table {
   }
 
   column(name: string): Column {
-    const c = this.cols.get(name);
+    let c = this.cols.get(name);
+    // No rows means no field names to read them from: a query that came back empty (a filter that
+    // matches nothing) is not an error, every field is simply empty. Its type comes from the catalog.
+    if (!c && this.length === 0) {
+      c = this.hints[name] === 'string' ? { name, type: 'string', values: [] } : { name, type: this.hints[name] ?? 'number', values: new Float64Array(0) };
+      this.cols.set(name, c);
+    }
     if (!c) {
       throw new Error(`futurCharts: unknown field "${name}". Available: ${[...this.cols.keys()].join(', ')}`);
     }

@@ -158,7 +158,7 @@ function model(layer: LayerSpec, style: { direction?: string; rankGap?: number; 
     const shapes = new Map(nodes.map((n) => [n.id, n.shape ?? 'step']));
     m.routes = routeOrthogonal(layout.nodes, graph.edges, {
       direction: s.direction,
-      bounds: laned ? [laned.lanes[0].start + 6, (TB ? laned.width : laned.height) - 6] : undefined,
+      bounds: laned && laned.lanes.length ? [laned.lanes[0].start + 6, (TB ? laned.width : laned.height) - 6] : undefined,
       inset: (id, side, offset) => {
         const p = layout.nodes.get(id)!;
         return outlineInset(shapes.get(id)!, side, offset, p.w, p.h, TB);

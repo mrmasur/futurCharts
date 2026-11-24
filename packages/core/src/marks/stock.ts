@@ -30,9 +30,21 @@ export interface RenkoBrick {
  * `brick` past the last one, in either direction (so a reversal needs two bricks
  * of travel from the last brick's far end). Levels sit on multiples of `brick`.
  */
+/** At most this many bricks between the lowest and the highest price. */
+export const MAX_BRICKS = 2000;
+
 export function renkoBricks(close: ArrayLike<number>, brick: number): RenkoBrick[] {
   const out: RenkoBrick[] = [];
   if (!(brick > 0)) return out;
+  // A fixed brick on prices far larger than expected would make millions of bricks: cap their number.
+  let lo0 = Infinity;
+  let hi0 = -Infinity;
+  for (let i = 0; i < close.length; i++) {
+    const p = close[i];
+    if (p < lo0) lo0 = p;
+    if (p > hi0) hi0 = p;
+  }
+  if (hi0 > lo0 && (hi0 - lo0) / brick > MAX_BRICKS) brick = (hi0 - lo0) / MAX_BRICKS;
   let base = NaN;
   // Bottom and top of the last brick, in bricks from the base (equal until the first brick).
   let lo = 0;

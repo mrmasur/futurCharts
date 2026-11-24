@@ -38,11 +38,14 @@ Prérequis : Node 20 (testé en 20.20, npm 10.8). Pas de `.nvmrc` pour l'instant
 npm install
 npm run dev          # démo : http://localhost:5273 (gallery.html, wrappers.html, maps.html)
 npm run storybook    # http://localhost:6006
-npm test             # vitest, 345 tests, ~1 s
+npm test             # vitest, 353 tests, ~1 s
 npm run test:visual  # Playwright : 217 exemples × 4 variantes comparés à leurs captures, ~2 min
 npm run test:visual:update   # accepter le rendu actuel comme nouvelle référence (relire les images)
 npm run typecheck    # tsc sur chaque paquet et chaque app
-npm run verif        # tout d'un coup : typecheck, tests, build, suite visuelle (~3 min) ; avant toute fusion
+npm run verif        # tout d'un coup : typecheck, tests, build, captures, robustesse, interactions (~6 min) ; avant toute fusion
+npm run test:robustesse     # chaque exemple avec des données et des tailles hostiles : rien ne doit planter
+npm run test:interactions   # chaque exemple survolé, cliqué, zoomé, glissé : sans erreur
+npm run schema       # régénère le schéma JSON de la spec après un changement de spec/types.ts
 npm run build        # dist/ de chaque paquet (vite + tsc)
 npm run stories      # régénère les stories après un nouvel exemple de galerie
 ```
@@ -164,7 +167,7 @@ Elles sont aussi dans `CLAUDE.md`. Chacune a une raison ; la plupart ont été a
 | Tableur | Formules, dates, fusions, mise en forme, classeur, wrappers | Lien avec le catalogue dbt ; tri qui ignore les fusions |
 | Petits écrans | Compaction, `responsive`, petits multiples, calendrier, tactile | Calendrier d'une année trop serré (5-8 px) : cas pour une règle `responsive` |
 | Données | Adaptateurs ES / ClickHouse / dbt, rôles de champ (`importance`, `link`) | Format Arrow |
-| Tests | 345 tests unitaires ; tests visuels de la galerie (868 captures, 2026-11-23) | Tests de `Chart` sans GPU, interactions, tableur |
+| Tests | 353 tests unitaires ; captures (868) ; robustesse (données et tailles hostiles) et interactions sur chaque exemple ; schéma JSON de la spec (2026-11-24) | Tests de `Chart` sans GPU, tableur, tableaux de bord ; options de style hors schéma |
 | Distribution | `npm run build` produit `dist/` | Publication npm, CI, licence, changelog |
 
 ## 7. Passation (même Mac, autre compte)

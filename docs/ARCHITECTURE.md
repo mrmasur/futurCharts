@@ -188,7 +188,7 @@ destruction. Le wrapper ne fait que relier le cycle de vie et les événements. 
 
 ## 6. Tests
 
-- `npm test` (Vitest, environnement Node, sans DOM) : 345 tests sur la logique pure (données, transformations,
+- `npm test` (Vitest, environnement Node, sans DOM) : 353 tests sur la logique pure (données, transformations,
   échelles, mises en page de flux / arbres / formes, formules et modèle du tableur, adaptateurs, géo).
 - Pas de test unitaire de `Chart` lui-même, ni des wrappers. L'audit mobile se fait avec `fcAudit`.
 
@@ -213,7 +213,38 @@ ouvre chaque exemple seul et compare une capture à sa référence, au pixel pr�
   voulu, `npm run test:visual:update` (ou `-- -g "Sankey"` pour un seul exemple), puis relire les images modifiées
   avant de les commiter : une référence acceptée sans la regarder ne protège plus rien.
 - **Cibler** : `npm run test:visual -- --project=mobile -g "Frise"`.
-- **Limites** : rien ne teste les interactions (survol, zoom, lasso, glisser), ni les tableaux de bord, ni le tableur,
-  ni Storybook. L'état testé est l'état final : une animation cassée en cours de route ne se voit pas. Le rendu
+- **Limites** : ni les tableaux de bord, ni le tableur, ni Storybook ne sont capturés (les interactions ont leur
+  propre suite, ci-dessous). L'état testé est l'état final : une animation cassée en cours de route ne se voit pas. Le rendu
   WebGL est logiciel (SwiftShader) : un défaut propre à un GPU réel ne se voit pas non plus.
 - Première installation sur un autre poste : `npx playwright install chromium`.
+
+### Robustesse (`npm run test:robustesse`, ~1,5 min)
+
+Chaque exemple est remonté avec des données hostiles et à des tailles hostiles (`apps/demo/robustesse.html` +
+`src/robustesse.ts`, test `tests/visual/robustesse.pw.ts`) : données vides, une seule ligne, trous (`null`), `NaN`,
+valeurs négatives, énormes (× 10⁹) ou nulles, libellés démesurés, lignes en double ; cadre de 60 × 40 et de 0 × 0,
+redimensionnements brutaux, passage de vide à plein et retour, destruction immédiate. Pour un diagramme de flux :
+graphe vide, liens vers des nœuds absents, boucle sur soi. Rien ne doit lever d'exception ni écrire d'erreur. Pas de
+capture : il s'agit de pannes, pas d'apparence. Garde-fous ajoutés le 2026-11-24 à la suite de ce test (dans
+`test/robustesse.test.ts`) : une table vide répond pour tout champ demandé (une requête qui ne renvoie rien n'est
+pas une erreur) ; une colonne sans valeur est numérique ; dates manquantes affichées « — » ; nombre de classes, de
+briques Renko, de sièges d'hémicycle, de pictogrammes et de tirets plafonné.
+
+### Interactions (`npm run test:interactions`, ~2 min)
+
+`tests/visual/interactions.pw.ts` : chaque exemple est survolé sur une grille de 30 points, cliqué, double-cliqué,
+zoomé à la molette, glissé, puis quitté, sans erreur. Les exemples où aucune infobulle n'apparaît sont signalés en
+annotation dans le rapport (pas en échec : certains n'en ont pas par nature). Cinq tests vérifient qu'une
+interaction change vraiment le dessin : repli de l'arbre indenté, déploiement de l'arbre de décomposition, clic de
+légende (événement `legend` et série masquée), zoom à la molette, survol des faisceaux. `visual.html` expose les
+graphiques créés dans `window.__graphiques` pour ces tests.
+
+### Schéma de la spec (`npm run schema`)
+
+`packages/core/schema/chart-spec.schema.json` (exporté : `@futurcharts/core/schema.json`) est généré depuis
+`spec/types.ts` par `scripts/schema.mjs` (ts-json-schema-generator). Il sert aux éditeurs et aux IA qui écrivent des
+specs : valider avant de dessiner (avec ajv, par exemple). `tests/schema/spec.test.ts` vérifie qu'il est à jour,
+qu'il accepte chaque exemple de la galerie et qu'il refuse les erreurs courantes (clé inconnue, champ non textuel,
+type d'échelle inconnu). Limites : les options de style des marques (`layer.style`) ne sont pas vérifiées par le
+schéma (le générateur ne sait pas lire l'intersection `MarkStyle`), ni les données. Après un changement de
+`spec/types.ts` : `npm run schema`, sinon le test échoue.

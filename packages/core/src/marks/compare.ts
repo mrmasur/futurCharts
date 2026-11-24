@@ -257,7 +257,8 @@ export const tornado: MarkDefinition = {
     const { layer, table } = ctx.data;
     const { style, theme } = ctx;
     const kf = need(layer, 'key', 'tornado');
-    const sf = layer.encode.color && table.has(layer.encode.color) ? layer.encode.color : undefined;
+    // An empty table has no field names: trust the encoding then.
+    const sf = layer.encode.color && (table.has(layer.encode.color) || table.length === 0) ? layer.encode.color : undefined;
     let items: TornadoItem[];
     let names: [string, string];
     let fields: [string, string];

@@ -95,7 +95,7 @@ export const bumpArea: MarkDefinition = {
       const ds = steps.map((s) => new Date(Number(s)));
       const years = new Set(ds.map((d) => d.getUTCFullYear())).size === S;
       const f = new Intl.DateTimeFormat(undefined, years ? { year: 'numeric', timeZone: 'UTC' } : { month: 'short', year: '2-digit', timeZone: 'UTC' });
-      return (s: string) => f.format(Number(s));
+      return (s: string) => (Number.isFinite(Number(s)) ? f.format(Number(s)) : '—');
     })();
 
     // Layout in px: names on the right, step labels along the bottom.

@@ -6,6 +6,7 @@ import { defineConfig } from '@playwright/test';
  * Reference captures depend on the platform (fonts, antialiasing): one folder per platform.
  */
 const size = (largeur: number, hauteur: number, theme: 'light' | 'dark', dpr: number) => ({
+  testMatch: 'galerie.pw.ts',
   metadata: { largeur, hauteur, theme },
   // Tall on purpose: a chart outside the viewport is not drawn, and small multiples grow downwards.
   use: { viewport: { width: Math.max(largeur, 320), height: 2600 }, deviceScaleFactor: dpr },
@@ -32,6 +33,11 @@ export default defineConfig({
     { name: 'sombre', ...size(800, 480, 'dark', 1) },
     { name: 'mobile', ...size(343, 260, 'light', 2) },
     { name: 'mobile-haut', ...size(375, 520, 'light', 2) },
+    // Hostile data and sizes: crashes only, no capture (tests/visual/robustesse.pw.ts).
+    // Every example hovered, clicked, zoomed and dragged (tests/visual/interactions.pw.ts).
+    { name: 'interactions', testMatch: 'interactions.pw.ts', timeout: 60_000, use: { viewport: { width: 1000, height: 1400 } } },
+    // Fourteen mounts per example, some with huge data: give each test more time than a capture.
+    { name: 'robustesse', testMatch: 'robustesse.pw.ts', timeout: 120_000, use: { viewport: { width: 1300, height: 900 } } },
   ],
   webServer: {
     command: 'npm run dev:test -w @futurcharts/demo',

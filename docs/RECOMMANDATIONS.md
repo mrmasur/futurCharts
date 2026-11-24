@@ -20,8 +20,11 @@ sont dans [REPRISE.md](REPRISE.md) § 4.
   copie du code.
 - **`chart/chart.ts` fait ~2 750 lignes** : mise en page, axes, légende, survol, zoom, lasso, navigateur, timeline,
   transitions, étiquettes. C'est là que les régressions naîtront.
-- **Rien ne teste `Chart` ni les interactions** : le rendu final de chaque exemple est couvert par les tests
-  visuels (depuis le 2026-11-23), mais survol, zoom, lasso et glisser restent vérifiés à la main.
+- **Rien ne teste `Chart` en Node** : depuis le 2026-11-24, chaque exemple est couvert par les captures, par un
+  test de robustesse (données et tailles hostiles) et par un test d'interactions (survol, clic, zoom, glisser) ;
+  le lasso et le tableur restent vérifiés à la main. Exemples sans infobulle détectée sur la grille du test :
+  jauges, compteur, Renko fin, nuage connecté, quantile-quantile, nuage 3D, arbre de bas en haut, distribution en
+  traits (à regarder : certaines n'en ont pas, d'autres sont trop clairsemées pour la grille).
 - **Perte de contexte WebGL non gérée** : sur mobile ou après une mise en veille, un contexte perdu laisse tous
   les graphiques de la page vides (un seul contexte partagé : une perte touche tout).
 - **Bundle monolithique** : ~125 Ko gzip pour le cœur, même pour une simple courbe.
@@ -76,8 +79,8 @@ La branche `graphiques-2026-11-23` porte les tests visuels et 103 exemples nouve
 7. **Tests unitaires de `Chart` sans GPU** : un `Renderer` factice (il suffit d'implémenter l'interface et
    d'enregistrer les `Frame`) passé par `options.renderer`, avec jsdom ou happy-dom. Permet de tester mise en page,
    légende, événements et transitions en Node.
-8. **Validation de la spec** : générer un JSON Schema depuis `spec/types.ts` (ts-json-schema-generator) et
-   l'exposer. Indispensable si une IA ou un éditeur écrit des specs, et utile pour des messages d'erreur clairs.
+8. ~~Validation de la spec~~ : **fait le 2026-11-24** (`@futurcharts/core/schema.json`, `npm run schema`). Reste :
+   valider aussi les options de style par marque, et offrir une fonction `validateSpec` qui n'impose pas ajv. Indispensable si une IA ou un éditeur écrit des specs, et utile pour des messages d'erreur clairs.
 9. **Lint et format** (ESLint + Prettier, ou Biome) avec une règle qui interdit d'importer `webgl2/` hors de
    `render/` (`no-restricted-imports`) : la règle WebGPU devient vérifiée par la machine.
 10. **Bundle à la carte** : exposer chaque famille de marques (`registerAdvancedMarks()`…) pour qu'une application

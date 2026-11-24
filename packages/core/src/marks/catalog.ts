@@ -448,7 +448,7 @@ export const motion: MarkDefinition = {
             const ds = (frameKeys as number[]).map((v) => new Date(v));
             const yearly = ds.every((d) => d.getMonth() === 0 && d.getDate() === 1);
             const f = new Intl.DateTimeFormat(undefined, yearly ? { year: 'numeric' } : { month: 'short', year: 'numeric' });
-            return (v: number | string) => f.format(v as number);
+            return (v: number | string) => (Number.isFinite(v as number) ? f.format(v as number) : '—');
           })()
         : (v: number | string) => String(v);
     const frames = frameKeys.map(fmt);
@@ -627,7 +627,7 @@ export const pivot: MarkDefinition = {
             const ds = (colKeys as number[]).map((v) => new Date(v));
             const oneYear = ds.every((d) => d.getFullYear() === ds[0].getFullYear());
             const f = new Intl.DateTimeFormat(undefined, oneYear ? { month: 'short' } : { month: 'short', year: '2-digit' });
-            return (v: number | string) => f.format(v as number);
+            return (v: number | string) => (Number.isFinite(v as number) ? f.format(v as number) : '—');
           })()
         : (v: number | string) => String(v);
     const colIndex = new Map(colKeys.map((k, i) => [String(k), i]));

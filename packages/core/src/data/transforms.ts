@@ -175,7 +175,8 @@ export function applyTransform(table: Table, t: TransformSpec): Table {
         if (v > hi) hi = v;
       }
       if (lo > hi) return output(table, { bin_start: [], bin_end: [], bin_mid: [], count: [] });
-      const step = t.step ?? niceStep(hi - lo || 1, t.maxbins ?? 20);
+      // A fixed step on data far larger than expected would make millions of bins: fall back to a fitted step.
+      const step = t.step && (hi - lo) / t.step <= 10000 ? t.step : niceStep(hi - lo || 1, t.maxbins ?? 20);
       const start = Math.floor(lo / step) * step;
       const n = Math.max(1, Math.floor((hi - start) / step) + 1);
       const cols: Record<string, Cell[]> = Object.fromEntries((t.groupby ?? []).map((f) => [f, []]));

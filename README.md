@@ -7,7 +7,9 @@ npm install
 npm run dev        # démo sur http://localhost:5273
 npm test
 npm run test:visual   # chaque exemple de la galerie comparé à sa capture de référence
-npm run verif         # typecheck, tests, build et suite visuelle d'un coup, avant une fusion
+npm run test:robustesse      # chaque exemple avec des données vides, trouées, énormes… : rien ne plante
+npm run test:interactions    # chaque exemple survolé, cliqué, zoomé : sans erreur
+npm run verif         # tout d'un coup, avant une fusion
 npm run typecheck
 npm run build      # dist/ de chaque paquet
 ```
@@ -86,6 +88,17 @@ c.on('click', ({ items }) => console.log(items));
 ```
 
 Le builder ne produit qu'une `ChartSpec`. Tout ce qu'il exprime peut s'écrire directement en JSON.
+
+Une spec écrite par un éditeur ou une IA se valide avant d'être dessinée, avec le schéma JSON fourni
+(généré depuis les types ; les options de style des marques n'y sont pas vérifiées) :
+
+```ts
+import Ajv from 'ajv';
+import schema from '@futurcharts/core/schema.json';
+
+const validate = new Ajv({ allErrors: true, strict: false }).compile(schema);
+if (!validate(spec)) console.warn(validate.errors); // « must NOT have additional properties »…
+```
 
 ## Architecture
 

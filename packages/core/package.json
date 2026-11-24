@@ -9,10 +9,12 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    }
+    },
+    "./schema.json": "./schema/chart-spec.schema.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "schema"
   ],
   "sideEffects": false
 }

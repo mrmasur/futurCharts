@@ -371,7 +371,9 @@ export const pictorial: MarkDefinition = {
     const kf = need(layer, 'key', 'pictorial');
     const vf = layer.encode.value ?? need(layer, 'x', 'pictorial');
     const items = totals(table, kf, vf).filter((d) => d.value > 0);
-    const unit = style.unit > 0 ? style.unit : 1;
+    // At most a few hundred symbols per row: a bigger value makes each symbol worth more (the caption says how much).
+    const top = Math.max(0, ...items.map((d) => d.value));
+    const unit = Math.max(style.unit > 0 ? style.unit : 1, top / 200);
     const [px, py] = ctx.pixel;
     const W = 1 / px;
     const H = 1 / py;
