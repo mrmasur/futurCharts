@@ -114,6 +114,10 @@ Dans l'ordre de valeur pour une application de BI :
 
 ## Pièges connus
 
+- **Instabilité vue une fois** (2026-11-24) : « Pyramide des âges » en `mobile-haut` a différé de 19 % des pixels
+  lors d'une passe complète, puis a passé 80 fois sur 80 en répétition. Si cela revient, regarder l'image obtenue
+  dans `tests/visual/resultats/` : une animation d'entrée inachevée est le suspect le plus probable.
+
 - Un wrapper ne met à jour le graphique que si l'objet `spec` est **remplacé** : `useMemo` en React,
   `shallowRef` en Vue. Une spec reconstruite à chaque rendu recompile le graphique à chaque rendu.
 - Le conteneur d'un graphique doit avoir une hauteur, sinon il fait 0 px.
