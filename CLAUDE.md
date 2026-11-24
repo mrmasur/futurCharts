@@ -55,7 +55,7 @@ Mettre ces documents à jour quand un chantier avance.
   textes) : `#/galerie` en vignettes vivantes par famille avec recherche, `#/demo/<nom>` en page détail. Chaque
   nouveau type de graphique y reçoit un exemple (`library.ts` : `entries` et `GROUPS`). Depuis le 2026-11-23 un
   nouvel exemple va dans `apps/demo/src/examples/<famille>.ts`.
-- **État au 2026-11-23** : la branche `graphiques-2026-11-23` (non fusionnée dans `main`) porte les tests visuels,
+- **État au 2026-11-24** : la branche `graphiques-2026-11-23`, fusionnée dans `main` le 2026-11-24, a apporté les tests visuels,
   50 marques et 103 exemples nouveaux (217 en tout), le double axe (`scales.secondary`) et un contrat des marques
   complété (`MarkLabel.rotate` / `ellipsis`, `BuiltMark.hover`, `legendRamp`). Reste à faire, dans l'ordre :
   `docs/RECOMMANDATIONS.md` § Priorité 0.

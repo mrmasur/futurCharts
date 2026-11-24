@@ -8,9 +8,9 @@ Le [README](../README.md) reste la référence fonctionnelle (ce que la spec sai
 État au 2026-11-23 : 30 commits sur `main`, tests, typecheck et build au vert. Le projet est repris par un autre
 compte **sur le même Mac**, dans le même dossier (`~/Documents/futurCharts`) : rien à cloner ni à installer.
 Reprise vérifiée le 2026-11-23 par le compte repreneur (80 tests, typecheck, build, galerie : tout passait tel
-quel). Le même jour, sur la branche **`graphiques-2026-11-23`** (non fusionnée dans `main`, à décider) : tests
+quel). Les 23 et 24, sur la branche **`graphiques-2026-11-23`** (fusionnée dans `main` le 2026-11-24) : tests
 visuels, puis deux vagues de nouveaux graphiques écrites par des agents en parallèle (50 marques, 103 exemples,
-double axe, contrat des marques complété). Les chiffres ci-dessous sont ceux de cette branche.
+double axe, contrat des marques complété), puis robustesse, accessibilité, textes traduisibles et performances.
 Aucun dépôt distant n'est configuré (`git remote -v` est vide) : c'est la seule copie du code.
 
 ## 1. Ce qu'est futurCharts

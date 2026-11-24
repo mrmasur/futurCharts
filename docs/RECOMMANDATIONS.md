@@ -32,10 +32,12 @@ sont dans [REPRISE.md](REPRISE.md) § 4.
 
 ## Priorité 0 — refermer la journée du 2026-11-23
 
-La branche `graphiques-2026-11-23` porte les tests visuels et 103 exemples nouveaux ; elle n'est pas fusionnée.
+La branche `graphiques-2026-11-23` (tests visuels, 103 exemples nouveaux, robustesse, accessibilité) a été
+fusionnée dans `main` le 2026-11-24, à la demande de l'utilisateur, sans tour de la galerie à la main.
 
-- **Décider de la fusion dans `main`** après avoir parcouru la galerie (les captures ne voient pas le survol, le
-  zoom ni les animations : aucune des nouvelles marques n'a été essayée à la main).
+- **Parcourir la galerie à la main** : survol, clics, zoom et animations des 103 nouveaux exemples ne sont
+  vérifiés que par les tests automatiques (`test:interactions`), aucune des nouvelles marques n'a été essayée à
+  la main.
 - **Passe de finition** : huit défauts corrigés le 2026-11-24 (Likert, Dorling Europe et anneaux d'activité en
   sombre ; noms du Voronoï ; vide de l'arbre de décomposition ; densité 2D au bord ; puces et planning des salles
   en mobile). Pas de relecture complète des 103 exemples ajoutés. Défauts encore vus : matrice de flux et
