@@ -215,6 +215,51 @@ test.describe('perte du contexte WebGL', () => {
       expect(errors).toEqual([]);
     });
   }
+
+  test('une sélection au lasso survit à la perte du contexte', async ({ page }) => {
+    const errors = watchErrors(page);
+    await page.addInitScript(() => {
+      const original = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, type: string, ...rest: unknown[]) {
+        const context = (original as (...a: unknown[]) => unknown).call(this, type, ...rest);
+        if (type === 'webgl2' && context) ((window as unknown as { __gl: unknown[] }).__gl ??= []).push(context);
+        return context;
+      } as typeof original;
+    });
+    const box = await open(page, 'points-sur-une-carte-du-monde');
+    // A wide lasso over the middle of the map.
+    const cx = box.x + box.width * 0.5;
+    const cy = box.y + Math.min(box.height, 480) * 0.55;
+    await page.mouse.move(cx - 220, cy - 110);
+    await page.mouse.down();
+    for (const [dx, dy] of [[220, -110], [220, 110], [-220, 110], [-220, -110]]) await page.mouse.move(cx + dx, cy + dy, { steps: 8 });
+    await page.mouse.up();
+    await page.mouse.move(box.x + box.width + 40, box.y + 10);
+    await page.waitForTimeout(300);
+    type Selectable = { getSelection(): { count: number }; on(t: 'select', h: (p: { count: number }) => void): void; requestRender(): void };
+    const count = () => page.evaluate(() => (window.__graphiques![0] as Selectable).getSelection().count);
+    const selected = await count();
+    expect(selected, 'le lasso n’a rien sélectionné').toBeGreaterThan(0);
+    await page.evaluate(() => {
+      const w = window as unknown as { __gl: WebGL2RenderingContext[]; __lose: WEBGL_lose_context[]; __select: unknown[] };
+      w.__lose = w.__gl.map((gl) => gl.getExtension('WEBGL_lose_context')!);
+      w.__select = [];
+      (window.__graphiques![0] as Selectable).on('select', (p) => w.__select.push(p));
+    });
+    const before = await pixels(page);
+
+    await page.evaluate(() => (window as unknown as { __lose: WEBGL_lose_context[] }).__lose.forEach((e) => e.loseContext()));
+    await page.waitForTimeout(200);
+    await page.evaluate(() => (window as unknown as { __lose: WEBGL_lose_context[] }).__lose.forEach((e) => e.restoreContext()));
+    await page.waitForTimeout(800);
+    await page.evaluate(() => (window.__graphiques![0] as Selectable).requestRender());
+    await page.waitForTimeout(400);
+
+    expect(await count(), 'la sélection a changé avec la perte du contexte').toBe(selected);
+    expect(await page.evaluate(() => (window as unknown as { __select: unknown[] }).__select), 'un événement select a été émis sans action de l’utilisateur').toEqual([]);
+    expect((await pixels(page)).equals(before), 'la sélection n’est plus dessinée après le retour du contexte').toBe(true);
+    expect(errors).toEqual([]);
+  });
 });
 
 declare global {

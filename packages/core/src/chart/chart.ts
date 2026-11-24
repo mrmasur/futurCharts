@@ -199,13 +199,20 @@ export class Chart implements SyncMember {
 
   /**
    * The GPU device came back after a loss: every batch died with it. Make them again from the same spec,
-   * zoom and focus kept, without a transition (nothing changed for the reader).
+   * zoom, focus and lasso selection kept, without a transition and without a `select` event (nothing
+   * changed for the reader). The same spec builds the same datums in the same order, so the selection
+   * masks still apply.
    */
   private restore(): void {
     if (this.destroyed) return;
+    const masks = this.built.map((b) => b.sel?.mask);
     this.gridBatch = this.renderer.createBatch('line');
     this.compile();
     this.morph = undefined;
+    this.built.forEach((b, i) => {
+      const mask = masks[i];
+      if (mask && mask.length === b.mark.hit.n) setLayerSelection(b, mask, this.renderer);
+    });
     this.requestRender();
   }
 
