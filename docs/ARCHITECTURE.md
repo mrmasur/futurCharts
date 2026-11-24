@@ -38,6 +38,12 @@ Points clés :
 
 - **Deux couches par graphique** : un canvas pour le GPU, un canvas 2D par-dessus pour tout le texte. Le texte
   n'est jamais dans les buffers GPU. Les positions des étiquettes sont en espace d'échelle : elles suivent le zoom.
+- **Perte du contexte** (2026-11-24) : le navigateur peut reprendre le contexte WebGL (veille, téléphone à court de
+  mémoire) et le rendre plus tard. Pendant la perte, rien n'est dessiné et chaque graphique garde sa dernière image ;
+  au retour, les shaders sont recompilés et le contrat `Renderer.onRestored` prévient chaque graphique, qui recrée
+  ses batches (`Chart.restore`, même spec, même zoom, sans transition). Un batch d'un contexte perdu est ignoré
+  (`GLBatch.alive`). Un moteur WebGPU branchera son `device.lost` sur le même `onRestored`. Testé dans
+  `tests/visual/interactions.pw.ts` (extension `WEBGL_lose_context`).
 - **Contexte partagé** : `SharedWebGL2Renderer` dessine dans un unique canvas WebGL2 caché (qui ne fait que
   grandir), puis copie l'image dans le canvas 2D du graphique (`drawImage`). Les batches vivent dans ce contexte
   commun ; le graphique les libère lui-même.

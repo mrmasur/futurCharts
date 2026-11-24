@@ -273,6 +273,8 @@ export class Chart implements SyncMember {
   private intersection?: IntersectionObserver;
   private enterProgress = 1;
   private destroyed = false;
+  /** Unsubscribes from the renderer's device restore. */
+  private stopRestore?: () => void;
 
   private constructor(private container: HTMLElement, private options: ChartOptions) {}
 
@@ -306,6 +308,7 @@ export class Chart implements SyncMember {
     this.ctx = this.overlay.getContext('2d')!;
     this.renderer = await createRenderer(gl, this.options.renderer);
     this.gridBatch = this.renderer.createBatch('line');
+    this.stopRestore = this.renderer.onRestored?.(() => this.restore());
 
     const signal = this.abort.signal;
     root.addEventListener('pointermove', (e) => this.onMove(e), { signal });
@@ -350,6 +353,18 @@ export class Chart implements SyncMember {
     this.zoom = { kx: 1, ky: 1, tx: 0, ty: 0 };
     this.userZoomed = false;
     this.compile();
+  }
+
+  /**
+   * The GPU device came back after a loss: every batch died with it. Make them again from the same spec,
+   * zoom and focus kept, without a transition (nothing changed for the reader).
+   */
+  private restore(): void {
+    if (this.destroyed) return;
+    this.gridBatch = this.renderer.createBatch('line');
+    this.compile();
+    this.morph = undefined;
+    this.requestRender();
   }
 
   /** Swap the data, keep everything else (zoom included). */
@@ -518,6 +533,7 @@ export class Chart implements SyncMember {
       leaveGroup(this.syncGroup, this);
     }
     this.destroyed = true;
+    this.stopRestore?.();
     cancelAnimationFrame(this.frame);
     this.abort.abort();
     this.observer?.disconnect();

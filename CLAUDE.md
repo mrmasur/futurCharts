@@ -26,7 +26,10 @@ Mettre ces documents à jour quand un chantier avance.
 - Les paquets sont `sideEffects: false` : aucun import pour effet de bord (`import './x'`), le bundler le supprime.
   Tout enregistrement se fait dans une fonction appelée explicitement (voir `ensureBuiltinMarks`).
 - Pas de mot-clé `ember-addon` dans `@futurcharts/ember` : Ember CLI chargerait le paquet comme un addon v1.
-- **WebGPU doit toujours rester possible.** Aucun concept WebGL hors de `packages/core/src/render/webgl2/`.
+- **WebGPU doit toujours rester possible.** Aucun concept WebGL hors de `packages/core/src/render/webgl2/`
+  (vérifié par `packages/core/test/regles.test.ts`, avec l'absence d'import pour effet de bord et la cohérence des
+  types d'options entre marques). Perte du contexte gérée par `Renderer.onRestored` : tout nouveau batch créé hors
+  de `compile()` doit être recréé dans `Chart.restore`.
   Toute nouvelle primitive passe par `render/types.ts` et `render/layouts.ts`, et doit être traduisible en WebGPU.
 - Un seul contexte WebGL2 partagé par page (`SharedWebGL2Renderer`) : ne jamais revenir à un contexte par graphique
   par défaut, la galerie (19 graphiques) dépasse la limite des navigateurs.

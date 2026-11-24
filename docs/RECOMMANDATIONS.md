@@ -25,8 +25,7 @@ sont dans [REPRISE.md](REPRISE.md) § 4.
   le lasso et le tableur restent vérifiés à la main. Exemples sans infobulle détectée sur la grille du test :
   jauges, compteur, Renko fin, nuage connecté, quantile-quantile, nuage 3D, arbre de bas en haut, distribution en
   traits (à regarder : certaines n'en ont pas, d'autres sont trop clairsemées pour la grille).
-- **Perte de contexte WebGL non gérée** : sur mobile ou après une mise en veille, un contexte perdu laisse tous
-  les graphiques de la page vides (un seul contexte partagé : une perte touche tout).
+- ~~Perte de contexte WebGL non gérée~~ : gérée depuis le 2026-11-24.
 - **Bundle monolithique** : ~125 Ko gzip pour le cœur, même pour une simple courbe.
 - Le développement a été très rapide (une quarantaine de commits en 8 jours, dont 50 marques écrites, sur deux jours, en un après-midi par des agents en parallèle) : beaucoup de fonctionnalités, peu de
   consolidation. Certaines marques (`advanced.ts`, `more.ts`, `shapes.ts`) font 800 à 1 150 lignes.
@@ -63,9 +62,7 @@ La branche `graphiques-2026-11-23` porte les tests visuels et 103 exemples nouve
 2. **CI minimale** — remplacée le 2026-11-24 par des hooks git locaux (`.githooks/`) et `npm run verif`, faute de
    CI. Une vraie CI reste utile le jour où quelqu'un d'autre contribue : `npm ci`, `npm run typecheck`, `npm test`, `npm run build`. Ajouter un
    `.nvmrc` (Node 20) et `"engines"` dans le `package.json` racine.
-3. **Gestion de la perte de contexte** dans `SharedWebGL2Renderer` : écouter `webglcontextlost` /
-   `webglcontextrestored`, recréer `GLCore`, recompiler les shaders, puis demander à chaque graphique de
-   reconstruire ses batches (`compile()`). Tester avec l'extension `WEBGL_lose_context`.
+3. ~~Gestion de la perte de contexte~~ : **faite le 2026-11-24** (`Renderer.onRestored`, voir ARCHITECTURE.md § 1).
 4. ~~Tests visuels de non-régression~~ : **fait le 2026-11-23** (`npm run test:visual`, voir
    [ARCHITECTURE.md](ARCHITECTURE.md) § 6). Reste à les brancher sur la CI (point 2) : les références actuelles
    sont celles de macOS, il faudra en générer pour la plateforme de la CI (Linux), dans un conteneur Playwright.
@@ -81,8 +78,9 @@ La branche `graphiques-2026-11-23` porte les tests visuels et 103 exemples nouve
    légende, événements et transitions en Node.
 8. ~~Validation de la spec~~ : **fait le 2026-11-24** (`@futurcharts/core/schema.json`, `npm run schema`). Reste :
    valider aussi les options de style par marque, et offrir une fonction `validateSpec` qui n'impose pas ajv. Indispensable si une IA ou un éditeur écrit des specs, et utile pour des messages d'erreur clairs.
-9. **Lint et format** (ESLint + Prettier, ou Biome) avec une règle qui interdit d'importer `webgl2/` hors de
-   `render/` (`no-restricted-imports`) : la règle WebGPU devient vérifiée par la machine.
+9. **Lint et format** (ESLint + Prettier, ou Biome). La règle WebGPU, l'absence d'import pour effet de bord et la
+   cohérence des types d'options entre marques sont déjà vérifiées par `packages/core/test/regles.test.ts`
+   (2026-11-24) ; reste le formatage.
 10. **Bundle à la carte** : exposer chaque famille de marques (`registerAdvancedMarks()`…) pour qu'une application
     n'embarque que ce qu'elle utilise, en gardant `ensureBuiltinMarks()` pour le cas « tout ». Mesurer avant et
     après.

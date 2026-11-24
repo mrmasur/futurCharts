@@ -163,6 +163,60 @@ test.describe('les interactions changent vraiment quelque chose', () => {
   });
 });
 
+test.describe('perte du contexte WebGL', () => {
+  // The browser may take the GPU context back (sleep, a phone short of memory) and give it back later.
+  // While it is lost, every chart keeps its last image; once restored, it draws again exactly as before.
+  for (const nom of ['barres-horizontales-triees', 'graphiques-synchronises', 'transition-entre-deux-etats-anneau', 'sankey']) {
+    test(nom, async ({ page }) => {
+      const errors = watchErrors(page);
+      // Keep a handle on every WebGL2 context the page creates, to lose it on purpose.
+      await page.addInitScript(() => {
+        const original = HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, type: string, ...rest: unknown[]) {
+          const context = (original as (...a: unknown[]) => unknown).call(this, type, ...rest);
+          if (type === 'webgl2' && context) ((window as unknown as { __gl: unknown[] }).__gl ??= []).push(context);
+          return context;
+        } as typeof original;
+      });
+      const box = await open(page, nom);
+      await page.mouse.move(box.x + box.width + 40, box.y + 10);
+      await page.waitForTimeout(300);
+      const before = await pixels(page);
+      // The extension must be fetched before the loss: a lost context hands out none.
+      await page.evaluate(() => {
+        const w = window as unknown as { __gl: WebGL2RenderingContext[]; __lose: WEBGL_lose_context[] };
+        w.__lose = w.__gl.map((gl) => gl.getExtension('WEBGL_lose_context')!);
+      });
+      const lose = (how: 'loseContext' | 'restoreContext') =>
+        page.evaluate((h) => {
+          for (const ext of (window as unknown as { __lose: WEBGL_lose_context[] }).__lose) ext[h]();
+        }, how);
+
+      await lose('loseContext');
+      await page.waitForTimeout(200);
+      // Draw while lost: the chart must neither fail nor go blank.
+      await page.evaluate(() => {
+        for (const c of window.__graphiques ?? []) (c as { requestRender(): void }).requestRender();
+      });
+      await page.mouse.move(box.x + box.width / 2, box.y + Math.min(box.height, 400) / 2);
+      await page.mouse.move(box.x + box.width + 40, box.y + 10);
+      await page.waitForTimeout(300);
+      expect((await pixels(page)).equals(before), 'le graphique a perdu son image pendant la perte du contexte').toBe(true);
+
+      await lose('restoreContext');
+      await page.waitForTimeout(800);
+      // Force a fresh GPU frame of every chart: an image kept from before the loss would prove nothing
+      // (hovering only redraws the text layer).
+      await page.evaluate(() => {
+        for (const c of window.__graphiques ?? []) (c as { requestRender(): void }).requestRender();
+      });
+      await page.waitForTimeout(400);
+      expect((await pixels(page)).equals(before), 'le graphique ne se redessine pas à l’identique après le retour du contexte').toBe(true);
+      expect(errors).toEqual([]);
+    });
+  }
+});
+
 declare global {
   interface Window {
     __pret?: boolean;

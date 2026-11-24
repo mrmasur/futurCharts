@@ -19,13 +19,20 @@ const MORPHED: Partial<Record<PrimitiveKind, number[]>> = { rect: [0, 1], point:
 
 class GLBatch implements Batch {
   count = 0;
+  /** Context generation the GL objects belong to: after a restore, older ones are dead and skipped. */
+  readonly generation: number;
   readonly vao: WebGLVertexArrayObject;
   private buffer: WebGLBuffer;
   private prev?: WebGLBuffer;
   /** A previous state is bound (attributes after the layout's own locations). */
   hasPrevious = false;
 
-  constructor(private gl: WebGL2RenderingContext, readonly kind: PrimitiveKind) {
+  constructor(
+    private core: GLCore,
+    readonly kind: PrimitiveKind,
+  ) {
+    this.generation = core.generation;
+    const gl = core.gl;
     const layout = LAYOUTS[kind];
     this.vao = gl.createVertexArray()!;
     this.buffer = gl.createBuffer()!;
@@ -41,17 +48,27 @@ class GLBatch implements Batch {
     gl.bindVertexArray(null);
   }
 
+  private get gl(): WebGL2RenderingContext {
+    return this.core.gl;
+  }
+
+  /** Its GL objects still exist (no context loss since it was made). */
+  get alive(): boolean {
+    return this.generation === this.core.generation && !this.core.lost;
+  }
+
   update(data: Float32Array, count: number): void {
     const gl = this.gl;
+    this.count = count;
+    if (!this.alive) return;
     const stride = LAYOUTS[this.kind].stride;
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
     gl.bufferData(gl.ARRAY_BUFFER, data.subarray(0, count * stride), gl.DYNAMIC_DRAW);
-    this.count = count;
   }
 
   setPrevious(data: Float32Array | null): void {
     const morphed = MORPHED[this.kind];
-    if (!morphed) return;
+    if (!morphed || !this.alive) return;
     const gl = this.gl;
     const layout = LAYOUTS[this.kind];
     const base = layout.attributes.length;
@@ -78,6 +95,9 @@ class GLBatch implements Batch {
   }
 
   destroy(): void {
+    this.count = 0;
+    // Objects of a lost context are already gone: deleting them would only log GL errors.
+    if (!this.alive) return;
     this.gl.deleteBuffer(this.buffer);
     if (this.prev) this.gl.deleteBuffer(this.prev);
     this.gl.deleteVertexArray(this.vao);
@@ -85,26 +105,61 @@ class GLBatch implements Batch {
   }
 }
 
-/** A WebGL2 context with its compiled programs. Draws a frame into its bottom-left W×H pixels. */
+/**
+ * A WebGL2 context with its compiled programs. Draws a frame into its bottom-left W×H pixels.
+ *
+ * The browser may take the context back at any time (sleep, a phone short of memory, a GPU reset) and give
+ * it back later. While it is lost, nothing is drawn; once restored, the programs are compiled again and the
+ * charts are told (`onRestored`) to make their batches again: the old ones belong to a dead context.
+ */
 class GLCore {
   readonly gl: WebGL2RenderingContext;
+  /** Bumped at each restore: batches of an older generation are dead. */
+  generation = 0;
+  lost = false;
   private programs = new Map<PrimitiveKind, Program>();
+  private listeners = new Set<() => void>();
 
   constructor(readonly canvas: HTMLCanvasElement) {
     const gl = canvas.getContext('webgl2', { antialias: true, alpha: true, premultipliedAlpha: true });
     if (!gl) throw new Error('futurCharts: WebGL2 is not available in this browser.');
     this.gl = gl;
-    // Compile every program now, while the chart is being created, rather than in the
-    // middle of its first animated frame (a one-time hitch of several frames otherwise).
+    canvas.addEventListener('webglcontextlost', (e) => {
+      // Without preventDefault the browser never restores the context.
+      e.preventDefault();
+      this.lost = true;
+    });
+    canvas.addEventListener('webglcontextrestored', () => {
+      this.lost = false;
+      this.generation++;
+      this.programs.clear();
+      this.compileAll();
+      for (const listener of [...this.listeners]) listener();
+    });
+    this.compileAll();
+  }
+
+  /**
+   * Compile every program now, while the chart is being created, rather than in the
+   * middle of its first animated frame (a one-time hitch of several frames otherwise).
+   */
+  private compileAll(): void {
     for (const kind of Object.keys(SHADERS) as PrimitiveKind[]) this.program(kind);
   }
 
+  onRestored(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
   createBatch(kind: PrimitiveKind): Batch {
-    return new GLBatch(this.gl, kind);
+    return new GLBatch(this, kind);
   }
 
   /** `width` / `height`: CSS pixels of the chart; `W` / `H`: its device pixels. */
-  draw(frame: Frame, width: number, height: number, dpr: number, W: number, H: number): void {
+  /** False when nothing was drawn (context lost): the caller keeps its previous image. */
+  draw(frame: Frame, width: number, height: number, dpr: number, W: number, H: number): boolean {
+    if (this.lost || this.gl.isContextLost()) return false;
     const gl = this.gl;
     gl.viewport(0, 0, W, H);
     // Clear only this chart's region: a shared canvas is as large as the largest chart.
@@ -119,7 +174,7 @@ class GLCore {
 
     for (const call of frame.calls) {
       const batch = call.batch as GLBatch;
-      if (batch.count === 0) continue;
+      if (batch.count === 0 || !batch.alive) continue;
       const prog = this.program(batch.kind);
       const t = call.transform ?? IDENTITY;
       gl.useProgram(prog.program);
@@ -150,9 +205,12 @@ class GLCore {
     }
     gl.bindVertexArray(null);
     gl.disable(gl.SCISSOR_TEST);
+    return true;
   }
 
   destroy(): void {
+    this.listeners.clear();
+    if (this.lost) return;
     for (const p of this.programs.values()) this.gl.deleteProgram(p.program);
     this.programs.clear();
   }
@@ -226,12 +284,18 @@ export class WebGL2Renderer implements Renderer {
     this.core.draw(frame, this.width, this.height, this.dpr, this.canvas.width, this.canvas.height);
   }
 
+  onRestored(listener: () => void): () => void {
+    return this.core.onRestored(listener);
+  }
+
   destroy(): void {
     this.core.destroy();
   }
 }
 
 let shared: GLCore | undefined;
+/** Charts on the shared context, told when it comes back (or is replaced by a new one). */
+const sharedListeners = new Set<() => void>();
 
 /**
  * All charts of the page share one WebGL2 context. Browsers cap the number of
@@ -248,12 +312,20 @@ export class SharedWebGL2Renderer implements Renderer {
   private dpr = 1;
 
   constructor(readonly canvas: HTMLCanvasElement) {
-    if (!shared || shared.gl.isContextLost()) shared = new GLCore(document.createElement('canvas'));
+    if (!shared) {
+      shared = new GLCore(document.createElement('canvas'));
+      shared.onRestored(() => sharedListeners.forEach((l) => l()));
+    }
     this.target = canvas.getContext('2d')!;
   }
 
   private get core(): GLCore {
     return shared!;
+  }
+
+  onRestored(listener: () => void): () => void {
+    sharedListeners.add(listener);
+    return () => sharedListeners.delete(listener);
   }
 
   resize(width: number, height: number, dpr: number): void {
@@ -277,7 +349,8 @@ export class SharedWebGL2Renderer implements Renderer {
       source.width = Math.max(source.width, W);
       source.height = Math.max(source.height, H);
     }
-    this.core.draw(frame, this.width, this.height, this.dpr, W, H);
+    // Context lost: keep the chart's last image rather than a blank one, until the context comes back.
+    if (!this.core.draw(frame, this.width, this.height, this.dpr, W, H)) return;
     // The frame sits in the bottom-left corner of the shared canvas.
     this.target.clearRect(0, 0, W, H);
     this.target.drawImage(source, 0, source.height - H, W, H, 0, 0, W, H);

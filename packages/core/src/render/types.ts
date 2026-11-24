@@ -88,6 +88,12 @@ export interface Renderer {
   resize(width: number, height: number, dpr: number): void;
   createBatch(kind: PrimitiveKind): Batch;
   render(frame: Frame): void;
+  /**
+   * The GPU took the device back and gave it again (a WebGL context lost then restored after a sleep or on a
+   * busy phone; a WebGPU `device.lost`): every batch is gone. `listener` must create its batches again.
+   * Until then the renderer draws nothing and the chart keeps its last image. Returns an unsubscribe function.
+   */
+  onRestored?(listener: () => void): () => void;
   destroy(): void;
 }
 
