@@ -1160,7 +1160,7 @@ export interface Theme {
     };
   };
   /**
-   * Texts the marks write for the reader (tooltip rows, headers, captions), French by default. Override one
+   * Texts the marks and the chart write for the reader (tooltip rows, headers, captions, screen reader summary, play bar), French by default. Override one
    * (`theme: { texts: { median: 'Median' } }`) or all of them (`englishTexts`). `{name}` is filled at drawing
    * time; keep the same names in a translation. Dates and numbers follow the browser's language instead.
    */
@@ -1429,6 +1429,74 @@ export interface Theme {
     predictedCases: string;
     /** Eight compass points, clockwise from north (wind rose with `compass`). */
     compass: string[];
+
+    // The chart itself, for screen readers (summary, hidden table, keyboard walk) and the play bar.
+
+    /**
+     * What each kind of chart is called, by mark (`bar: 'Barres'`), at the start of the generated summary.
+     * Override one: `theme: { texts: { markNames: { bar: 'Bars' } } }`.
+     */
+    markNames: Record<string, string>;
+    /** Name of a mark missing from `markNames` (registered by an app), or of a chart without layers. */
+    chart: string;
+    /** Several kinds of charts in one: `{list}` the first names, comma-separated, `{last}` the last one. */
+    listAnd: string;
+    /** Language the counts of the summary and the hidden table are written in (`Intl`), and plural rules. */
+    numberLocale: string;
+    /** Summary of a chart showing nothing, after its kind. */
+    noData: string;
+    /** Number of series in the summary: `{n}` the count, `{names}` the first ones. */
+    seriesCount: string;
+    /** One category along the axis, in the summary: `{n}`. */
+    categoryCount: string;
+    /** Several categories, in the summary: `{n}`. */
+    categoriesCount: string;
+    /** One datum, in the summary: `{n}`. */
+    pointCount: string;
+    /** Several datums, in the summary: `{n}`. */
+    pointsCount: string;
+    /** One step of a diagram, in the summary: `{n}`. */
+    stepCount: string;
+    /** Several steps of a diagram, in the summary: `{n}`. */
+    stepsCount: string;
+    /** One link of a diagram, in the summary: `{n}`. */
+    linkCount: string;
+    /** Several links of a diagram, in the summary: `{n}`. */
+    linksCount: string;
+    /** One item of a chart without axes (pie, treemap), in the summary: `{n}`. */
+    itemCount: string;
+    /** Several items of a chart without axes, in the summary: `{n}`. */
+    itemsCount: string;
+    /** A range in the summary (after the field's name, if any): `{from}`, `{to}`. */
+    fromTo: string;
+    /** Caption of the hidden data table when the chart has no title. */
+    tableCaption: string;
+    /** Header of the series column of the hidden table. */
+    tableSeries: string;
+    /** Header of the value column of the hidden table when the field has no label. */
+    tableValue: string;
+    /** What the live region says of the datum reached with the keyboard: `{what}`, `{value}`, `{position}`, `{total}`. */
+    announce: string;
+    /** Role description of the focusable plot zone. */
+    plotArea: string;
+    /** Name of the focusable plot zone: how to walk the data with the keyboard. */
+    keyboardHelp: string;
+    /** The same, after the chart's title: `{title}`, `{help}`. */
+    keyboardHelpTitled: string;
+    /** Name of small multiples without description: `{panels}` their count. */
+    facetSummary: string;
+    /** The same, split by a field: `{panels}`, `{field}`. */
+    facetSummaryBy: string;
+    /** One panel of small multiples: `{n}`. */
+    panelCount: string;
+    /** Several panels of small multiples: `{n}`. */
+    panelsCount: string;
+    /** Name of the play bar's scrubber. */
+    timePosition: string;
+    /** Name of the play bar's button while it plays. */
+    pause: string;
+    /** Name of the play bar's button while it waits. */
+    play: string;
   };
   tooltip: {
     background: string;

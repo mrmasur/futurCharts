@@ -4,6 +4,7 @@
  */
 import type { Timeline } from '../marks/registry';
 import type { Theme } from '../theme/theme';
+import type { ThemeTexts } from '../theme/texts';
 
 export interface PlayBar {
   root: HTMLDivElement;
@@ -24,7 +25,6 @@ export function createPlayBar(parent: HTMLElement, toggle: () => void, seek: (fr
   range.min = '0';
   range.step = 'any';
   range.style.cssText = 'flex:1;min-width:0;';
-  range.setAttribute('aria-label', 'Position dans le temps');
   const label = document.createElement('span');
   label.style.cssText = 'min-width:72px;text-align:right;font-variant-numeric:tabular-nums;';
   root.append(button, range, label);
@@ -36,7 +36,7 @@ export function createPlayBar(parent: HTMLElement, toggle: () => void, seek: (fr
   return { root, button, range, label };
 }
 
-/** Colors after the theme, scrubber length after the timeline. */
+/** Colors and the scrubber's name after the theme, scrubber length after the timeline. */
 export function stylePlayBar(c: PlayBar, theme: Theme, timeline: Timeline): void {
   const { button, range, label } = c;
   button.style.background = theme.palette.categorical[0];
@@ -45,17 +45,18 @@ export function stylePlayBar(c: PlayBar, theme: Theme, timeline: Timeline): void
   label.style.color = theme.text.secondary;
   label.style.font = `600 12px ${theme.font.family}`;
   range.max = String(Math.max(0, timeline.frames.length - 1));
+  range.setAttribute('aria-label', theme.texts.timePosition);
 }
 
 /**
  * Show where the timeline is. Returns the frame index when it differs from `shown`
  * (the label was updated: a `frame` event is due), else null.
  */
-export function updatePlayBar(c: PlayBar, tl: Timeline, shown: number): number | null {
+export function updatePlayBar(c: PlayBar, tl: Timeline, shown: number, texts: ThemeTexts): number | null {
   const t = tl.get();
   if (document.activeElement !== c.range) c.range.value = String(t);
   c.button.textContent = tl.playing ? '❚❚' : '▶';
-  c.button.setAttribute('aria-label', tl.playing ? 'Pause' : 'Lecture');
+  c.button.setAttribute('aria-label', tl.playing ? texts.pause : texts.play);
   const index = Math.min(tl.frames.length - 1, Math.round(t));
   if (index === shown) return null;
   c.label.textContent = tl.frames[index] ?? '';

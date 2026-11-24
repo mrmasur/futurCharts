@@ -101,7 +101,7 @@ export class FacetChart {
     }
     // A figure of figures: each panel is a chart with its own name, table and keyboard walk.
     this.root.setAttribute('role', 'figure');
-    this.root.setAttribute('aria-label', facetLabel(spec, values.length));
+    this.root.setAttribute('aria-label', facetLabel(spec, values.length, theme.texts));
 
     // Shared category order and series colors, from the whole data set.
     const ref = spec.layers.find((l) => l.encode.x && l.encode.y);

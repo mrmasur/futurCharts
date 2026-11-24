@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { Table } from '../src/data/table';
 import { announce, chartKind, chartLabel, chartSummary, dataTable, facetLabel, navGroups, navMove, type A11yInput } from '../src/chart/a11y';
 import type { Built, HoverItem, Picked } from '../src/chart/types';
+import { englishTexts } from '../src/theme/texts';
+import { resolveTheme } from '../src/theme/theme';
 import type { HitData } from '../src/marks/registry';
 import type { Scale } from '../src/scale/scales';
 import type { ChartSpec, LayerSpec } from '../src/spec/types';
@@ -141,6 +143,22 @@ describe('accessibilité : résumé', () => {
     expect(chartLabel({ ...barSpec, description: 'Atlas mène.' }, 'Barres')).toBe('Chiffre d’affaires. Par boutique. Atlas mène');
     expect(chartLabel({}, 'Barres')).toBe('Barres');
     expect(facetLabel({ layers: [], title: 'Ventes', facet: { field: 'r' }, fields: { r: { label: 'Région' } } }, 4)).toBe('Ventes. Petits multiples, 4 panneaux par Région');
+  });
+
+  it('en anglais avec englishTexts : résumé, tableau, annonce et petits multiples', () => {
+    const all = [built(barLayer, [{ key: 'CA', x: [0, 1, 2, 3, 4, 5], value: revenue }])];
+    const o = { ...input(barSpec, all, band(shops)), texts: englishTexts };
+    expect(chartSummary(o)).toBe(`Bars, 6 categories, from 704 k€ (Helios) to ${(4276).toLocaleString('fr-FR')} k€ (Atlas)`);
+    expect(chartKind(['bar', 'line', 'point'], englishTexts)).toBe('Bars, lines and scatter plot');
+    expect(chartKind(['inconnue'], englishTexts)).toBe('Chart');
+    expect(chartSummary({ ...o, built: [] })).toBe('Chart, no data shown');
+    expect(dataTable({ ...o, spec: {} as ChartSpec }, 2)?.caption).toBe('Chart data');
+    const item: HoverItem = { layer: 0, series: 'CA', x: 'Atlas', xLabel: 'Atlas', value: 4276, valueLabel: '4276 k€', color: '#000', row: {} };
+    expect(announce(item, 1, 6, false, englishTexts)).toBe('Atlas: 4276 k€, 1 of 6');
+    expect(facetLabel({ layers: [], facet: { field: 'r' } }, 1, englishTexts)).toBe('Small multiples, 1 panel by r');
+    // One name overridden from a spec, the others kept.
+    const t = resolveTheme({ texts: { markNames: { bar: 'Bâtons' } } }).texts;
+    expect(chartKind(['bar', 'line'], t)).toBe('Bâtons et lignes');
   });
 });
 

@@ -304,3 +304,35 @@ qu'il accepte chaque exemple de la galerie et qu'il refuse les erreurs courantes
 type d'échelle inconnu). Limites : les options de style des marques (`layer.style`) ne sont pas vérifiées par le
 schéma (le générateur ne sait pas lire l'intersection `MarkStyle`), ni les données. Après un changement de
 `spec/types.ts` : `npm run schema`, sinon le test échoue.
+
+## 7. Performances
+
+Banc de mesure : `apps/demo/perf.html` (`src/perf.ts`), à ouvrir dans un onglet **visible** d'un vrai navigateur
+(`npm run dev`, puis `http://localhost:5273/perf.html`, bouton « Lancer », environ une minute ; `?auto` le lance seul,
+`window.__perf` garde les résultats). Un navigateur sans écran dessine WebGL en logiciel : ses chiffres ne valent
+rien, c'est pourquoi ce banc n'est pas dans `npm run verif`.
+
+Mesure du 2026-11-24 (MacBook, GPU Apple M5 via ANGLE / Metal, écran Retina, onglet du navigateur intégré à
+60 images/s), deux passages :
+
+| Scénario | Résultat |
+|---|---|
+| Création des 218 exemples de la galerie, un par un | ~4,8 s en tout, médiane 17 ms (une image) ; les plus lents 100 à 220 ms, liste différente à chaque passage (bruit) |
+| 12 puis 24 graphiques de la galerie redessinés à chaque image | 60 images/s dans les deux cas |
+| Nuage de 100 000 points (4 groupes) | création 85-95 ms, 60 images/s, mise à jour des données 75-100 ms |
+| Nuage de 1 000 000 de points | création ~580 ms, **7 à 10 images/s** (18 sans liseré, 23 à 1 px sans liseré) |
+| Courbe de 100 000 points ; 20 courbes de 10 000 points | création 130-185 ms ; 56-58 et 60 images/s |
+| Densité hexagonale de 500 000 points | création ~150 ms, 60 images/s |
+| Carte de chaleur de 200 × 200 cases ; 2 000 barres ; tableau de 500 lignes | création 17 à 32 ms, 60 images/s |
+
+Lecture :
+
+- **Le rendu n'est pas le goulot jusqu'à quelques centaines de milliers de marques.** Le JavaScript d'une image
+  coûte ~0,5 ms même avec un million de points : la limite est alors le débit du GPU (une instance par point,
+  avec mélange des couleurs), pas le code.
+- **Un million de points reste fluide en mouvement à condition de** retirer le liseré des points
+  (`strokeWidth: 0`, ×2 environ) ou de passer à la densité hexagonale (`hexbin`), qui tient 60 images/s sur
+  500 000 points. Par défaut un point porte un liseré de 2 px, si bien qu'un point de taille 2 couvre ~6 px.
+- Pas d'optimisation faite : rien de mesuré ne le justifiait. Pistes si un jour un besoin de volume l'exige :
+  agrégation GPU (WebGPU, `capabilities.compute`), ou bascule automatique vers la densité au-delà d'un seuil.
+

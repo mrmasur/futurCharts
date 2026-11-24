@@ -750,7 +750,7 @@ export class Chart implements SyncMember {
     const tl = this.timeline;
     const c = this.controls;
     if (!tl || !c) return;
-    const index = updatePlayBar(c, tl, this.shownFrame);
+    const index = updatePlayBar(c, tl, this.shownFrame, this.theme.texts);
     if (index === null) return;
     this.shownFrame = index;
     this.emit('frame', { index, label: tl.frames[index] ?? '' });
@@ -1285,13 +1285,14 @@ export class Chart implements SyncMember {
 
   /** After each compile: the figure's name, the hidden table, and whether the plot is a tab stop. */
   private refreshA11y(): void {
-    const input: A11yInput = { spec: this.spec, built: this.built, cat: this.cat, horizontal: this.horizontal, mode: this.tooltipMode(), describe: (p) => this.describe(p) };
+    const texts = this.theme.texts;
+    const input: A11yInput = { spec: this.spec, built: this.built, cat: this.cat, horizontal: this.horizontal, mode: this.tooltipMode(), describe: (p) => this.describe(p), texts };
     this.root.setAttribute('aria-label', chartLabel(this.spec, chartSummary(input)));
-    renderTable(this.a11y.table, dataTable(input));
+    renderTable(this.a11y.table, dataTable(input), texts);
     this.nav = undefined;
     this.navPos = undefined;
     const walkable = this.spec.interactions?.keyboard !== false && this.built.some((b) => b.data.index >= 0 && b.mark.hit.n > 0);
-    setFocusable(this.a11y.focus, walkable, this.spec.title);
+    setFocusable(this.a11y.focus, walkable, this.spec.title, texts);
   }
 
   /** Arrows walk the datums with the tooltip and the hover marker, Enter clicks, Escape leaves. */
@@ -1318,7 +1319,7 @@ export class Chart implements SyncMember {
     this.shareHover();
     const group = this.nav[pos.g];
     const [item] = this.describe([group.points[pos.i]]);
-    this.a11y.live.textContent = announce(item, pos.i + 1, group.points.length, this.nav.length > 1);
+    this.a11y.live.textContent = announce(item, pos.i + 1, group.points.length, this.nav.length > 1, this.theme.texts);
     this.emit('hover', { items: this.describe(at.picked), x: at.x, y: at.y });
   }
 

@@ -33,7 +33,9 @@ Mettre ces documents à jour quand un chantier avance.
   Toute nouvelle primitive passe par `render/types.ts` et `render/layouts.ts`, et doit être traduisible en WebGPU.
 - Un seul contexte WebGL2 partagé par page (`SharedWebGL2Renderer`) : ne jamais revenir à un contexte par graphique
   par défaut, la galerie (19 graphiques) dépasse la limite des navigateurs.
-- **Performance** (mesurée le 2026-11-17 dans un onglet affiché : 60 i/s pour 12 graphiques redessinés à chaque image) :
+- **Performance** (mesurée le 2026-11-17, puis le 2026-11-24 avec `apps/demo/perf.html` sur GPU Apple M5 : 60 i/s pour 24
+  graphiques redessinés à chaque image, 100 000 points à 60 i/s, 1 000 000 de points à 7-10 i/s, limite du GPU ; détail
+  dans `docs/ARCHITECTURE.md` § 7) :
   un graphique hors écran ne se dessine pas (IntersectionObserver) et son animation d'entrée attend qu'il soit vu ;
   une instance ne couvre que sa propre surface (cf. le quad serré de l'arc) ; les shaders sont compilés à la création
   du contexte ; les marques dépendant de la taille sont construites une seule fois. Mesurer avant d'optimiser :

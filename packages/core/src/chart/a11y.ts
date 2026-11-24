@@ -10,134 +10,27 @@
 import type { Table } from '../data/table';
 import type { Scale } from '../scale/scales';
 import type { ChartSpec, LayerSpec } from '../spec/types';
+import { frenchTexts, fillText, type ThemeTexts } from '../theme/texts';
 import { numberFormatter } from '../util/format';
 import type { Built, HoverItem, Picked } from './types';
 
-/** Rows of the hidden table; the rest is counted ("+ 120 lignes"). */
+/** Rows of the hidden table; the rest is counted (`texts.moreRows`: "+ 120 lignes"). */
 export const MAX_ROWS = 50;
 /** Beyond this many datums, categories are not counted and the table lists datums instead of pivoting them. */
 const COUNT_CAP = 200_000;
 
-/** What a chart kind is called, by mark (French: the library formats in the reader's language, the texts are French). */
-const NAMES: Record<string, string> = {
-  bar: 'Barres',
-  line: 'Lignes',
-  area: 'Aires',
-  point: 'Nuage de points',
-  tick: 'Traits',
-  rule: 'Règles',
-  pie: 'Secteurs',
-  donut: 'Anneau',
-  treemap: 'Carte proportionnelle',
-  sunburst: 'Rayons de soleil',
-  icicle: 'Stalactites',
-  pack: 'Cercles imbriqués',
-  tree: 'Arbre',
-  indentedTree: 'Arbre indenté',
-  decomposition: 'Arbre de décomposition',
-  sankey: 'Diagramme de Sankey',
-  chord: 'Diagramme en cordes',
-  bundle: 'Faisceaux de liens',
-  network: 'Réseau',
-  arcDiagram: 'Diagramme en arcs',
-  flow: 'Diagramme de flux',
-  parsets: 'Ensembles parallèles',
-  heatmap: 'Carte de chaleur',
-  calendar: 'Calendrier',
-  calendarMonth: 'Calendrier du mois',
-  geoshape: 'Carte',
-  mapPie: 'Carte à secteurs',
-  mapBars: 'Carte à barres',
-  tilemap: 'Carte en tuiles',
-  dorling: 'Cartogramme de Dorling',
-  globe: 'Globe',
-  route: 'Itinéraires',
-  candlestick: 'Chandeliers',
-  renko: 'Renko',
-  kagi: 'Kagi',
-  kpi: 'Indicateur',
-  gauge: 'Jauge',
-  bullet: 'Graphique à puces',
-  liquid: 'Jauge liquide',
-  led: 'Afficheur',
-  activity: 'Anneaux d’activité',
-  table: 'Tableau',
-  sparktable: 'Tableau de tendances',
-  pivot: 'Tableau croisé',
-  gantt: 'Diagramme de Gantt',
-  schedule: 'Planning',
-  swimlane: 'Couloirs',
-  timeline: 'Frise chronologique',
-  race: 'Course de barres',
-  motion: 'Bulles animées',
-  funnel: 'Entonnoir',
-  funnelCompare: 'Entonnoirs comparés',
-  pyramid: 'Pyramide',
-  waffle: 'Gaufre',
-  pictorial: 'Pictogrammes',
-  parliament: 'Hémicycle',
-  radar: 'Radar',
-  rose: 'Rose des vents',
-  radialBar: 'Barres radiales',
-  radialArea: 'Aire polaire',
-  polarLine: 'Lignes polaires',
-  polarScatter: 'Nuage polaire',
-  polarHeatmap: 'Carte de chaleur polaire',
-  spiral: 'Spirale',
-  violin: 'Violons',
-  raincloud: 'Nuages de pluie',
-  beeswarm: 'Essaim',
-  dotplot: 'Diagramme en points',
-  ridgeline: 'Crêtes',
-  hexbin: 'Hexagones',
-  contour: 'Courbes de niveau',
-  ecdf: 'Fonction de répartition',
-  qq: 'Diagramme quantile-quantile',
-  splom: 'Matrice de nuages',
-  scatter3d: 'Nuage en 3D',
-  surface: 'Surface',
-  venn: 'Diagramme de Venn',
-  upset: 'Intersections (UpSet)',
-  matrix: 'Matrice',
-  confusion: 'Matrice de confusion',
-  cohort: 'Cohortes',
-  wordcloud: 'Nuage de mots',
-  voronoi: 'Diagramme de Voronoï',
-  marimekko: 'Marimekko',
-  variwide: 'Barres de largeur variable',
-  bridge: 'Cascade',
-  variance: 'Écarts',
-  tornado: 'Tornade',
-  likert: 'Échelle de Likert',
-  difference: 'Écart entre deux courbes',
-  fan: 'Éventail',
-  horizon: 'Horizon',
-  spike: 'Pointes',
-  quadrant: 'Quadrants',
-  parallel: 'Coordonnées parallèles',
-  connected: 'Nuage connecté',
-  bumpArea: 'Classement en aires',
-  barRank: 'Classement',
-  barInBar: 'Barres dans les barres',
-  periodBars: 'Barres par période',
-  bubbles: 'Bulles',
-  marginal: 'Nuage et distributions',
-  vector: 'Vecteurs',
-  cycle: 'Cycle',
-};
-
-/** French name of a mark; unknown marks (registered by an app) read as "Graphique". */
-export function markName(mark: string): string {
-  return NAMES[mark] ?? 'Graphique';
+/** Name of a mark in the texts' language; unknown marks (registered by an app) read as `texts.chart` ("Graphique"). */
+export function markName(mark: string, texts: ThemeTexts = frenchTexts): string {
+  return (Object.prototype.hasOwnProperty.call(texts.markNames, mark) ? texts.markNames[mark] : undefined) ?? texts.chart;
 }
 
 /** "Barres", "Barres et lignes", "Barres, lignes et nuage de points". */
-export function chartKind(marks: string[]): string {
-  const names = [...new Set(marks.map(markName))];
-  if (names.length === 0) return 'Graphique';
+export function chartKind(marks: string[], texts: ThemeTexts = frenchTexts): string {
+  const names = [...new Set(marks.map((m) => markName(m, texts)))];
+  if (names.length === 0) return texts.chart;
   const lower = (s: string) => s[0].toLowerCase() + s.slice(1);
   if (names.length === 1) return names[0];
-  return `${[names[0], ...names.slice(1, -1).map(lower)].join(', ')} et ${lower(names[names.length - 1])}`;
+  return fillText(texts.listAnd, { list: [names[0], ...names.slice(1, -1).map(lower)].join(', '), last: lower(names[names.length - 1]) });
 }
 
 /** What the module reads from a chart. */
@@ -150,6 +43,8 @@ export interface A11yInput {
   mode: 'x' | 'nearest';
   /** The chart's own description of datums (same labels and formats as the tooltip). */
   describe: (picked: Picked[]) => HoverItem[];
+  /** The chart theme's texts (French when left out). */
+  texts?: ThemeTexts;
 }
 
 export interface A11yTable {
@@ -182,31 +77,32 @@ function fieldsOf(layer: LayerSpec, horizontal: boolean): { cat?: string; val?: 
 
 /** Generated summary: kind, series, categories (or points and x range), then value range with where the extremes are. */
 export function chartSummary(o: A11yInput): string {
+  const texts = o.texts ?? frenchTexts;
   const layers = dataLayers(o.built);
-  const kind = chartKind(layers.map((b) => b.data.layer.mark));
+  const kind = chartKind(layers.map((b) => b.data.layer.mark), texts);
   const withHits = layers.filter((b) => b.mark.hit.n > 0);
   if (withHits.length === 0) {
     const standalone = layers.find((b) => b.def.standalone);
-    return standalone ? standaloneSummary(kind, standalone, o.spec) : `${kind}, aucune donnée affichée`;
+    return standalone ? standaloneSummary(kind, standalone, o.spec, texts) : `${kind}, ${texts.noData}`;
   }
   const parts = [kind];
   const series: string[] = [];
   for (const b of withHits) for (const s of b.data.series) if (!s.hidden && s.x.length && !series.includes(s.key)) series.push(s.key);
   const multi = series.length > 1;
-  if (multi) parts.push(`${series.length} séries (${listOf(series, 5)})`);
+  if (multi) parts.push(fillText(texts.seriesCount, { n: series.length, names: listOf(series, 5) }));
 
   const n = withHits.reduce((sum, b) => sum + b.mark.hit.n, 0);
   const band = o.cat.type === 'band';
   if (band) {
     const count = n <= COUNT_CAP ? distinctX(withHits).length : undefined;
-    parts.push(count !== undefined ? plural(count, 'catégorie') : plural(n, 'point'));
+    parts.push(count !== undefined ? plural(texts, count, texts.categoryCount, texts.categoriesCount) : plural(texts, n, texts.pointCount, texts.pointsCount));
   } else {
     let lo = Infinity;
     let hi = -Infinity;
     for (const b of withHits) for (const x of b.mark.hit.x) if (Number.isFinite(x)) [lo, hi] = [Math.min(lo, x), Math.max(hi, x)];
     const xName = label(o.spec, fieldsOf(withHits[0].data.layer, o.horizontal).cat);
-    parts.push(plural(n, 'point'));
-    if (lo <= hi) parts.push(`${xName ? `${xName} ` : ''}de ${o.cat.format(lo)} à ${o.cat.format(hi)}`);
+    parts.push(plural(texts, n, texts.pointCount, texts.pointsCount));
+    if (lo <= hi) parts.push(`${xName ? `${xName} ` : ''}${fillText(texts.fromTo, { from: o.cat.format(lo), to: o.cat.format(hi) })}`);
   }
 
   // Extremes, per measure: a dual-axis chart (euros and a percentage) never mixes them.
@@ -221,19 +117,20 @@ export function chartSummary(o: A11yInput): string {
     const [min, max] = o.describe([ext.min, ext.max]);
     const at = (it: HoverItem) => (multi ? `${it.xLabel}, ${it.series}` : it.xLabel);
     const name = groups.size > 1 || !band ? `${label(o.spec, field)} ` : '';
-    parts.push(`${name}de ${min.valueLabel} (${at(min)}) à ${max.valueLabel} (${at(max)})`);
+    parts.push(`${name}${fillText(texts.fromTo, { from: `${min.valueLabel} (${at(min)})`, to: `${max.valueLabel} (${at(max)})` })}`);
   }
   return parts.join(', ');
 }
 
-function standaloneSummary(kind: string, b: Built, spec: ChartSpec): string {
+function standaloneSummary(kind: string, b: Built, spec: ChartSpec, texts: ThemeTexts): string {
   const graph = b.data.layer.graph;
   if (graph && Array.isArray(graph.nodes)) {
-    return `${kind}, ${plural(graph.nodes.length, 'étape')}, ${plural(Array.isArray(graph.edges) ? graph.edges.length : 0, 'lien')}`;
+    const edges = Array.isArray(graph.edges) ? graph.edges.length : 0;
+    return `${kind}, ${plural(texts, graph.nodes.length, texts.stepCount, texts.stepsCount)}, ${plural(texts, edges, texts.linkCount, texts.linksCount)}`;
   }
   const t = b.data.table;
-  if (t.length === 0) return `${kind}, aucune donnée affichée`;
-  const parts = [kind, plural(t.length, 'élément')];
+  if (t.length === 0) return `${kind}, ${texts.noData}`;
+  const parts = [kind, plural(texts, t.length, texts.itemCount, texts.itemsCount)];
   const { key, value } = standaloneFields(b.data.layer, t);
   if (value) {
     const vals = t.column(value).values as Float64Array;
@@ -247,7 +144,7 @@ function standaloneSummary(kind: string, b: Built, spec: ChartSpec): string {
     if (lo >= 0) {
       const fmt = numberFormatter(spec.fields?.[value]?.format);
       const at = (i: number) => (key ? ` (${cell(t, key, i, spec)})` : '');
-      parts.push(`${label(spec, value)} de ${fmt(vals[lo])}${at(lo)} à ${fmt(vals[hi])}${at(hi)}`);
+      parts.push(`${label(spec, value)} ${fillText(texts.fromTo, { from: `${fmt(vals[lo])}${at(lo)}`, to: `${fmt(vals[hi])}${at(hi)}` })}`);
     }
   }
   return parts.join(', ');
@@ -292,8 +189,14 @@ function distinctX(layers: Built[]): number[] {
   return out;
 }
 
-function plural(n: number, word: string): string {
-  return `${n.toLocaleString('fr-FR')} ${word}${n > 1 ? 's' : ''}`;
+const pluralRules = new Map<string, Intl.PluralRules>();
+
+/** `one` or `many` filled with `n` written in `texts.numberLocale`, after that language's plural rules (French: 0 and 1 are singular). */
+function plural(texts: ThemeTexts, n: number, one: string, many: string): string {
+  const locale = texts.numberLocale;
+  let rules = pluralRules.get(locale);
+  if (!rules) pluralRules.set(locale, (rules = new Intl.PluralRules(locale)));
+  return fillText(rules.select(n) === 'one' ? one : many, { n: n.toLocaleString(locale) });
 }
 
 function listOf(items: string[], max: number): string {
@@ -318,7 +221,8 @@ function cell(t: Table, field: string, i: number, spec: ChartSpec): string {
 export function dataTable(o: A11yInput, max = MAX_ROWS): A11yTable | null {
   const layers = dataLayers(o.built);
   const withHits = layers.filter((b) => b.mark.hit.n > 0);
-  const caption = o.spec.title?.trim() || 'Données du graphique';
+  const texts = o.texts ?? frenchTexts;
+  const caption = o.spec.title?.trim() || texts.tableCaption;
   if (withHits.length === 0) {
     const standalone = layers.find((b) => b.def.standalone);
     return standalone ? standaloneTable(standalone, o.spec, caption, max) : null;
@@ -367,8 +271,8 @@ export function dataTable(o: A11yInput, max = MAX_ROWS): A11yTable | null {
   }
   const items = o.describe(picked);
   const multi = new Set(withHits.flatMap((b) => b.data.series.map((s) => s.key))).size > 1;
-  const valName = label(o.spec, ref.val) || 'valeur';
-  const head = multi ? ['Série', catName, valName] : [catName, valName];
+  const valName = label(o.spec, ref.val) || texts.tableValue;
+  const head = multi ? [texts.tableSeries, catName, valName] : [catName, valName];
   const rows = items.map((it) => (multi ? [it.series, it.xLabel, it.valueLabel] : [it.xLabel, it.valueLabel]));
   return { caption, head, rows, more: n - rows.length };
 }
@@ -470,16 +374,16 @@ export function navMove(groups: NavGroup[], pos: NavPos | undefined, key: string
 }
 
 /** What the live region says of the datum reached: "Atlas : 4 276 k€, 1 sur 6" (series first when there are several). */
-export function announce(item: HoverItem, position: number, total: number, multi: boolean): string {
+export function announce(item: HoverItem, position: number, total: number, multi: boolean, texts: ThemeTexts = frenchTexts): string {
   const what = multi ? `${item.series}, ${item.xLabel}` : item.xLabel;
-  return `${what} : ${item.valueLabel}, ${position} sur ${total}`;
+  return fillText(texts.announce, { what, value: item.valueLabel, position, total });
 }
 
 /** Name of small multiples: title, subtitle, then the spec's `description` or "Petits multiples, 4 panneaux par Région". */
-export function facetLabel(spec: ChartSpec, panels: number): string {
+export function facetLabel(spec: ChartSpec, panels: number, texts: ThemeTexts = frenchTexts): string {
   const by = spec.facet ? label(spec, spec.facet.field) : '';
-  const count = `${panels} panneau${panels > 1 ? 'x' : ''}`;
-  return chartLabel(spec, `Petits multiples, ${count}${by ? ` par ${by}` : ''}`);
+  const count = fillText(panels > 1 ? texts.panelsCount : texts.panelCount, { n: panels });
+  return chartLabel(spec, by ? fillText(texts.facetSummaryBy, { panels: count, field: by }) : fillText(texts.facetSummary, { panels: count }));
 }
 
 // ----------------------------------------------------------------------- DOM
@@ -496,13 +400,13 @@ export interface A11yDom {
 }
 
 /** Make the root a figure and add its accessibility elements. */
-export function createA11yDom(root: HTMLElement): A11yDom {
+export function createA11yDom(root: HTMLElement, texts: ThemeTexts = frenchTexts): A11yDom {
   root.setAttribute('role', 'figure');
   const focus = document.createElement('div');
   // Over the plot, transparent, letting the pointer through: only its focus ring ever shows.
   focus.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;pointer-events:none;';
   focus.setAttribute('role', 'application');
-  focus.setAttribute('aria-roledescription', 'zone de tracé');
+  focus.setAttribute('aria-roledescription', texts.plotArea);
   const live = document.createElement('div');
   live.style.cssText = VISUALLY_HIDDEN;
   live.setAttribute('aria-live', 'polite');
@@ -522,10 +426,11 @@ export function placeFocus(el: HTMLElement, plot: { x: number; y: number; width:
 }
 
 /** Turn the keyboard walk on or off: a zone with nothing to walk (or `interactions.keyboard: false`) is not a tab stop. */
-export function setFocusable(el: HTMLElement, on: boolean, title: string | undefined): void {
+export function setFocusable(el: HTMLElement, on: boolean, title: string | undefined, texts: ThemeTexts = frenchTexts): void {
+  el.setAttribute('aria-roledescription', texts.plotArea);
   if (on) {
     el.tabIndex = 0;
-    el.setAttribute('aria-label', `${title ? `${trimEnd(title)} : ` : ''}flèches gauche et droite pour parcourir les données, haut et bas pour changer de série, Entrée pour sélectionner, Échap pour quitter`);
+    el.setAttribute('aria-label', title ? fillText(texts.keyboardHelpTitled, { title: trimEnd(title), help: texts.keyboardHelp }) : texts.keyboardHelp);
     el.removeAttribute('aria-hidden');
   } else {
     el.removeAttribute('tabindex');
@@ -536,7 +441,7 @@ export function setFocusable(el: HTMLElement, on: boolean, title: string | undef
 }
 
 /** Fill the hidden box with the data table (or empty it). */
-export function renderTable(box: HTMLElement, t: A11yTable | null): void {
+export function renderTable(box: HTMLElement, t: A11yTable | null, texts: ThemeTexts = frenchTexts): void {
   if (!t) {
     box.replaceChildren();
     return;
@@ -568,7 +473,7 @@ export function renderTable(box: HTMLElement, t: A11yTable | null): void {
   box.replaceChildren(table);
   if (t.more > 0) {
     const p = document.createElement('p');
-    p.textContent = `+ ${plural(t.more, 'ligne')}`;
+    p.textContent = plural(texts, t.more, texts.moreRow, texts.moreRows);
     box.appendChild(p);
   }
 }

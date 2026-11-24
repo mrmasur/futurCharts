@@ -75,7 +75,8 @@ La branche `graphiques-2026-11-23` porte les tests visuels et 103 exemples nouve
 
 ## Priorité 2 — consolider
 
-6. **Découper `chart.ts`** sans changer de comportement, une fois les tests visuels en place : `layout.ts`
+6. ~~Découper `chart.ts`~~ : **fait le 2026-11-24** (1 262 lignes, modules dans `chart/`, ARCHITECTURE.md § 1). Texte d'origine :
+   découper sans changer de comportement, une fois les tests visuels en place : `layout.ts`
    (mise en page, compaction), `axes.ts`, `legend.ts`, `labels.ts` (placement anti-chevauchement), `interaction.ts`
    (survol, zoom, lasso, glisser), `navigator.ts`, `timeline.ts`, `morph.ts`. Le contrat `Chart` public ne bouge pas.
 7. **Tests unitaires de `Chart` sans GPU** : un `Renderer` factice (il suffit d'implémenter l'interface et
@@ -86,7 +87,9 @@ La branche `graphiques-2026-11-23` porte les tests visuels et 103 exemples nouve
 9. **Lint et format** (ESLint + Prettier, ou Biome). La règle WebGPU, l'absence d'import pour effet de bord et la
    cohérence des types d'options entre marques sont déjà vérifiées par `packages/core/test/regles.test.ts`
    (2026-11-24) ; reste le formatage.
-10. **Bundle à la carte** : exposer chaque famille de marques (`registerAdvancedMarks()`…) pour qu'une application
+10. **Performances** : mesurées le 2026-11-24 (ARCHITECTURE.md § 7), sans goulot à corriger. Refaire la mesure
+    (`perf.html`) après tout changement du rendu ou de `compile()`, et à chaque nouvelle marque lourde.
+11. **Bundle à la carte** : exposer chaque famille de marques (`registerAdvancedMarks()`…) pour qu'une application
     n'embarque que ce qu'elle utilise, en gardant `ensureBuiltinMarks()` pour le cas « tout ». Mesurer avant et
     après.
 
@@ -94,27 +97,29 @@ La branche `graphiques-2026-11-23` porte les tests visuels et 103 exemples nouve
 
 Dans l'ordre de valeur pour une application de BI :
 
-11. **Transitions des lignes et aires**, puis **sortie animée** des données qui disparaissent (aujourd'hui elles
+12. **Transitions des lignes et aires**, puis **sortie animée** des données qui disparaissent (aujourd'hui elles
     disparaissent d'un coup). Même mécanique : deux buffers + `morph`, identité par `keys`. Pour les lignes,
     rééchantillonner les deux états sur les mêmes x avant l'interpolation.
-12. **Lien tableur ↔ catalogue dbt** : colonnes typées et formatées depuis `fieldsFromDbt`.
-13. **Format Arrow** dans `Table.from` (colonnes Arrow → tableaux typés sans copie) : ClickHouse et beaucoup
+13. **Lien tableur ↔ catalogue dbt** : colonnes typées et formatées depuis `fieldsFromDbt`.
+14. **Format Arrow** dans `Table.from` (colonnes Arrow → tableaux typés sans copie) : ClickHouse et beaucoup
     d'outils le produisent.
-14. **Accessibilité** : rien n'est lisible par un lecteur d'écran aujourd'hui (tout est dessiné sur canvas).
+15. ~~Accessibilité~~ : **faite le 2026-11-24** (nom et résumé, tableau caché, clavier ; README « Accessibilité »).
+    Reste : essai avec un vrai lecteur d'écran (VoiceOver, NVDA), parcours clavier des marques sans points (cartes,
+    treemap, Sankey). Texte d'origine : rien n'est lisible par un lecteur d'écran (tout est dessiné sur canvas).
     Ajouter un résumé `aria-label`, un tableau de données caché, et la navigation au clavier entre les points.
-15. **Export SVG / PDF** (PNG existe via `toImage()`).
-16. **Diagrammes de flux** : couloirs (swimlanes), routage orthogonal, édition à la souris.
-17. **Calendrier d'une année en petit** : ajouter une règle `responsive` à son exemple (cases de 5 à 8 px).
+16. **Export SVG / PDF** (PNG existe via `toImage()`).
+17. **Diagrammes de flux** : couloirs et routage orthogonal faits le 2026-11-23 ; reste l'édition à la souris.
+18. **Calendrier d'une année en petit** : ajouter une règle `responsive` à son exemple (cases de 5 à 8 px).
 
 ## Priorité 4 — WebGPU et diffusion
 
-18. **Moteur WebGPU** dans `render/webgpu/`, sondé en premier par `createRenderer('auto')` (`navigator.gpu`), repli
+19. **Moteur WebGPU** dans `render/webgpu/`, sondé en premier par `createRenderer('auto')` (`navigator.gpu`), repli
     sur WebGL2. Les dispositions de `layouts.ts` se traduisent telles quelles en `GPUVertexBufferLayout`. Ouvre le
     calcul GPU (`capabilities.compute`) : binning, densité, hexbin sur des millions de points. Ne le faire que
     quand un besoin de volume le justifie : WebGL2 tient aujourd'hui 60 i/s sur 12 graphiques.
-19. **Publication npm** : réserver le scope `@futurcharts`, versions sémantiques, changelog (changesets), minifier
+20. **Publication npm** : réserver le scope `@futurcharts`, versions sémantiques, changelog (changesets), minifier
     le build publié.
-20. **Site de documentation** : la galerie et Storybook sont déjà presque un site ; les publier (build statique
+21. **Site de documentation** : la galerie et Storybook sont déjà presque un site ; les publier (build statique
     de `apps/demo` et `apps/storybook`).
 
 ## Pièges connus

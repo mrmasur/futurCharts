@@ -1,5 +1,5 @@
 /**
- * Texts the marks write for the reader live in `theme.texts` (French by default, `englishTexts` ready):
+ * Texts the marks and the chart (summary, hidden table, play bar) write for the reader live in `theme.texts` (French by default, `englishTexts` ready):
  * both languages have the same keys and the same `{variables}`, and no mark writes them by hand any more.
  */
 import { readdirSync, readFileSync } from 'node:fs';
@@ -10,6 +10,7 @@ import { englishTexts, fillText, frenchTexts, textVariables } from '../src/theme
 import { darkTheme, lightTheme, resolveTheme } from '../src/theme/theme';
 
 const marks = fileURLToPath(new URL('../src/marks/', import.meta.url));
+const chart = fileURLToPath(new URL('../src/chart/', import.meta.url));
 
 /** The words the marks used to write in French, as they were (inventory of 2026-11-24). */
 const FORBIDDEN = [
@@ -23,6 +24,12 @@ const FORBIDDEN = [
   'Comparaison', 'Amplitude', 'Hauteur', 'Défavorable', 'Favorable', 'Base :', 'Toutes', 'Tout afficher', 'survolez',
   'cliquer', 'Nombre', 'Valeur', 'Volume', 'Période', 'Condition', 'Note', 'Type', 'Points', 'Point ', 'Ligne ', 'Quadrant',
   'max. ', '1 symbole', 'SO', 'NO',
+  // The chart itself (summary, hidden table, keyboard walk, small multiples, play bar), inventory of 2026-11-24.
+  'Graphique', 'aucune donnée', 'séries', 'catégorie', 'catégories', 'étape', 'lien', 'élément', 'Données du graphique',
+  'Série', 'valeur', 'sur', 'par', 'zone de tracé', 'flèches', 'Entrée', 'Échap', 'Petits multiples', 'panneau', 'panneaux',
+  'Position dans le temps', 'Pause', 'Lecture',
+  // Every chart kind's name (`texts.markNames`).
+  ...Object.values(frenchTexts.markNames),
 ];
 
 /** The text of every string literal and template chunk of a source (comments left out). */
@@ -50,8 +57,16 @@ describe('textes des marques', () => {
     expect(resolveTheme({ texts: { compass: englishTexts.compass } }).texts.compass).toEqual(['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']);
   });
 
+  it('un nom de marque se surcharge seul, les autres restent', () => {
+    const t = resolveTheme({ texts: { markNames: { bar: 'Bars' } } }).texts;
+    expect(t.markNames.bar).toBe('Bars');
+    expect(t.markNames.line).toBe('Lignes');
+    expect(lightTheme.texts.markNames.bar).toBe('Barres');
+  });
+
   it('englishTexts a exactement les clés des textes par défaut', () => {
     expect(Object.keys(englishTexts).sort()).toEqual(Object.keys(frenchTexts).sort());
+    expect(Object.keys(englishTexts.markNames).sort()).toEqual(Object.keys(frenchTexts.markNames).sort());
   });
 
   it('les gabarits ont les mêmes {variables} dans les deux langues', () => {
@@ -71,10 +86,13 @@ describe('textes des marques', () => {
     expect(fillText('{toString}', {})).toBe('{toString}');
   });
 
-  it('aucune marque n’écrit plus ces textes en dur', () => {
+  it('aucune marque ni le graphique n’écrivent plus ces textes en dur', () => {
     const offenders: string[] = [];
-    for (const file of readdirSync(marks).filter((f) => f.endsWith('.ts'))) {
-      const strings = literals(readFileSync(join(marks, file), 'utf8'));
+    const files = [marks, chart].flatMap((dir) => readdirSync(dir).filter((f) => f.endsWith('.ts')).map((f) => join(dir, f)));
+    expect(files.length).toBeGreaterThan(20);
+    for (const path of files) {
+      const file = path.slice(path.lastIndexOf('/src/') + 5);
+      const strings = literals(readFileSync(path, 'utf8'));
       for (const word of FORBIDDEN) {
         const re = new RegExp(`(^|[^\\p{L}])${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}])`, 'u');
         const hit = strings.find((s) => re.test(s));
