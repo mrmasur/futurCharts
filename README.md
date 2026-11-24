@@ -7,6 +7,7 @@ npm install
 npm run dev        # démo sur http://localhost:5273
 npm test
 npm run test:visual   # chaque exemple de la galerie comparé à sa capture de référence
+npm run verif         # typecheck, tests, build et suite visuelle d'un coup, avant une fusion
 npm run typecheck
 npm run build      # dist/ de chaque paquet
 ```

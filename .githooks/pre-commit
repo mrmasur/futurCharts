@@ -1,0 +1,7 @@
+#!/bin/sh
+# Before every commit: types and unit tests (about half a minute).
+# The visual suite is too slow for each commit: it runs before a push, or by hand with `npm run verif`.
+# Skip once with `git commit --no-verify` (a commit of work in progress, for instance).
+echo "pre-commit : typecheck et tests unitaires…"
+npm run --silent typecheck || { echo "✘ typecheck en échec : commit refusé (git commit --no-verify pour passer outre)"; exit 1; }
+npm run --silent test || { echo "✘ tests unitaires en échec : commit refusé (git commit --no-verify pour passer outre)"; exit 1; }

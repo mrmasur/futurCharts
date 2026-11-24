@@ -42,6 +42,7 @@ npm test             # vitest, 345 tests, ~1 s
 npm run test:visual  # Playwright : 217 exemples × 4 variantes comparés à leurs captures, ~2 min
 npm run test:visual:update   # accepter le rendu actuel comme nouvelle référence (relire les images)
 npm run typecheck    # tsc sur chaque paquet et chaque app
+npm run verif        # tout d'un coup : typecheck, tests, build, suite visuelle (~3 min) ; avant toute fusion
 npm run build        # dist/ de chaque paquet (vite + tsc)
 npm run stories      # régénère les stories après un nouvel exemple de galerie
 ```
@@ -144,6 +145,9 @@ Elles sont aussi dans `CLAUDE.md`. Chacune a une raison ; la plupart ont été a
   près. Il ne dit pas si le nouveau dessin est bon : c'est en relisant les images changées qu'on le sait.
 - **Une démo par fonctionnalité** : si ce n'est pas dans la galerie, ça n'existe pas pour l'utilisateur, et ce
   n'est pas dans Storybook non plus.
+- **Pas de CI : des hooks git locaux** (`.githooks/`, activés par `npm install`). `pre-commit` refuse un commit si
+  le typecheck ou les tests unitaires échouent (~30 s) ; `pre-push` lance `npm run verif`. `--no-verify` passe
+  outre, à réserver à un travail en cours. Après un clone, `npm install` (ou `npm run prepare`) les active.
 - **Garder `CLAUDE.md` à jour** quand une décision durable est prise : c'est la mémoire du projet pour les sessions
   Claude Code (y compris celles du nouveau compte).
 

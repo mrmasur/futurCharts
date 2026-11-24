@@ -1,0 +1,5 @@
+#!/bin/sh
+# Before every push: the whole verification, visual suite included (about three minutes).
+# Skip once with `git push --no-verify`.
+echo "pre-push : vérification complète (npm run verif)…"
+npm run --silent verif || { echo "✘ vérification en échec : push refusé (git push --no-verify pour passer outre)"; exit 1; }

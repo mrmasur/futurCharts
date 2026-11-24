@@ -7,6 +7,10 @@ Mettre ces documents à jour quand un chantier avance.
 
 - Démo et Storybook écoutent sur le réseau local (`--host`) : accessibles depuis un autre poste par l'IP du Mac.
 - `npm run dev` (démo, port 5273 ; `/wrappers.html` pour React, Vue, Web Component), `npm test`, `npm run typecheck`, `npm run build`.
+- **Vérification sans CI** (2026-11-24) : `npm run verif` enchaîne typecheck, tests, build et suite visuelle (~3 min) :
+  à lancer avant toute fusion dans `main`. Hooks versionnés dans `.githooks/` (activés par `npm install` via
+  `prepare`) : `pre-commit` lance typecheck et tests unitaires, `pre-push` lance `npm run verif`. Ne pas les
+  contourner par `--no-verify` sans le dire à l'utilisateur.
 - **Tests visuels** (faits le 2026-11-23) : `npm run test:visual` (Playwright, ~1 min) compare chaque exemple de la
   galerie à sa capture de référence, en 4 variantes (bureau clair, bureau sombre, 343 × 260, 375 × 520), au pixel près.
   À lancer après tout changement de rendu ; si l'écart est voulu, `npm run test:visual:update` puis **regarder** les

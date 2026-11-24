@@ -57,7 +57,8 @@ La branche `graphiques-2026-11-23` porte les tests visuels et 103 exemples nouve
 
 1. **Sauvegarde** : un dépôt distant privé (ou au minimum une sauvegarde Time Machine du dossier). Il sert aussi de
    support à la CI.
-2. **CI minimale** sur chaque push : `npm ci`, `npm run typecheck`, `npm test`, `npm run build`. Ajouter un
+2. **CI minimale** — remplacée le 2026-11-24 par des hooks git locaux (`.githooks/`) et `npm run verif`, faute de
+   CI. Une vraie CI reste utile le jour où quelqu'un d'autre contribue : `npm ci`, `npm run typecheck`, `npm test`, `npm run build`. Ajouter un
    `.nvmrc` (Node 20) et `"engines"` dans le `package.json` racine.
 3. **Gestion de la perte de contexte** dans `SharedWebGL2Renderer` : écouter `webglcontextlost` /
    `webglcontextrestored`, recréer `GLCore`, recompiler les shaders, puis demander à chaque graphique de
