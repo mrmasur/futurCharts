@@ -27,7 +27,7 @@ import { PRODUCT_MARKS } from './product';
 import { FINANCE_MARKS } from './finance';
 import type { SeriesData } from './prepare';
 import { dashed, pushRect, pushSegment, pushVertex } from './primitives';
-import { buildHit, hasMark, registerMark, type BuildContext, type BuiltMark, type MarkDefinition, type MarkLabel } from './registry';
+import { buildHit, hasMark, registerMark, type BuildContext, type BuiltMark, type DrawPath, type MarkDefinition, type MarkLabel } from './registry';
 
 function normalized(ctx: BuildContext, s: SeriesData, y: Float64Array): { x: Float32Array; y: Float32Array } {
   const n = s.x.length;
@@ -64,6 +64,26 @@ function runs(s: SeriesData): [number, number][] {
   return out;
 }
 
+/** Identity of datum `i` of a series along the category axis: its category, or its x value. */
+const datumKey = (ctx: BuildContext, s: SeriesData, i: number) => String(ctx.x.type === 'band' ? ctx.x.format(s.x[i]) : s.x[i]);
+
+/**
+ * A run of a series drawn as one continuous path of `vertices` vertices (or columns), for
+ * transitions: its identity, and the vertex each datum sits on (a curve adds vertices between two data).
+ */
+function runPath(ctx: BuildContext, s: SeriesData, [a, b]: [number, number], runIndex: number, start: number, count: number, vertices: number): DrawPath {
+  const per = b - a > 1 ? (vertices - 1) / (b - a - 1) : 0;
+  const keys: string[] = [];
+  const at: number[] = [];
+  if (Number.isInteger(per)) {
+    for (let i = a; i < b; i++) {
+      keys.push(datumKey(ctx, s, i));
+      at.push((i - a) * per);
+    }
+  }
+  return { key: `${s.key}\u0000${runIndex}`, start, count, anchors: keys.length ? { keys, at } : undefined };
+}
+
 const slice = (p: { x: Float32Array; y: Float32Array }, [a, b]: [number, number]) => ({ x: p.x.subarray(a, b), y: p.y.subarray(a, b) });
 
 /** Width of one category slot in scale space: the band, or the smallest step on a continuous axis. */
@@ -80,6 +100,10 @@ const line: MarkDefinition = {
     const data: number[] = [];
     const dots: number[] = [];
     const labels: MarkLabel[] = [];
+    // Each curve (a series, or a run of it between two gaps) and each marker keep an identity, for transitions.
+    const paths: DrawPath[] = [];
+    const dotKeys: string[] = [];
+    const stride = LAYOUTS.line.stride;
     for (const s of ctx.data.series) {
       if (s.hidden || s.x.length === 0) continue;
       const p = normalized(ctx, s, s.y1);
@@ -89,7 +113,7 @@ const line: MarkDefinition = {
       const dash = own?.dash ?? style.dash;
       const markers = own?.markers ?? style.markers;
       const color = withAlpha(ctx.color(s, 0), own?.opacity ?? style.opacity ?? 1);
-      for (const run of runs(s)) {
+      for (const [ri, run] of runs(s).entries()) {
         if (run[1] - run[0] === 1) {
           // A lone datum (or one between two gaps) still has to be visible: draw a dot-sized segment.
           const [x, y] = ctx.pos(p.x[run[0]], p.y[run[0]]);
@@ -98,6 +122,7 @@ const line: MarkDefinition = {
         }
         const r = slice(p, run);
         const curve = curvePoints(r.x, r.y, style.curve);
+        const from = data.length / stride;
         if (style.colorByValue && !dash?.length) {
           // Each stretch takes the ramp's color at its height (positions are already 0–1 along y).
           for (let k = 0; k < curve.x.length - 1; k++) {
@@ -107,6 +132,9 @@ const line: MarkDefinition = {
             pushSegment(data, ax, ay, bx, by, withAlpha(ctx.ramp(0.15 + 0.85 * t), style.opacity ?? 1), width);
           }
         } else pushPolyline(ctx, data, curve, color, width, dash);
+        // One segment per step of the curve: a continuous path (dashes, or a segment left out, are not).
+        const count = data.length / stride - from;
+        if (!dash?.length && count > 0 && count === curve.x.length - 1) paths.push(runPath(ctx, s, run, ri, from, count, curve.x.length));
       }
       for (let i = 0; i < s.x.length; i++) {
         const [x, y] = ctx.pos(p.x[i], p.y[i]);
@@ -114,6 +142,7 @@ const line: MarkDefinition = {
         const c = ctx.color(s, i);
         if (markers) {
           dots.push(x, y, Math.max(6, width * 3.5), 0, c[0], c[1], c[2], c[3], ctx.surface[0], ctx.surface[1], ctx.surface[2], 1, 2);
+          dotKeys.push(`${s.key}\u0000${datumKey(ctx, s, i)}`);
         }
         if (style.labels) {
           labels.push({ tx: x, ty: y, text: ctx.format(s.value[i]), align: 'center', baseline: 'bottom', dy: -8, size: 11, color: ctx.theme.text.secondary, series: s.key });
@@ -126,12 +155,15 @@ const line: MarkDefinition = {
       }
     }
     const batch = ctx.renderer.createBatch('line');
-    batch.update(new Float32Array(data), data.length / LAYOUTS.line.stride);
-    const draws = [{ batch }];
+    const segments = new Float32Array(data);
+    batch.update(segments, data.length / stride);
+    const draws: BuiltMark['draws'] = [{ batch, data: segments, paths }];
     if (dots.length) {
       const points = ctx.renderer.createBatch('point');
-      points.update(new Float32Array(dots), dots.length / LAYOUTS.point.stride);
-      draws.push({ batch: points });
+      const markers = new Float32Array(dots);
+      points.update(markers, dots.length / LAYOUTS.point.stride);
+      // A marker whose position could not be drawn would shift the others: no identity then.
+      draws.push(markers.length === dotKeys.length * LAYOUTS.point.stride ? { batch: points, data: markers, keys: dotKeys } : { batch: points });
     }
     return { draws, hit: buildHit(ctx), labels };
   },
@@ -145,11 +177,14 @@ const area: MarkDefinition = {
     const opacity = ctx.data.stacked ? style.stackedOpacity : style.opacity;
     const mesh: number[] = [];
     const lines: number[] = [];
+    // Each ribbon (a series, or a run of it between two gaps) and its outline keep an identity, for transitions.
+    const ribbons: DrawPath[] = [];
+    const outlines: DrawPath[] = [];
     for (const s of ctx.data.series) {
       if (s.hidden || s.x.length < 2) continue;
       const top0 = normalized(ctx, s, s.y1);
       const bottom0 = normalized(ctx, s, s.y0);
-      for (const run of runs(s)) {
+      for (const [ri, run] of runs(s).entries()) {
       if (run[1] - run[0] < 2) continue;
       const top = slice(top0, run);
       const bottom = slice(bottom0, run);
@@ -163,6 +198,7 @@ const area: MarkDefinition = {
         const [x, y] = ctx.pos(c, val);
         pushVertex(mesh, x, y, color);
       };
+      const from = mesh.length / LAYOUTS.mesh.stride;
       for (let i = 0; i < t.x.length - 1; i++) {
         v(t.x[i], t.y[i], ct);
         v(t.x[i + 1], t.y[i + 1], ct);
@@ -171,16 +207,25 @@ const area: MarkDefinition = {
         v(b.x[i + 1], b.y[i + 1], cb);
         v(b.x[i], b.y[i], cb);
       }
-      if (style.line) pushPolyline(ctx, lines, t, base, own?.width ?? style.lineWidth, own?.dash);
+      const count = mesh.length / LAYOUTS.mesh.stride - from;
+      if (count > 0 && b.x.length === t.x.length) ribbons.push(runPath(ctx, s, run, ri, from, count, t.x.length));
+      if (style.line) {
+        const lineFrom = lines.length / LAYOUTS.line.stride;
+        pushPolyline(ctx, lines, t, base, own?.width ?? style.lineWidth, own?.dash);
+        const segments = lines.length / LAYOUTS.line.stride - lineFrom;
+        if (!own?.dash?.length && segments > 0 && segments === t.x.length - 1) outlines.push(runPath(ctx, s, run, ri, lineFrom, segments, t.x.length));
+      }
       }
     }
     const fill = ctx.renderer.createBatch('mesh');
-    fill.update(new Float32Array(mesh), mesh.length / LAYOUTS.mesh.stride);
-    const draws = [{ batch: fill }];
+    const vertices = new Float32Array(mesh);
+    fill.update(vertices, mesh.length / LAYOUTS.mesh.stride);
+    const draws: BuiltMark['draws'] = [{ batch: fill, data: vertices, paths: ribbons }];
     if (lines.length) {
       const stroke = ctx.renderer.createBatch('line');
-      stroke.update(new Float32Array(lines), lines.length / LAYOUTS.line.stride);
-      draws.push({ batch: stroke });
+      const segments = new Float32Array(lines);
+      stroke.update(segments, lines.length / LAYOUTS.line.stride);
+      draws.push({ batch: stroke, data: segments, paths: outlines });
     }
     return { draws, hit: buildHit(ctx) };
   },

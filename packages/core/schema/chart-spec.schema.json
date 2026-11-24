@@ -180,6 +180,9 @@
         },
         {
           "$ref": "#/definitions/Table"
+        },
+        {
+          "$ref": "#/definitions/ArrowTableLike"
         }
       ],
       "description": "Chart input. Columnar is the native form (what ClickHouse/Arrow produce); rows are accepted for convenience and converted once."
@@ -230,6 +233,97 @@
         "length"
       ],
       "additionalProperties": false
+    },
+    "ArrowTableLike": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "fields": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/ArrowFieldLike"
+              }
+            }
+          },
+          "required": [
+            "fields"
+          ],
+          "additionalProperties": false
+        },
+        "numRows": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "schema"
+      ],
+      "additionalProperties": false,
+      "description": "An Apache Arrow table, recognised by its shape so that the core depends on nothing: a `Table` of `apache-arrow` (what `tableFromIPC` returns for a ClickHouse `FORMAT Arrow` / `ArrowStream` response) fits.\n\nHow columns are read:\n- Float64 without null: the Arrow buffer is used as is, no copy. Other integers and floats, Int64 / UInt64   (exact up to 2^53) and Decimal128 / 256 (as doubles) are converted once; nulls become `NaN`.\n- Date32, Date64 and Timestamp (s, ms, µs, ns) become epoch milliseconds, type `time`. A timestamp is an   instant: it is drawn in the browser's time zone, like a `Date`.\n- Utf8, LargeUtf8 and dictionaries of strings become strings; a null is the empty string.\n- Booleans become the strings `true` / `false` (a category, as with rows); declare the field   `type: 'number'` in the catalog to get 0 / 1 instead.\n- Anything else (lists, structs, binary…) is written as text. A type declared in `spec.fields` wins over the Arrow type."
+    },
+    "ArrowFieldLike": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/definitions/ArrowTypeLike"
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "size": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "size"
+          ],
+          "additionalProperties": false,
+          "description": "Field metadata (`label`, `description`, `format`), read by `fromArrow` in `@futurcharts/adapters`."
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "ArrowTypeLike": {
+      "type": "object",
+      "properties": {
+        "typeId": {
+          "type": "number",
+          "description": "Arrow's `Type` enum: 2 Int, 3 Float, 5 Utf8, 6 Bool, 7 Decimal, 8 Date, 10 Timestamp, -1 Dictionary…"
+        },
+        "unit": {
+          "type": "number",
+          "description": "Timestamp: 0 s, 1 ms, 2 µs, 3 ns. Date: 0 days, 1 ms."
+        },
+        "bitWidth": {
+          "type": "number",
+          "description": "Decimal: 128 or 256."
+        },
+        "scale": {
+          "type": "number",
+          "description": "Decimal: digits after the point."
+        },
+        "precision": {
+          "type": "number",
+          "description": "Float: 0 half, 1 single, 2 double."
+        },
+        "dictionary": {
+          "$ref": "#/definitions/ArrowTypeLike",
+          "description": "Dictionary: type of the decoded values."
+        }
+      },
+      "required": [
+        "typeId"
+      ],
+      "additionalProperties": false,
+      "description": "Type of an Arrow field, read by its shape (`apache-arrow`'s `DataType`): no import of the library."
     },
     "FieldSpec": {
       "type": "object",

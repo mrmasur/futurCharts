@@ -11,7 +11,7 @@ export type * from './spec/types';
 export { Table } from './data/table';
 export { applyTransform, applyTransforms } from './data/transforms';
 export type { TransformSpec, AggregateOp } from './data/transforms';
-export type { DataInput, Column, ColumnType, Row } from './data/table';
+export type { DataInput, Column, ColumnType, Row, ArrowTableLike, ArrowFieldLike, ArrowTypeLike, ArrowVectorLike } from './data/table';
 
 export { lightTheme, darkTheme, registerTheme, resolveTheme, themeColor, resolveThemeColors } from './theme/theme';
 export type { Theme, ThemeSpec } from './theme/theme';

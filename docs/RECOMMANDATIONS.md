@@ -103,8 +103,13 @@ Dans l'ordre de valeur pour une application de BI :
     disparaissent d'un coup). Même mécanique : deux buffers + `morph`, identité par `keys`. Pour les lignes,
     rééchantillonner les deux états sur les mêmes x avant l'interpolation.
 13. **Lien tableur ↔ catalogue dbt** : colonnes typées et formatées depuis `fieldsFromDbt`.
-14. **Format Arrow** dans `Table.from` (colonnes Arrow → tableaux typés sans copie) : ClickHouse et beaucoup
-    d'outils le produisent.
+14. ~~Format Arrow~~ : **fait le 2026-11-24**. `Table.from` lit une table Arrow reconnue à sa forme
+    (`ArrowTableLike`, sans dépendance ; Float64 sans null sans copie), `fromArrow` dans `@futurcharts/adapters`
+    décode aussi les octets IPC (`apache-arrow` en dépendance optionnelle, décodeur passé en paramètre) ; exemple
+    « Données Arrow » dans la galerie, README « Apache Arrow ». Une table Arrow se passe telle quelle dans `data`
+    (type `DataInput`), petits multiples compris. Reste : types imbriqués (listes, structures) et un essai sur une
+    vraie réponse ClickHouse. Texte d'origine : colonnes Arrow → tableaux typés sans copie, ClickHouse et beaucoup d'outils le
+    produisent.
 15. ~~Accessibilité~~ : **faite le 2026-11-24** (nom et résumé, tableau caché, clavier ; README « Accessibilité »).
     Reste : essai avec un vrai lecteur d'écran (VoiceOver, NVDA), parcours clavier des marques sans points (cartes,
     treemap, Sankey). Texte d'origine : rien n'est lisible par un lecteur d'écran (tout est dessiné sur canvas).

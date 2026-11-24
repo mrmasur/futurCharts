@@ -23,7 +23,7 @@ import { describeItems, drawHover, inPlot, pickAt, pickAtX, shapeAt, tooltipMode
 import { drawMarkLabels } from './labels';
 import { computeLayout, drawTitles } from './layout';
 import { drawLegend, legendEntries, legendRampOf } from './legend';
-import { snapshot, startTransition, type Snapshot } from './morph';
+import { endTransition, snapshot, startTransition, type Snapshot, type Transition } from './morph';
 import { dragWindow, drawNavigator, navHandleAt, type NavDrag, type NavWindow } from './navigator';
 import { applyResponsive, sameMarks } from './responsive';
 import { drawLasso, lassoPolygon, selectionMasks, selectionPayload, setLayerSelection, type Lasso } from './selection';
@@ -223,7 +223,8 @@ export class Chart implements SyncMember {
     const masks = this.built.map((b) => b.sel?.mask);
     this.gridBatch = this.renderer.createBatch('line');
     this.compile();
-    this.morph = undefined;
+    // No transition: nothing changed for the reader (and its batches would be the only ones made outside `compile`).
+    this.endMorph();
     this.built.forEach((b, i) => {
       const mask = masks[i];
       if (mask && mask.length === b.mark.hit.n) setLayerSelection(b, mask, this.renderer);
@@ -391,8 +392,8 @@ export class Chart implements SyncMember {
   // ------------------------------------------------------------------ compile
 
   private disposeMarks(): void {
-    // Their batches go: a running transition has nothing left to blend.
-    this.morph = undefined;
+    // Their batches go: a running transition has nothing left to blend, and its own batches go with it.
+    this.endMorph();
     for (const b of this.built) {
       for (const d of b.mark.draws) d.batch.destroy();
       for (const d of b.sel?.draws ?? []) d.batch.destroy();
@@ -568,23 +569,25 @@ export class Chart implements SyncMember {
 
   // -------------------------------------------------------------- transitions
 
-  private morph?: { start: number; duration: number; batches: Batch[] };
+  private morph?: { start: number; duration: number; transition: Transition };
   private morphProgress = 1;
 
   /**
    * After a data change, every keyed instance moves from where it was (same
-   * key) and new ones grow from nothing. The GPU blends the two states.
+   * key), new ones grow from nothing, lines and areas are reshaped and what is gone
+   * shrinks and fades. The GPU blends the two states. The batches the transition makes
+   * live until `endMorph` (its end, the next `compile`, a context loss, `destroy`).
    */
   private startMorph(before: Snapshot): void {
     this.endMorph();
     const anim = this.spec.animation;
     if (!before.size || anim === false || prefersReducedMotion()) return;
-    const batches = startTransition(before, this.built);
-    if (batches.length) this.morph = { start: NaN, duration: typeof anim === 'number' ? anim : 650, batches };
+    const transition = startTransition(before, this.built, this.renderer);
+    if (transition) this.morph = { start: NaN, duration: typeof anim === 'number' ? anim : 650, transition };
   }
 
   private endMorph(): void {
-    for (const b of this.morph?.batches ?? []) b.setPrevious?.(null);
+    if (this.morph) endTransition(this.morph.transition);
     this.morph = undefined;
   }
 
@@ -881,13 +884,14 @@ export class Chart implements SyncMember {
       morphT = Math.min(1, (now - this.morph.start) / this.morph.duration);
       if (morphT < 1) animating = true;
     }
-    const morphing = morphT < 1 ? new Set(this.morph!.batches) : undefined;
+    const moving = morphT < 1 ? this.morph!.transition : undefined;
+    const morphing = moving && new Set(moving.batches);
     this.morphProgress = morphT;
     for (const b of this.built) if (b.mark.animate?.(now)) animating = true;
 
     // With a selection, selectable marks are dimmed and the selected ones redrawn on top.
     const dim = this.built.some((b) => b.sel) ? theme.selection.dimOpacity : 1;
-    calls.push(...markCalls(this.built, L, clip, { enter: enterT, reveal, morph: morphT, morphing, dim }));
+    calls.push(...markCalls(this.built, L, clip, { enter: enterT, reveal, morph: morphT, morphing, stand: moving?.stand, ghosts: moving?.ghosts, dim }));
     this.renderer.render({ clearColor: parseColor(theme.background), calls });
     if (this.morph && morphT >= 1) this.endMorph();
     this.drawOverlay(L);

@@ -472,6 +472,7 @@ function printable(spec: ChartSpec): unknown {
     JSON.stringify(spec, (key, value) => {
       if (key === 'theme') return undefined;
       if (key === 'geo') return '[GeoJSON : contours des pays]';
+      if (key === 'data' && typeof value?.getChild === 'function') return `[table Arrow : ${value.numRows} lignes, colonnes ${value.schema.fields.map((f: { name: string }) => f.name).join(', ')}]`;
       if (key === 'data' && Array.isArray(value)) return value.length > 3 ? [...value.slice(0, 3), `… ${value.length - 3} lignes de plus`] : value;
       if (key === 'columns' && value && typeof value === 'object') {
         return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, `[${(v as ArrayLike<unknown>).length} valeurs]`]));

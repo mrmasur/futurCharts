@@ -31,6 +31,12 @@ const LONG = ' — libellé démesuré qui ne tiendra nulle part, ni dans une ba
 /** Rows of a data source, whatever its shape (rows, columns); `undefined` when it is something else. */
 function rowsOf(data: unknown): Row[] | undefined {
   if (Array.isArray(data)) return data as Row[];
+  // An Arrow table: read it back as rows, so that the hostile variants apply to it too.
+  const arrow = data as { schema?: { fields: { name: string }[] }; getChild?: (n: string) => { get(i: number): unknown } | null; numRows?: number } | undefined;
+  if (arrow?.schema && typeof arrow.getChild === 'function') {
+    const names = arrow.schema.fields.map((f) => f.name);
+    return Array.from({ length: arrow.numRows ?? 0 }, (_, i) => Object.fromEntries(names.map((k) => { const v = arrow.getChild!(k)?.get(i); return [k, typeof v === 'bigint' ? Number(v) : v]; })));
+  }
   const columns = (data as { columns?: Record<string, ArrayLike<unknown>> } | undefined)?.columns;
   if (!columns) return undefined;
   const names = Object.keys(columns);

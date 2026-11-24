@@ -7,5 +7,8 @@ export type { EsAggregationOptions } from './elasticsearch';
 export { fromClickHouse, clickHouseColumnType, unwrapClickHouseType } from './clickhouse';
 export type { ClickHouseOptions } from './clickhouse';
 
+export { fromArrow } from './arrow';
+export type { ArrowOptions } from './arrow';
+
 export { fieldsFromDbt, sqlColumnType } from './dbt';
 export type { DbtOptions } from './dbt';

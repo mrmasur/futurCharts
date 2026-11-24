@@ -17,5 +17,13 @@
   "sideEffects": false,
   "dependencies": {
     "@futurcharts/core": "^0.0.1"
+  },
+  "peerDependencies": {
+    "apache-arrow": ">=15"
+  },
+  "peerDependenciesMeta": {
+    "apache-arrow": {
+      "optional": true
+    }
   }
 }

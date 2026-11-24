@@ -340,6 +340,8 @@ function indicesOf(table: Table, field: string, value: string): number[] {
 
 /** The rows `idx` of the input, in the same shape (rows or columns). */
 function subset(data: DataInput, idx: number[]): DataInput {
+  // An Arrow table (or anything else `Table.from` reads): go through the table form.
+  if (!Array.isArray(data) && !(data instanceof Table) && !('columns' in data)) data = Table.from(data);
   if (Array.isArray(data)) return idx.map((i) => data[i] as Row);
   if (data instanceof Table) {
     const columns: Record<string, unknown[]> = {};

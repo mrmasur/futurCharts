@@ -11,3 +11,4 @@ export default meta;
 export const RetentionParCohorte: StoryObj = { name: "Rétention par cohorte", ...entryStory("Rétention par cohorte") };
 export const ArbreDeDecompositionDuChiffreDAffaires: StoryObj = { name: "Arbre de décomposition du chiffre d’affaires", ...entryStory("Arbre de décomposition du chiffre d’affaires") };
 export const EntonnoirCompareParCanal: StoryObj = { name: "Entonnoir comparé par canal", ...entryStory("Entonnoir comparé par canal") };
+export const GraphiquesEnAnglais: StoryObj = { name: "Graphiques en anglais", ...entryStory("Graphiques en anglais") };

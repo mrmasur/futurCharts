@@ -25,7 +25,7 @@ Une librairie de graphiques pour une future application de BI (sources visées :
 - **Un tableur éditable** (`createSheet`, `createWorkbook`) avec formules, en DOM (seule exception au GPU).
 - **Adaptateurs de données** purs (réponses ES / ClickHouse, manifeste dbt → colonnes + catalogue de champs).
 - **Wrappers** React, Vue, Ember, Web Component, tous fondés sur `mountChart` / `mountSpreadsheet` du cœur.
-- **Galerie** (217 exemples, 21 familles) et **Storybook** généré depuis la galerie.
+- **Galerie** (222 exemples, 21 familles) et **Storybook** généré depuis la galerie.
 
 Le projet est écrit en TypeScript strict, en monorepo npm workspaces, sans dépendance d'exécution dans le cœur
 (seul `@futurcharts/geo` dépend de `earcut`).
@@ -38,8 +38,8 @@ Prérequis : Node 20 (testé en 20.20, npm 10.8). Pas de `.nvmrc` pour l'instant
 npm install
 npm run dev          # démo : http://localhost:5273 (gallery.html, wrappers.html, maps.html)
 npm run storybook    # http://localhost:6006
-npm test             # vitest, 378 tests, ~1 s
-npm run test:visual  # Playwright : 217 exemples × 4 variantes comparés à leurs captures, ~2 min
+npm test             # vitest, 438 tests, ~1 s
+npm run test:visual  # Playwright : 222 exemples × 4 variantes comparés à leurs captures, ~2 min
 npm run test:visual:update   # accepter le rendu actuel comme nouvelle référence (relire les images)
 npm run typecheck    # tsc sur chaque paquet et chaque app
 npm run verif        # tout d'un coup : typecheck, tests, build, captures, robustesse, interactions (~6 min) ; avant toute fusion
@@ -159,14 +159,14 @@ Elles sont aussi dans `CLAUDE.md`. Chacune a une raison ; la plupart ont été a
 | Chantier | Fait | Reste |
 |---|---|---|
 | Rendu | WebGL2 partagé, primitives `rect`, `point`, `line`, `arc`, `mesh` | Moteur WebGPU, perte de contexte WebGL, export SVG/PDF |
-| Animation | Entrée, course de barres (`race`), Gapminder (`motion`), transitions rect / point / arc | Transitions des lignes, aires ; sortie animée des données qui disparaissent |
+| Animation | Entrée, course de barres (`race`), Gapminder (`motion`), transitions de toutes les primitives (barres, points, parts, courbes, aires) et sortie animée (2026-11-24) | Pointillés et marques spécialisées sans `MarkDraw.paths` changent d'un coup ; les axes passent directement au nouvel état |
 | Flux | `flow` (pipeline et boîtes), placement en couches, déplacement à la main (pipeline), couloirs (`lanes`) et routage orthogonal (`routing: 'orthogonal'`) en style `boxes` | Édition à la souris en `boxes` (déplacer, ajouter nœuds et liens) ; croisements entre pistes orthogonales non minimisés ; couloirs sans effet en `pipeline` |
 | Galerie | 217 exemples, 21 familles, page détail ; huit défauts de finition corrigés le 2026-11-24 | Relecture complète des 103 exemples ajoutés : seuls les défauts déjà repérés ont été traités (restent la matrice de flux et les polaires en 343 × 260, les noms coupés du pont de résultat, le contour du budget peu lisible dans les écarts) |
 | Axes | Double axe des valeurs (`scales.secondary`), axe du temps par séance, panneaux synchronisés alignés | Graduations des deux axes non alignées automatiquement |
 | Cartes | Fonds, choroplèthe, bulles, routes, globe, Dorling, camemberts, pics, barres | Les symboles `mapPie` / `spike` / `mapBars` grossissent avec le zoom (pas de taille en px dans `arc` / `mesh`) |
 | Tableur | Formules, dates, fusions, mise en forme, classeur, wrappers | Lien avec le catalogue dbt ; tri qui ignore les fusions |
 | Petits écrans | Compaction, `responsive`, petits multiples, calendrier, tactile | Calendrier d'une année trop serré (5-8 px) : cas pour une règle `responsive` |
-| Données | Adaptateurs ES / ClickHouse / dbt, rôles de champ (`importance`, `link`) | Format Arrow |
+| Données | Adaptateurs ES / ClickHouse / dbt / Arrow (`fromArrow`, `Table.from` sur une table Arrow), rôles de champ (`importance`, `link`) | Types Arrow imbriqués (listes, structures) ; essai sur une vraie réponse ClickHouse |
 | Tests | 378 tests unitaires ; captures (868) ; robustesse (données et tailles hostiles) et interactions sur chaque exemple ; schéma JSON de la spec (2026-11-24) | Tests de `Chart` sans GPU, tableur, tableaux de bord ; options de style hors schéma |
 | Distribution | `npm run build` produit `dist/` | Publication npm, CI, licence, changelog |
 

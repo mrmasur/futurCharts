@@ -41,10 +41,17 @@ Mettre ces documents à jour quand un chantier avance.
   du contexte ; les marques dépendant de la taille sont construites une seule fois. Mesurer avant d'optimiser :
   le rendu n'était pas le goulot, c'étaient les calculs de données et la compilation au premier affichage.
 - La spec reste du JSON sérialisable ; ce qui exige une fonction va dans `ChartOptions`.
-- **Animation** (demandée le 2026-11-16) : l'animation d'entrée est faite (`DrawCall.progress`, appliquée dans le
-  vertex shader ; lignes et aplats révélés par le clip). La course de barres (`mark: 'race'`, contrat `Timeline`) et les transitions entre deux états
-  (`Batch.setPrevious` + `DrawCall.morph`, `MarkDraw.keys` ; rect, point et arc) sont faites. Restent : transition des
-  lignes et des aires, et sortie animée des données qui disparaissent. Ne rien concevoir qui l'empêche : chaque donnée doit
+- **Animation** (demandée le 2026-11-16, terminée le 2026-11-24) : l'animation d'entrée (`DrawCall.progress`, appliquée
+  dans le vertex shader ; lignes et aplats révélés par le clip), la course de barres (`mark: 'race'`, contrat `Timeline`)
+  et les transitions entre deux états sont faites pour les cinq primitives (`Batch.setPrevious` + `DrawCall.morph`).
+  Barres, points et parts : identité par `MarkDraw.keys`. Lignes et aires : identité par `MarkDraw.paths` (une
+  courbe = une série ; `chart/paths.ts` rééchantillonne les deux tracés une fois, sur CPU, sur des positions communes,
+  puis un batch de remplacement vit le temps de la transition). Ce qui disparaît se retire dans un batch à part
+  (`Transition.ghosts`) : la barre vers sa base, le point vers zéro, la part là où ses voisines se rejoignent, la
+  courbe en s'estompant, l'aire en se repliant sur sa base. Tout batch de transition est créé dans `startTransition`
+  (jamais par image) et détruit par `Chart.endMorph` (fin, `compile` suivant, perte du contexte, `destroy`). Restent :
+  les lignes en pointillés (`dash`) et les marques des autres fichiers qui dessinent des lignes ou des aires sans
+  déclarer `paths` : elles changent d'un coup. Ne rien concevoir qui l'empêche : chaque donnée doit
   pouvoir garder une identité stable d'un état à l'autre, et l'interpolation doit pouvoir se faire sur GPU
   (deux états de buffer + un uniform de progression), sans reconstruire les batches à chaque image.
 - **Diagrammes de flux** (`mark: 'flow'`, `marks/flow.ts` + `marks/flowLayout.ts`) : placement en couches maison

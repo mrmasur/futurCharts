@@ -11,3 +11,6 @@ export default meta;
 export const TransitionEntreDeuxEtatsBarres: StoryObj = { name: "Transition entre deux états (barres)", ...entryStory("Transition entre deux états (barres)") };
 export const TransitionEntreDeuxEtatsAnneau: StoryObj = { name: "Transition entre deux états (anneau)", ...entryStory("Transition entre deux états (anneau)") };
 export const TransitionEntreDeuxEtatsNuage: StoryObj = { name: "Transition entre deux états (nuage)", ...entryStory("Transition entre deux états (nuage)") };
+export const TransitionEntreDeuxEtatsCourbes: StoryObj = { name: "Transition entre deux états (courbes)", ...entryStory("Transition entre deux états (courbes)") };
+export const TransitionEntreDeuxEtatsAiresEmpilees: StoryObj = { name: "Transition entre deux états (aires empilées)", ...entryStory("Transition entre deux états (aires empilées)") };
+export const SortieAnimeeSeriesQuiDisparaissent: StoryObj = { name: "Sortie animée : séries qui disparaissent", ...entryStory("Sortie animée : séries qui disparaissent") };

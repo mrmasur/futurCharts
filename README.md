@@ -305,9 +305,40 @@ chart(res.data).fields(fields).bar({ x: 'month', y: 'mrr', color: 'plan' }, { st
 | `fromEsHits` | Documents bruts (`hits.hits[]._source`) |
 | `fromEsTable` | Réponses ES\|QL et SQL (`columns` + `values` / `rows`) |
 | `fromClickHouse` | Réponse HTTP ClickHouse avec `meta` ; types déduits, dates et nombres en `Float64Array` |
+| `fromArrow` | Table Apache Arrow décodée, ou octets IPC (fichier ou flux) avec le décodeur en paramètre ; `Float64` sans null lu sans copie |
 | `fieldsFromDbt` | `manifest.json` : colonnes d'un modèle, ou dimensions, mesures et métriques d'un modèle sémantique |
 
 Les libellés et formats se lisent dans dbt via `label`, `description` et `meta.format` (une `FormatSpec`).
+
+### Apache Arrow
+
+ClickHouse sait répondre en Arrow (`FORMAT Arrow` ou `FORMAT ArrowStream`) : les colonnes arrivent déjà en
+tableaux typés, sans analyse de JSON. `apache-arrow` est une dépendance optionnelle de `@futurcharts/adapters`,
+jamais importée par la librairie : on lui passe le décodeur.
+
+```ts
+import { tableFromIPC } from 'apache-arrow';
+import { fromArrow } from '@futurcharts/adapters';
+
+// Côté API : SELECT day, plan, mrr FROM subscriptions FORMAT Arrow
+const bytes = await (await fetch('/api/mrr')).arrayBuffer();
+const res = fromArrow(bytes, { tableFromIPC });         // ou fromArrow(table) si elle est déjà décodée
+chart(res.data).fields(res.fields).line({ x: 'day', y: 'mrr', color: 'plan' });
+```
+
+| Type Arrow | Devient |
+|---|---|
+| Float64 sans null | le tampon Arrow lui-même, sans copie |
+| Int8 à Int64, UInt8 à UInt64, Float16 / 32, Decimal128 / 256 | nombres (`Float64Array`, exacts jusqu'à 2^53), null → `NaN` |
+| Date32, Date64, Timestamp (s, ms, µs, ns) | type `time`, millisecondes depuis 1970 (un instant, affiché dans le fuseau du navigateur) |
+| Utf8, LargeUtf8, dictionnaire de chaînes (`LowCardinality`) | chaînes, null → chaîne vide |
+| Bool | chaînes `true` / `false` (une catégorie) ; `type: 'number'` dans `fields` donne 0 / 1 |
+| Time, Duration | nombres, dans l'unité de la colonne |
+| List, Struct, Map, Binary, Interval… | texte (non interprétés) |
+
+Un type déclaré dans `fields` l'emporte sur le type Arrow. Les métadonnées de champ `label`, `description` et
+`format` (une `FormatSpec` en JSON) alimentent le catalogue. `Table.from(tableArrow)` du cœur lit la même forme,
+reconnue à sa structure (`ArrowTableLike` : `schema.fields`, `getChild`), sans dépendre d'`apache-arrow`.
 
 ## Palettes
 
@@ -487,19 +518,27 @@ La lecture démarre quand le graphique devient visible.
 
 ## Transitions entre deux états de données
 
-`chart.update(spec)` (ou `setData`) avec les mêmes marques : chaque barre, chaque point et chaque part se déplace de son ancien
-état vers le nouveau (position, taille, couleur), les nouveaux poussent de rien, en 650 ms (`animation: 1000`
-pour une autre durée, `false` pour couper). L'identité d'une barre est sa série et sa catégorie, celle d'un point
-sa série et son `encode.key` (sinon son x). Les deux états sont dans deux buffers et le vertex shader les mélange
-selon un uniform de progression (`Batch.setPrevious`, `DrawCall.morph`) : aucun buffer n'est reconstruit pendant
-l'animation. Les filtres des tableaux de bord et le masquage d'une série par la légende en profitent.
+`chart.update(spec)` (ou `setData`) avec les mêmes marques : chaque barre, chaque point, chaque part, chaque courbe et
+chaque aire se déplace de son ancien état vers le nouveau (position, taille, couleur), en 650 ms (`animation: 1000`
+pour une autre durée, `false` pour couper ; immédiat si le système demande moins d'animations). L'identité d'une barre
+est sa série et sa catégorie, celle d'un point sa série et son `encode.key` (sinon son x), celle d'une courbe ou d'une
+aire sa série.
+
+Deux courbes n'ont pas forcément les mêmes dates ni le même nombre de points : les deux tracés sont rééchantillonnés
+une fois sur des positions communes, les données présentes dans les deux états gardant leur identité ; une période
+ajoutée pousse du bout de la courbe. Une série nouvelle est révélée comme à l'entrée.
+
+Ce qui disparaît se retire en douceur : une barre se replie vers sa base, un point rétrécit, une part se referme entre
+ses voisines, une courbe s'estompe, une aire se replie sur sa base.
+
+Les deux états sont dans deux buffers et le vertex shader les mélange selon un uniform de progression
+(`Batch.setPrevious`, `DrawCall.morph`) : aucun buffer n'est reconstruit pendant l'animation. Les filtres des tableaux
+de bord et le masquage d'une série par la légende en profitent.
 
 ## Reste à faire en animation
 
-Les transitions des barres, points et parts et le nuage animé (`motion`) sont faits. Restent les transitions des
-lignes et des aires, et la sortie animée des données qui disparaissent. Même mécanique : une clé d'identité par
-donnée pour apparier deux états, et une interpolation faite sur GPU entre deux états de buffer, pilotée par un
-uniform de progression.
+Les lignes en pointillés et les marques spécialisées qui dessinent des lignes ou des aires sans déclarer leurs tracés
+(`MarkDraw.paths`) changent encore d'un coup. Pendant une transition, les axes passent directement au nouvel état.
 
 ## Diagrammes de flux
 
@@ -554,6 +593,6 @@ Des boîtes reliées pour tracer un processus de bout en bout, embranchements et
 
 ## Pas encore fait
 
-Lecture du format Arrow, moteur WebGPU, publication sur npm,
+Moteur WebGPU, publication sur npm,
 export SVG/PDF, gestion de la perte de contexte WebGL, accessibilité (lecteur d'écran, clavier), CI. Les tirets sont découpés à la construction : un zoom les étire avec les données. Ordre conseillé :
 [docs/RECOMMANDATIONS.md](docs/RECOMMANDATIONS.md).

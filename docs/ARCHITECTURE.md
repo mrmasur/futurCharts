@@ -26,6 +26,7 @@ Chart.compile()                                           chart/chart.ts (orches
      (contexte de la marque, surcharges `highlight` / `overrides` : chart/overrides.ts ; annotations)
   8. légende : entrées et rampe                               chart/legend.ts
   9. instantané de l'état précédent → transition (Batch.setPrevious + morph) si mêmes marques   chart/morph.ts
+     (lignes et aires rééchantillonnées sur des positions communes : chart/paths.ts ; sortants dans des batches à part)
   ▼
 requestRender() → renderNow()  (une image par requestAnimationFrame, rien hors écran)
   – mise en page (titres, légende, axes, compaction si trop petit) → Layout { plot, view, transform }   chart/layout.ts
@@ -55,7 +56,8 @@ pures qui reçoivent ce qu'elles lisent (souvent un objet `…Input`) et sont te
 | `axes.ts` | Lignes de grille (GPU) ; axes x, y et secondaire sur le canvas 2D |
 | `labels.ts` | Ajustement du texte (« … », texte tourné) ; dessin des `MarkLabel` sans chevauchement |
 | `frame.ts` | Clip des marques et `DrawCall` de chaque batch (entrée animée, transition, sélection) |
-| `morph.ts` | Instantané des instances identifiées et état précédent de chaque batch (transitions) |
+| `morph.ts` | Transitions : instantané de ce qui a une identité (`keys`, `paths`), état précédent de chaque batch, batches de remplacement des lignes et des aires, batches des sortants (`startTransition` → `Transition`, `endTransition`) |
+| `paths.ts` | Rééchantillonnage de deux polylignes (ou de deux rubans) sur une même suite de positions, points communs appariés par clé ; état final d'un tracé qui sort |
 | `hover.ts` | Hit-testing (modes `x` et `nearest`, formes), `HoverItem`, dessin du survol |
 | `tooltip.ts` | Contenu et position de l'infobulle |
 | `zoom.ts` | Arithmétique du zoom et du déplacement, axe des valeurs recalé sur la plage visible (`fitY`) |
@@ -181,7 +183,36 @@ Aides d'écriture : `pushRect`, `pushSegment`, `pushVertex` (`marks/primitives.t
    nom avec un autre type dans une autre marque devient `never` : garder le même type ou changer de nom.
 9. Ajouter une ligne au tableau « Types de graphiques » du README.
 
-Pour qu'elle profite des transitions : exposer `perDatum`, `data` et `keys` sur ses draws (rect, point, arc).
+Pour qu'elle profite des transitions : exposer `data` et `keys` sur ses draws d'instances (rect, point, arc ; une clé
+par instance), ou `data` et `paths` sur ses draws de lignes et d'aires (`DrawPath` dans `marks/registry.ts` : une clé
+par courbe, le rang de son premier segment ou sommet, leur nombre, et si possible `anchors`, la clé et le sommet de
+chaque donnée). Une ligne doit alors être faite de segments contigus, une aire d'un ruban de six sommets par pas
+(haut i, haut i+1, bas i+1, haut i, bas i+1, bas i), comme `line` et `area` dans `builtin.ts`.
+
+**Transitions** (terminées le 2026-11-24). À chaque `compile`, `snapshot` garde les données CPU de ce qui a une
+identité ; `startTransition` compare ensuite l'ancien et le nouvel état, calque par calque et draw par draw :
+
+- *instances* (`keys`) : le batch de la marque reçoit son état précédent (`setPrevious`) ; une clé nouvelle part de
+  rien ; une clé disparue va dans un batch à part (`Transition.ghosts`, dessiné sous le calque) dont l'état final est
+  replié et transparent ;
+- *tracés* (`paths`) : les deux polylignes n'ont ni les mêmes x ni le même nombre de points. `resamplePair` les coupe
+  une fois, sur CPU, aux positions de l'une et de l'autre : entre deux données présentes des deux côtés (appariées par
+  clé, donc une donnée garde son identité même si son abscisse change), chaque tracé reçoit les sommets de l'autre,
+  posés sur lui (sa forme ne change pas) ; un bout que seul un état possède fait face au point d'extrémité de l'autre
+  (la courbe pousse de son bout, ou s'y replie). Les deux états, de même taille, vont dans un batch de remplacement
+  (`Transition.stand`) dessiné à la place de celui de la marque pendant la transition ; à la fin, le batch de la marque,
+  jamais touché, redevient le seul dessiné : l'image finale est exactement celle d'un rendu direct. Une série nouvelle
+  va dans un second batch, révélé par le clip comme à l'entrée ; une série disparue s'estompe (une aire se replie
+  aussi sur sa base) ;
+- un calque retiré part en entier, si les calques restants ont gardé leurs marques (sinon c'est un autre graphique).
+
+Aucun buffer n'est envoyé pendant la transition : le vertex shader mélange les deux états selon `u_morph`. Les batches
+de transition sont les seuls créés hors des marques ; `Chart.endMorph` les détruit (fin de la transition, `compile`
+suivant, `destroy`) et `Chart.restore` l'appelle après une perte du contexte (la transition est abandonnée, l'état
+final est dessiné). Au-delà de 400 000 instances ou sommets dans un draw, lignes et aires changent d'un coup.
+Limites : l'ancien état est dessiné dans le nouvel espace d'échelle (les axes changent d'un coup, les marques
+glissent) ; les pointillés et les marques qui ne déclarent pas `paths` changent d'un coup. Tests :
+`test/transitions.test.ts`.
 
 ### Ajouter une primitive GPU
 
@@ -190,7 +221,9 @@ C'est la décision la plus engageante : elle devra exister aussi en WebGPU.
 1. L'ajouter à `PrimitiveKind` (`render/types.ts`) et sa disposition à `LAYOUTS` (`render/layouts.ts`) : float32,
    1 à 4 composantes par attribut, `instanced-quad` ou `triangles`.
 2. Écrire ses shaders dans `render/webgl2/shaders.ts` (compilés à la création du contexte, pas à la volée).
-   Appliquer `u_progress` (entrée) et, si elle se transforme, `u_morph` (liste `MORPHED` dans `renderer.ts`).
+   Appliquer `u_progress` (entrée) et `u_morph` (transition : liste `MORPHED` dans `renderer.ts`, les attributs
+   mélangés sont relus dans un second buffer de même disposition, aux emplacements suivants ; en WebGPU, un second
+   `GPUVertexBufferLayout` de même pas). Les cinq primitives se transforment.
 3. S'assurer que rien d'autre que `webgl2/` ne dépend d'un détail WebGL.
 4. Préférer une primitive paramétrique (comme `arc` : quatre nombres par secteur, rien à retesseller) à de la
    géométrie précalculée : les animations deviennent gratuites.
@@ -241,15 +274,15 @@ destruction. Le wrapper ne fait que relier le cycle de vie et les événements. 
 
 ## 6. Tests
 
-- `npm test` (Vitest, environnement Node, sans DOM) : 378 tests sur la logique pure (données, transformations,
+- `npm test` (Vitest, environnement Node, sans DOM) : 438 tests sur la logique pure (données, transformations,
   échelles, mises en page de flux / arbres / formes, formules et modèle du tableur, adaptateurs, géo).
 - Pas de test unitaire de `Chart` lui-même, ni des wrappers ; ses modules purs (marges, zoom, navigateur,
   sélection, transitions, règles `responsive`, surcharges…) sont testés dans `test/chart-modules.test.ts`. L'audit mobile se fait avec `fcAudit`.
 
 ### Tests visuels (`npm run test:visual`)
 
-Les 217 exemples de la galerie sont la suite de tests du rendu : Playwright (Chromium sans écran, WebGL logiciel)
-ouvre chaque exemple seul et compare une capture à sa référence, au pixel près. 868 comparaisons, environ deux minutes.
+Les 222 exemples de la galerie sont la suite de tests du rendu : Playwright (Chromium sans écran, WebGL logiciel)
+ouvre chaque exemple seul et compare une capture à sa référence, au pixel près. 888 comparaisons, environ deux minutes.
 
 | Élément | Rôle |
 |---|---|

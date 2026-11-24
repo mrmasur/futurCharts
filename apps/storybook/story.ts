@@ -102,6 +102,7 @@ export function printable(spec: ChartSpec): string {
     (key, value) => {
       if (key === 'theme') return undefined;
       if (key === 'geo') return '[GeoJSON]';
+      if (key === 'data' && typeof value?.getChild === 'function') return `[table Arrow : ${value.numRows} lignes, colonnes ${value.schema.fields.map((f: { name: string }) => f.name).join(', ')}]`;
       if (key === 'data' && Array.isArray(value)) return value.length > 3 ? [...value.slice(0, 3), `… ${value.length - 3} lignes de plus`] : value;
       if (ArrayBuffer.isView(value)) return `[${(value as unknown as ArrayLike<unknown>).length} valeurs]`;
       return value;

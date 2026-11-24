@@ -26,3 +26,4 @@ export const SaisonnaliteParJourDeSemaine: StoryObj = { name: "Saisonnalité par
 export const TableauASparklines: StoryObj = { name: "Tableau à sparklines", ...entryStory("Tableau à sparklines") };
 export const TableauAMiniBarresTrie: StoryObj = { name: "Tableau à mini-barres trié", ...entryStory("Tableau à mini-barres trié") };
 export const ClassementEnRubansBumpArea: StoryObj = { name: "Classement en rubans (bump area)", ...entryStory("Classement en rubans (bump area)") };
+export const DonneesArrow: StoryObj = { name: "Données Arrow", ...entryStory("Données Arrow") };

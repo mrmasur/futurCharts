@@ -133,17 +133,20 @@ flat out float v_sw;
 void main() {
   vec4 pt = a_point;
   vec4 fill = a_fill;
+  float sw = a_sw;
   if (u_morph < 1.0) {
     float m = morphK();
     pt.xyz = mix(a_ppoint.xyz, a_point.xyz, m);
     fill = mix(a_pfill, a_fill, m);
+    // A dot that grows from nothing, or shrinks to nothing, takes its outline with it.
+    if (min(a_ppoint.z, a_point.z) <= 0.0) sw *= pt.z / max(max(a_ppoint.z, a_point.z), 1e-6);
   }
   vec2 center = toPx(pt.xy);
   float r = pt.z * 0.5 * (u_progress < 1.0 ? enterK(pt.x) : 1.0);
-  float ext = r + a_sw + 1.0;
+  float ext = r + sw + 1.0;
   vec2 off = (corner() * 2.0 - 1.0) * ext;
   v_p = off; v_r = r; v_shape = a_point.w;
-  v_fill = fill; v_stroke = a_stroke; v_sw = a_sw;
+  v_fill = fill; v_stroke = a_stroke; v_sw = sw;
   gl_Position = toClip(center + off);
 }`;
 
@@ -182,6 +185,9 @@ const LINE_VS = VS_COMMON + /* glsl */ `
 layout(location=0) in vec4 a_seg;
 layout(location=1) in vec4 a_color;
 layout(location=2) in float a_width;
+layout(location=3) in vec4 a_pseg;
+layout(location=4) in vec4 a_pcolor;
+layout(location=5) in float a_pwidth;
 out vec2 v_p;
 flat out vec2 v_a;
 flat out vec2 v_b;
@@ -193,8 +199,17 @@ vec2 snap(vec2 p, float w) {
   return odd ? (floor(p * u_dpr) + 0.5) / u_dpr : round(p * u_dpr) / u_dpr;
 }
 void main() {
-  vec2 a = toPx(a_seg.xy), b = toPx(a_seg.zw);
+  vec4 seg = a_seg;
+  vec4 color = a_color;
   float w = a_width;
+  if (u_morph < 1.0) {
+    // A curve is reshaped: both ends of each segment, its color and its width.
+    float m = morphK();
+    seg = mix(a_pseg, a_seg, m);
+    color = mix(a_pcolor, a_color, m);
+    w = mix(a_pwidth, a_width, m);
+  }
+  vec2 a = toPx(seg.xy), b = toPx(seg.zw);
   if (u_snap > 0.5) { a = snap(a, w); b = snap(b, w); w = max(round(w * u_dpr), 1.0) / u_dpr; }
   vec2 dir = b - a;
   float len = length(dir);
@@ -204,7 +219,7 @@ void main() {
   float ext = hw + 1.0;
   vec2 c = corner();
   vec2 pos = a + d * mix(-ext, len + ext, c.x) + n * (c.y * 2.0 - 1.0) * ext;
-  v_p = pos; v_a = a; v_b = b; v_color = a_color; v_hw = hw;
+  v_p = pos; v_a = a; v_b = b; v_color = color; v_hw = hw;
   gl_Position = toClip(pos);
 }`;
 
@@ -226,10 +241,19 @@ void main() {
 const MESH_VS = VS_COMMON + /* glsl */ `
 layout(location=0) in vec2 a_pos;
 layout(location=1) in vec4 a_color;
+layout(location=2) in vec2 a_ppos;
+layout(location=3) in vec4 a_pcolor;
 out vec4 v_color;
 void main() {
-  v_color = a_color;
-  gl_Position = toClip(toPx(a_pos));
+  vec2 pos = a_pos;
+  vec4 color = a_color;
+  if (u_morph < 1.0) {
+    float m = morphK();
+    pos = mix(a_ppos, a_pos, m);
+    color = mix(a_pcolor, a_color, m);
+  }
+  v_color = color;
+  gl_Position = toClip(toPx(pos));
 }`;
 
 const MESH_FS = FS_COMMON + /* glsl */ `

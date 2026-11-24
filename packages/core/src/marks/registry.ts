@@ -171,9 +171,37 @@ export interface MarkDraw {
   /**
    * Identity of each instance (with `data`): after a data change, an instance
    * moves from the one with the same key in the previous state, and a new key
-   * grows from nothing. Rect, point and arc batches only.
+   * grows from nothing, and a key that is gone leaves (shrinks to its base and fades).
+   * Rect, point and arc batches.
    */
   keys?: string[];
+  /**
+   * The curves of a `line` batch or the ribbons of a `mesh` batch (with `data`): after a data
+   * change each one is reshaped continuously from the path with the same key, a new one is
+   * revealed like at entry, and one that is gone fades out. See `DrawPath`.
+   */
+  paths?: DrawPath[];
+}
+
+/**
+ * One continuous path inside a draw's `data`, with an identity that survives a data change.
+ * - `line` batch: `count` contiguous segments from instance `start` (each one starts where the
+ *   previous ends): a polyline of `count + 1` vertices.
+ * - `mesh` batch: a ribbon of `count` vertices from vertex `start`, six per step, in the order
+ *   top i, top i+1, bottom i+1, top i, bottom i+1, bottom i: `count / 6 + 1` columns.
+ * Instances of the draw that belong to no path simply appear.
+ */
+export interface DrawPath {
+  /** Identity of the path: its series (and the run, when gaps cut a series in several). */
+  key: string;
+  start: number;
+  count: number;
+  /**
+   * The data points along the path: identity of each (its category or x value) and the vertex
+   * (or column) it sits on, in increasing order. A point present before and after keeps its
+   * identity through the transition; without anchors the whole path is matched end to end.
+   */
+  anchors?: { keys: string[]; at: number[] };
 }
 
 /** What a shape mark reports under the pointer (tooltip content). */

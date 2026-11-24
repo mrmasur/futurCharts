@@ -3,6 +3,7 @@
  * entry animation (`progress`, reveal through the clip, fade) and the transition (`morph`).
  */
 import type { Batch, ClipRect, DrawCall } from '../render/types';
+import type { Ghost, StandIn } from './morph';
 import type { Built, Layout } from './types';
 
 /**
@@ -30,6 +31,10 @@ export interface FrameProgress {
   /** Transition between two data states, 0..1, for the batches in `morphing`. */
   morph: number;
   morphing?: Set<Batch>;
+  /** Lines and areas in transition: the batches drawn in place of the mark's own. */
+  stand?: Map<Batch, StandIn[]>;
+  /** What is gone and leaves, per layer index (drawn under that layer; first when the layer is gone too). */
+  ghosts?: Map<number, Ghost[]>;
   /** Opacity of the selectable marks while a selection is shown (1: no selection). */
   dim: number;
 }
@@ -38,7 +43,15 @@ export interface FrameProgress {
 export function markCalls(built: Built[], L: Layout, clip: ClipRect, p: FrameProgress): DrawCall[] {
   const T = L.transform;
   const calls: DrawCall[] = [];
+  const leave = (ghosts: Ghost[] | undefined) => {
+    for (const g of ghosts ?? []) calls.push({ batch: g.batch, transform: T, clip, pixelSnap: g.pixelSnap, progress: 1, morph: p.morph });
+  };
+  if (p.ghosts) {
+    const layers = new Set(built.map((b) => b.data.index));
+    for (const [layer, ghosts] of p.ghosts) if (!layers.has(layer)) leave(ghosts);
+  }
   for (const b of built) {
+    leave(p.ghosts?.get(b.data.index));
     for (const d of b.mark.draws) {
       const opacity = d.perDatum ? p.dim : 1;
       const kind = d.batch.kind;
@@ -50,6 +63,15 @@ export function markCalls(built: Built[], L: Layout, clip: ClipRect, p: FramePro
       }
       const grows = kind === 'rect' || kind === 'arc' || kind === 'point';
       const c = !grows && p.reveal < 1 ? { ...clip, width: clip.width * p.reveal } : clip;
+      const stand = p.stand?.get(d.batch);
+      if (stand) {
+        // A line or an area between two states: both states blended, and the new paths revealed like at entry.
+        const shown = 1 - Math.pow(1 - p.morph, 3);
+        for (const s of stand) {
+          calls.push({ batch: s.batch, transform: T, clip: s.reveal ? { ...c, width: c.width * shown } : c, pixelSnap: d.pixelSnap, opacity, progress: 1, morph: s.reveal ? 1 : p.morph });
+        }
+        continue;
+      }
       calls.push({ batch: d.batch, transform: T, clip: c, pixelSnap: d.pixelSnap, opacity, progress: grows ? p.enter : 1, morph: p.morphing?.has(d.batch) ? p.morph : 1 });
     }
     for (const d of b.sel?.draws ?? []) calls.push({ batch: d.batch, transform: T, clip, pixelSnap: d.pixelSnap });

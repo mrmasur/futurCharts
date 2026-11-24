@@ -44,9 +44,12 @@ export interface Batch {
   update(data: Float32Array, count: number): void;
   /**
    * The state to move from (same layout and count as the current data), for a
-   * transition between two data states; `null` drops it. Only `rect`, `point`
-   * and `arc` batches morph (position, size, angles, color); others ignore it. The backend blends
-   * the two states itself, driven by `DrawCall.morph`: no upload per frame.
+   * transition between two data states; `null` drops it. Every primitive morphs: `rect`,
+   * `point` and `arc` blend position, size, angles and fill; `line` blends its two ends, color
+   * and width; `mesh` blends position and color, vertex for vertex. The backend blends the two
+   * states itself, driven by `DrawCall.morph`: no upload per frame. Nothing here is specific to
+   * a backend: the previous state is a second vertex buffer with the layout of `LAYOUTS[kind]`.
+   * Call it after `update` (it holds as many instances as the batch then has).
    */
   setPrevious?(data: Float32Array | null): void;
   destroy(): void;

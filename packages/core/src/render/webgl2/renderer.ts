@@ -15,7 +15,7 @@ interface Program {
 }
 
 /** Attributes that a transition blends, per primitive: their index in the layout. */
-const MORPHED: Partial<Record<PrimitiveKind, number[]>> = { rect: [0, 1], point: [0, 1], arc: [0, 1, 2] };
+const MORPHED: Partial<Record<PrimitiveKind, number[]>> = { rect: [0, 1], point: [0, 1], arc: [0, 1, 2], line: [0, 1, 2], mesh: [0, 1] };
 
 class GLBatch implements Batch {
   count = 0;
@@ -88,7 +88,7 @@ class GLBatch implements Batch {
       for (let a = 0; a < index; a++) offset += layout.attributes[a].size;
       gl.enableVertexAttribArray(base + k);
       gl.vertexAttribPointer(base + k, layout.attributes[index].size, gl.FLOAT, false, layout.stride * 4, offset * 4);
-      gl.vertexAttribDivisor(base + k, 1);
+      if (layout.topology === 'instanced-quad') gl.vertexAttribDivisor(base + k, 1);
     });
     gl.bindVertexArray(null);
     this.hasPrevious = true;
