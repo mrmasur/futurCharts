@@ -482,7 +482,7 @@ function placesOf(ctx: BuildContext, mark: string): { places: Place[]; groups: s
 function placeHit(ctx: BuildContext, p: Place, vf: string, focus?: string): ShapeHit {
   const parts = focus ? [...p.parts].sort((a, b) => Number(b.group === focus) - Number(a.group === focus)) : p.parts;
   const rows = parts.slice(0, 8).map((q) => ({ label: q.group, value: p.parts.length > 1 ? `${ctx.format(q.value, vf)} · ${share(q.value, p.total)}` : ctx.format(q.value, vf) }));
-  if (p.parts.length > 1) rows.push({ label: 'Total', value: ctx.format(p.total, vf) });
+  if (p.parts.length > 1) rows.push({ label: ctx.theme.texts.total, value: ctx.format(p.total, vf) });
   return { title: p.key, rows };
 }
 

@@ -285,7 +285,7 @@ export const bridge: MarkDefinition = {
         const s = steps[pick(tx, ty)];
         if (!s || tx < 0 || tx > 1 || ty < 0 || ty > 1) return null;
         if (s.total) return { title: s.key, rows: [{ label: fieldLabel(ctx, vf), value: ctx.format(s.to, vf) }] };
-        return { title: s.key, rows: [{ label: 'Variation', value: signed(ctx, s.delta, vf) }, { label: 'Cumul', value: ctx.format(s.to, vf) }] };
+        return { title: s.key, rows: [{ label: ctx.theme.texts.change, value: signed(ctx, s.delta, vf) }, { label: ctx.theme.texts.cumulative, value: ctx.format(s.to, vf) }] };
       },
     };
   },
@@ -317,7 +317,7 @@ export const variance: MarkDefinition = {
     );
     if (style.total && items.length > 1) {
       const sum = (f: 'actual' | 'budget') => items.reduce((a, d) => a + (Number.isFinite(d[f]) ? d[f] : 0), 0);
-      items.push({ key: 'Total', actual: sum('actual'), budget: sum('budget'), total: true });
+      items.push({ key: ctx.theme.texts.total, actual: sum('actual'), budget: sum('budget'), total: true });
     }
     const P = palette(ctx);
     const F = frame(ctx);
@@ -406,11 +406,11 @@ export const variance: MarkDefinition = {
       labels.push({ tx: X(x), ty: headY, text, color: theme.text.muted, size: 11, weight: 600, align, baseline: 'middle' });
     if (cols.abs) {
       const z = diverging(cols.abs, vars.map((d) => d.abs), absText, false);
-      header('Écart', z);
+      header(ctx.theme.texts.gap, z);
     }
     if (cols.rel) {
       const z = diverging(cols.rel, vars.map((d) => d.rel), relText, true);
-      header('Écart %', z);
+      header(ctx.theme.texts.gapPercent, z);
     }
     keyRow(keyRects, labels, F, theme, B.x0, bands.top - 12, [
       { name: fieldLabel(ctx, vf), fill: P.ink },
@@ -442,8 +442,8 @@ export const variance: MarkDefinition = {
           rows: [
             { label: fieldLabel(ctx, vf), value: valText[i] },
             { label: fieldLabel(ctx, tf), value: Number.isFinite(d.budget) ? ctx.format(d.budget, tf) : '–' },
-            { label: 'Écart', value: absText[i] },
-            { label: 'Écart %', value: relText[i] },
+            { label: ctx.theme.texts.gap, value: absText[i] },
+            { label: ctx.theme.texts.gapPercent, value: relText[i] },
           ],
         };
       },
@@ -554,7 +554,7 @@ export const periodBars: MarkDefinition = {
         if (d.past) rows.push({ label: fieldLabel(ctx, vf), value: ctx.format(d.actual, vf) });
         if (tf && Number.isFinite(d.budget)) rows.push({ label: fieldLabel(ctx, tf), value: ctx.format(d.budget, tf) });
         if (pf && Number.isFinite(d.previous)) rows.push({ label: fieldLabel(ctx, pf), value: ctx.format(d.previous, pf) });
-        if (Number.isFinite(d.variance)) rows.push({ label: 'Écart au budget', value: varText[items.indexOf(d)] });
+        if (Number.isFinite(d.variance)) rows.push({ label: ctx.theme.texts.gapToBudget, value: varText[items.indexOf(d)] });
         return { title: d.key, rows };
       },
     };

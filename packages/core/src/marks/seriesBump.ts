@@ -192,7 +192,7 @@ export const bumpArea: MarkDefinition = {
             title: `${names[e]} · ${stepLabel(steps[near])}`,
             rows: [
               { label: ctx.fields[vf]?.label ?? vf, value: ctx.format(values[near][e], vf) },
-              { label: 'Rang', value: `${L.rank[near][e]} / ${L.rank[near].filter((r) => !Number.isNaN(r)).length}` },
+              { label: ctx.theme.texts.rank, value: `${L.rank[near][e]} / ${L.rank[near].filter((r) => !Number.isNaN(r)).length}` },
             ],
           };
         }

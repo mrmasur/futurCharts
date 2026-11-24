@@ -339,13 +339,13 @@ function arcMark(defaultInner: number): MarkDefinition {
         legend,
         pick(tx, ty): ShapeHit | null {
           const i = hit(tx, ty);
-          if (i < 0) return focus !== undefined && polar(tx, ty).r < r0 ? { title: '↑ Toutes les parts', rows: [] } : null;
+          if (i < 0) return focus !== undefined && polar(tx, ty).r < r0 ? { title: `↑ ${ctx.theme.texts.allParts}`, rows: [] } : null;
           const d = slices[i];
           return {
             title: d.key,
             rows: [
               { label: ctx.fields[vf]?.label ?? vf, value: ctx.format(d.value, vf) },
-              { label: 'Part', value: share(d.value, total) },
+              { label: ctx.theme.texts.share, value: share(d.value, total) },
             ],
           };
         },
@@ -619,9 +619,9 @@ export const treemap: MarkDefinition = {
         if (!t) return null;
         const rows = [
           { label: ctx.fields[vf]?.label ?? vf, value: ctx.format(t.d.value, vf) },
-          { label: 'Part', value: share(t.d.value, total) },
+          { label: ctx.theme.texts.share, value: share(t.d.value, total) },
         ];
-        if (gf) rows.unshift({ label: ctx.fields[gf]?.label ?? 'Groupe', value: t.d.group });
+        if (gf) rows.unshift({ label: ctx.fields[gf]?.label ?? ctx.theme.texts.group, value: t.d.group });
         return { title: t.d.key, rows };
       },
     };
@@ -695,9 +695,9 @@ export const funnel: MarkDefinition = {
         const s = stages[i];
         const rows = [
           { label: ctx.fields[vf]?.label ?? vf, value: ctx.format(s.value, vf) },
-          { label: 'Depuis le début', value: share(s.value, first) },
+          { label: ctx.theme.texts.sinceStart, value: share(s.value, first) },
         ];
-        if (i > 0) rows.push({ label: 'Depuis l’étape précédente', value: share(s.value, stages[i - 1].value) });
+        if (i > 0) rows.push({ label: ctx.theme.texts.sincePrevious, value: share(s.value, stages[i - 1].value) });
         return { title: s.key, rows };
       },
     };

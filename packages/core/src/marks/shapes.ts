@@ -11,6 +11,7 @@ import { Tween } from './animate';
 import { batches, need, share, totals } from './charts';
 import { pushArc, pushRect, pushSegment } from './primitives';
 import { emptyHit, fieldWithRole, type BuildContext, type MarkDefinition, type MarkLabel, type ShapeHit } from './registry';
+import { fillText } from '../theme/texts';
 
 const TAU = Math.PI * 2;
 
@@ -101,7 +102,7 @@ export const radialBar: MarkDefinition = {
         const r = Math.hypot(x, y);
         const g = rings.find((q) => r >= q.inner && r <= q.outer);
         if (!g) return null;
-        return { title: g.key, rows: [{ label: fieldLabel(ctx, vf), value: ctx.format(g.value, vf) }, { label: 'Part du maximum', value: share(g.value, max) }] };
+        return { title: g.key, rows: [{ label: fieldLabel(ctx, vf), value: ctx.format(g.value, vf) }, { label: ctx.theme.texts.shareOfMax, value: share(g.value, max) }] };
       },
     };
   },
@@ -265,7 +266,7 @@ export const icicle: MarkDefinition = {
           title: n.path.join(' › '),
           rows: [
             ...(vf ? [{ label: fieldLabel(ctx, vf), value: ctx.format(n.value, vf) }] : []),
-            { label: 'Part du total', value: share(n.value, root.value) },
+            { label: ctx.theme.texts.shareOfTotal, value: share(n.value, root.value) },
           ],
         };
       },
@@ -368,7 +369,7 @@ export const parliament: MarkDefinition = {
         });
         if (best < 0) return null;
         const p = parties[owner[best]];
-        return { title: p.key, rows: [{ label: fieldLabel(ctx, vf), value: ctx.format(p.seats, vf) }, { label: 'Part', value: share(p.seats, N) }] };
+        return { title: p.key, rows: [{ label: fieldLabel(ctx, vf), value: ctx.format(p.seats, vf) }, { label: ctx.theme.texts.share, value: share(p.seats, N) }] };
       },
     };
   },
@@ -777,7 +778,7 @@ export const timeline: MarkDefinition = {
       });
       if (placedCount < visible) {
         // Say that more is there.
-        labels.push({ tx: v1, ty: y0, text: `${visible - placedCount} autres : survolez les points`, color: theme.text.muted, size: 10, align: 'right', baseline: 'top', dx: -6, dy: H / 2 - 18, free: true });
+        labels.push({ tx: v1, ty: y0, text: fillText(ctx.theme.texts.hiddenLabels, { n: visible - placedCount }), color: theme.text.muted, size: 10, align: 'right', baseline: 'top', dx: -6, dy: H / 2 - 18, free: true });
       }
       lineBatch.update(new Float32Array(lines), lines.length / LAYOUTS.line.stride);
       dotBatch.update(new Float32Array(dots), dots.length / LAYOUTS.point.stride);
@@ -823,7 +824,7 @@ export const timeline: MarkDefinition = {
           .slice(0, 4)
           .sort((a, b) => a.k - b.k);
         for (const q of around) out.push({ label: fmt(xcol.values[rows[q.k]] as number | string), value: String(keys[rows[q.k]]) });
-        if (links && links[r]) out.push({ label: 'Lien', value: 'cliquer pour ouvrir' });
+        if (links && links[r]) out.push({ label: ctx.theme.texts.link, value: ctx.theme.texts.openLink });
         return { title: String(keys[r]), rows: out };
       },
     };
@@ -864,7 +865,7 @@ export const tree: MarkDefinition = {
     const legend = paintHierarchy(ctx, hierarchy(ctx, table, path, vf, false).root, h.root);
     // One top-level value is the root itself.
     const single = h.root.children.length === 1;
-    const root = (single ? h.root.children[0] : { ...h.root, name: vf ? fieldLabel(ctx, vf) : 'Total' }) as TNode;
+    const root = (single ? h.root.children[0] : { ...h.root, name: vf ? fieldLabel(ctx, vf) : ctx.theme.texts.total }) as TNode;
     const nodes: TNode[] = [];
     let leaves = 0;
     let depth = 0;
@@ -1020,7 +1021,7 @@ export const tree: MarkDefinition = {
         if (!best) return null;
         const rows = [];
         if (vf) rows.push({ label: fieldLabel(ctx, vf), value: ctx.format(best.value, vf) });
-        if (best.children.length) rows.push({ label: 'Enfants', value: String(best.children.length) });
+        if (best.children.length) rows.push({ label: ctx.theme.texts.children, value: String(best.children.length) });
         return { title: best.path.length ? best.path.join(' › ') : best.name, rows };
       },
     };

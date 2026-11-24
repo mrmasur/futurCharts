@@ -10,6 +10,7 @@ import { mix, parseColor, toCss, withAlpha } from '../util/color';
 import { batches, categoriesOf, need, share, totals } from './charts';
 import { pushArc, pushRect, pushSegment, pushVertex } from './primitives';
 import { emptyHit, type BuildContext, type MarkDefinition, type MarkLabel, type ShapeHit } from './registry';
+import { fillText } from '../theme/texts';
 
 const TAU = Math.PI * 2;
 const pct = (v: number) => new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 0 }).format(v);
@@ -80,8 +81,8 @@ export const marimekko: MarkDefinition = {
           title: `${b.d.key} · ${b.d.group}`,
           rows: [
             { label: ctx.fields[vf]?.label ?? vf, value: ctx.format(b.d.value, vf) },
-            { label: `Part de ${b.d.key}`, value: share(b.d.value, t) },
-            { label: 'Part du total', value: share(b.d.value, grand) },
+            { label: fillText(ctx.theme.texts.shareOf, { name: b.d.key }), value: share(b.d.value, t) },
+            { label: ctx.theme.texts.shareOfTotal, value: share(b.d.value, grand) },
           ],
         };
       },
@@ -216,7 +217,7 @@ export const chord: MarkDefinition = {
           if (i < 0) return null;
           const out = flows.filter((f) => f.s === i).reduce((s, f) => s + f.v, 0);
           const inn = flows.filter((f) => f.t === i).reduce((s, f) => s + f.v, 0);
-          return { title: names[i], rows: [{ label: 'Sortant', value: ctx.format(out, vf) }, { label: 'Entrant', value: ctx.format(inn, vf) }] };
+          return { title: names[i], rows: [{ label: ctx.theme.texts.outgoing, value: ctx.format(out, vf) }, { label: ctx.theme.texts.incoming, value: ctx.format(inn, vf) }] };
         }
         for (let i = strips.length - 1; i >= 0; i--) {
           if (!inPoly(strips[i], x, y)) continue;
@@ -418,7 +419,7 @@ export const pack: MarkDefinition = {
           title: hit.path.join(' › '),
           rows: [
             { label: ctx.fields[vf]?.label ?? vf, value: ctx.format(hit.value, vf) },
-            { label: 'Part du total', value: share(hit.value, root.value) },
+            { label: ctx.theme.texts.shareOfTotal, value: share(hit.value, root.value) },
           ],
         };
       },
@@ -510,7 +511,7 @@ export const parallel: MarkDefinition = {
         }
         if (best < 0) return null;
         const rows = dims.map((d, j) => ({ label: ctx.fields[d]?.label ?? d, value: ctx.format(cols[j][best], d) }));
-        return { title: ccol ? String(ccol.values[best]) : `Ligne ${best + 1}`, rows };
+        return { title: ccol ? String(ccol.values[best]) : fillText(ctx.theme.texts.rowN, { n: best + 1 }), rows };
       },
     };
   },
@@ -648,7 +649,7 @@ export const network: MarkDefinition = {
         if (n.group && ctx.hidden.has(n.group)) continue;
         const p = at(n.id);
         const on = lit(n);
-        const base = n.color ? parseColor(n.color) : n.group ? ctx.categorical(n.group) : ctx.categorical('Nœuds');
+        const base = n.color ? parseColor(n.color) : n.group ? ctx.categorical(n.group) : ctx.categorical(ctx.theme.texts.nodes);
         const c = on ? base : withAlpha(base, base[3] * dim);
         const r = radius(n);
         // A surface ring keeps overlapping nodes apart.
@@ -680,9 +681,9 @@ export const network: MarkDefinition = {
         const n = nodeAt(px * W, (1 - py) * H);
         if (!n) return null;
         const links = edges.filter((e) => e.from === n.id || e.to === n.id);
-        const rows = [{ label: 'Liens', value: String(links.length) }];
-        if (n.value !== undefined) rows.unshift({ label: ctx.fields[layer.encode.value ?? '']?.label ?? 'Valeur', value: ctx.format(n.value, layer.encode.value) });
-        if (n.group) rows.push({ label: 'Groupe', value: n.group });
+        const rows = [{ label: ctx.theme.texts.links, value: String(links.length) }];
+        if (n.value !== undefined) rows.unshift({ label: ctx.fields[layer.encode.value ?? '']?.label ?? ctx.theme.texts.value, value: ctx.format(n.value, layer.encode.value) });
+        if (n.group) rows.push({ label: ctx.theme.texts.group, value: n.group });
         return { title: n.label ?? n.id, rows };
       },
       click(px, py) {
@@ -813,7 +814,7 @@ export const hexbin: MarkDefinition = {
         if (!best) return null;
         return {
           title: `${ctx.format(ctx.x.invert(best.x), xf)} · ${ctx.format(ctx.y.invert(best.y), yf)}`,
-          rows: [{ label: 'Points', value: new Intl.NumberFormat().format(best.n) }],
+          rows: [{ label: ctx.theme.texts.points, value: new Intl.NumberFormat().format(best.n) }],
         };
       },
     };

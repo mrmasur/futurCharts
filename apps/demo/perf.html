@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>futurCharts · performances</title>
+    <style>
+      body { margin: 16px; font-family: system-ui, sans-serif; background: #fcfcfb; color: #0b0b0b; }
+      h1 { font-size: 18px; margin: 0 0 4px; }
+      p { color: #52514e; margin: 0 0 12px; font-size: 13px; }
+      button { font: inherit; padding: 6px 14px; border-radius: 6px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
+      table { border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+      td { padding: 3px 12px 3px 0; border-bottom: 1px solid #eee; }
+      td.n { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+      #scene { margin-top: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>Banc de performances</h1>
+    <p>À lancer dans un onglet visible d'un vrai navigateur : un navigateur sans écran dessine WebGL en logiciel. Environ une minute.</p>
+    <button id="lancer" type="button">Lancer</button> <span id="etat"></span>
+    <table><tbody id="resultats"></tbody></table>
+    <div id="scene"></div>
+    <script type="module" src="/src/perf.ts"></script>
+  </body>
+</html>

@@ -13,6 +13,7 @@ import { ganttModel, RowScale, routeDependency, scheduleModel, specDate, type Ga
 import { dashed, luminance, pushRect, pushSegment, pushVertex } from './primitives';
 import { emptyHit, type BuildContext, type MarkDefinition, type MarkDraw, type MarkLabel, type MarkScales, type ShapeHit } from './registry';
 import { textWidth } from './shapes';
+import { fillText } from '../theme/texts';
 
 const DAY = 86400000;
 
@@ -50,13 +51,15 @@ function flagRoom(flag: boolean, weight: number, size: Size): number {
 
 function duration(ms: number, time: boolean, ctx: BuildContext): string {
   if (!time) return ctx.format(ms);
+  const texts = ctx.theme.texts;
   if (ms >= DAY) {
     const d = Math.round((ms / DAY) * 10) / 10;
-    return `${String(d).replace('.', ',')} j`;
+    return fillText(texts.days, { n: String(d).replace('.', texts.decimalSeparator) });
   }
   const min = Math.round(ms / 60000);
   const h = Math.floor(min / 60);
-  return h ? `${h} h${min % 60 ? ` ${String(min % 60).padStart(2, '0')}` : ''}` : `${min} min`;
+  if (!h) return fillText(texts.minutes, { n: min });
+  return min % 60 ? fillText(texts.hoursMinutes, { h, m: String(min % 60).padStart(2, '0') }) : fillText(texts.hours, { n: h });
 }
 
 /** Ink that reads on `fill`. */
@@ -273,16 +276,16 @@ export const gantt: MarkDefinition = {
         if (row.kind === 'task' && !shown(row.task)) return null;
         const rows: ShapeHit['rows'] = [];
         if (row.end > row.start) {
-          rows.push({ label: fieldLabel(ctx, e.x, 'Début'), value: fmtX(row.start) }, { label: fieldLabel(ctx, e.x2, 'Fin'), value: fmtX(row.end) });
-          rows.push({ label: 'Durée', value: duration(row.end - row.start, m.time, ctx) });
-        } else rows.push({ label: 'Jalon', value: fmtX(row.start) });
-        if (Number.isFinite(row.progress)) rows.push({ label: fieldLabel(ctx, e.progress, 'Avancement'), value: `${Math.round(row.progress * 100)} %` });
+          rows.push({ label: fieldLabel(ctx, e.x, ctx.theme.texts.start), value: fmtX(row.start) }, { label: fieldLabel(ctx, e.x2, ctx.theme.texts.end), value: fmtX(row.end) });
+          rows.push({ label: ctx.theme.texts.duration, value: duration(row.end - row.start, m.time, ctx) });
+        } else rows.push({ label: ctx.theme.texts.milestone, value: fmtX(row.start) });
+        if (Number.isFinite(row.progress)) rows.push({ label: fieldLabel(ctx, e.progress, ctx.theme.texts.progress), value: `${Math.round(row.progress * 100)} %` });
         if (row.kind === 'task') {
           const t = m.tasks[row.task];
           if (cf && t.color) rows.push({ label: fieldLabel(ctx, cf, cf), value: t.color });
-          if (t.group) rows.push({ label: fieldLabel(ctx, e.group, 'Phase'), value: t.group });
+          if (t.group) rows.push({ label: fieldLabel(ctx, e.group, ctx.theme.texts.phase), value: t.group });
           const preds = t.deps.map((id) => m.tasks.find((q) => q.id === id)?.name).filter(Boolean);
-          if (preds.length) rows.push({ label: 'Après', value: preds.join(', ') });
+          if (preds.length) rows.push({ label: ctx.theme.texts.after, value: preds.join(', ') });
         }
         return { title: row.label, rows };
       },
@@ -416,12 +419,12 @@ function slotMark(name: 'schedule' | 'swimlane', fill: boolean): MarkDefinition 
           if (!b) return null;
           const s = m.slots[b.k];
           const rows: ShapeHit['rows'] = [];
-          if (s.label) rows.push({ label: fieldLabel(ctx, e.y ?? e.group, 'Ressource'), value: m.resources[b.res] });
+          if (s.label) rows.push({ label: fieldLabel(ctx, e.y ?? e.group, ctx.theme.texts.resource), value: m.resources[b.res] });
           if (cf && s.color && s.color !== s.label) rows.push({ label: fieldLabel(ctx, cf, cf), value: s.color });
           rows.push(
-            { label: fieldLabel(ctx, e.x, 'Début'), value: fmtX(s.start) },
-            { label: fieldLabel(ctx, e.x2, 'Fin'), value: fmtX(s.end) },
-            { label: 'Durée', value: duration(s.end - s.start, m.time, ctx) },
+            { label: fieldLabel(ctx, e.x, ctx.theme.texts.start), value: fmtX(s.start) },
+            { label: fieldLabel(ctx, e.x2, ctx.theme.texts.end), value: fmtX(s.end) },
+            { label: ctx.theme.texts.duration, value: duration(s.end - s.start, m.time, ctx) },
           );
           return { title: s.label || m.resources[b.res], rows };
         },

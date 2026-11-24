@@ -234,7 +234,7 @@ export const upset: MarkDefinition = {
       b.update(new Float32Array(data), data.length / LAYOUTS.point.stride);
       return { batch: b, enter: 'fade' as const };
     };
-    const valueLabel = vf ? (ctx.fields[vf]?.label ?? vf) : 'Éléments';
+    const valueLabel = vf ? (ctx.fields[vf]?.label ?? vf) : ctx.theme.texts.elements;
     return {
       // Links over the pale dots they cross, members on top.
       draws: [...stripeDraws, ...barDraws, points(pale), ...batches(ctx, [], [], lines), points(dots)],
@@ -247,7 +247,7 @@ export const upset: MarkDefinition = {
         if (x >= g.barsLeft && x < g.matrixLeft - 4) {
           const s = sets[i];
           if (!s) return null;
-          return { title: s.name, rows: [{ label: valueLabel, value: fmt(s.size) }, { label: 'Part du total', value: share(s.size, total) }] };
+          return { title: s.name, rows: [{ label: valueLabel, value: fmt(s.size) }, { label: ctx.theme.texts.shareOfTotal, value: share(s.size, total) }] };
         }
         const j = Math.floor((x - g.matrixLeft) / g.colWidth);
         const c = combos[j];
@@ -257,8 +257,8 @@ export const upset: MarkDefinition = {
           title: names.join(' ∩ '),
           rows: [
             { label: valueLabel, value: fmt(c.value) },
-            { label: 'Part du total', value: share(c.value, total) },
-            { label: names.length > 1 ? 'Ensembles combinés' : 'Uniquement', value: names.length > 1 ? String(names.length) : names[0] },
+            { label: ctx.theme.texts.shareOfTotal, value: share(c.value, total) },
+            { label: names.length > 1 ? ctx.theme.texts.combinedSets : ctx.theme.texts.only, value: names.length > 1 ? String(names.length) : names[0] },
           ],
         };
       },

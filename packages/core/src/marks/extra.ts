@@ -6,6 +6,7 @@ import { batches, categoriesOf, need, share, totals } from './charts';
 import { Tween } from './animate';
 import { pushArc, pushRect, pushSegment, pushVertex } from './primitives';
 import { emptyHit, type MarkDefinition, type MarkLabel, type ShapeHit } from './registry';
+import { fillText } from '../theme/texts';
 
 const TAU = Math.PI * 2;
 
@@ -40,7 +41,7 @@ export const kpi: MarkDefinition = {
       // Color = direction × whether up is good; the arrow keeps it readable without color.
       const color = d === 0 ? theme.text.muted : d > 0 === style.upIsGood ? style.good : style.bad;
       labels.push({
-        tx: 0, ty: 1, text: `${d > 0 ? '▲' : d < 0 ? '▼' : '='} ${pct}  vs précédent`, color, size: 13, weight: 600,
+        tx: 0, ty: 1, text: fillText(ctx.theme.texts.versusPrevious, { value: `${d > 0 ? '▲' : d < 0 ? '▼' : '='} ${pct}` }), color, size: 13, weight: 600,
         align: 'left', baseline: 'top', dx: 2, dy: style.size + 10,
       });
     }
@@ -170,7 +171,7 @@ export const waffle: MarkDefinition = {
           title: d.key,
           rows: [
             { label: ctx.fields[vf]?.label ?? vf, value: ctx.format(d.value, vf) },
-            { label: 'Part', value: share(d.value, total) },
+            { label: ctx.theme.texts.share, value: share(d.value, total) },
           ],
         };
       },
@@ -301,11 +302,11 @@ export const rose: MarkDefinition = {
       labels,
       legend,
       pick(tx, ty): ShapeHit | null {
-        if (polar(tx, ty).r < r0 + 0.04 && focus !== undefined) return { title: '↑ Toutes les séries', rows: [] };
+        if (polar(tx, ty).r < r0 + 0.04 && focus !== undefined) return { title: `↑ ${ctx.theme.texts.allSeries}`, rows: [] };
         const s = hit(tx, ty);
         if (!s) return null;
         const rows = [{ label: ctx.fields[vf]?.label ?? vf, value: ctx.format(s.value, vf) }];
-        if (sf && focus === undefined) rows.push({ label: 'Total', value: ctx.format(stackTotal(s.cat), vf) });
+        if (sf && focus === undefined) rows.push({ label: ctx.theme.texts.total, value: ctx.format(stackTotal(s.cat), vf) });
         return { title: sf ? `${s.cat} · ${s.series}` : s.cat, rows };
       },
       click(tx, ty) {
@@ -474,9 +475,9 @@ export const violin: MarkDefinition = {
         return {
           title: s.c,
           rows: [
-            { label: 'Médiane', value: f(s.med) },
-            { label: 'Quartiles', value: `${f(s.q1)} → ${f(s.q3)}` },
-            { label: 'Observations', value: String(s.n) },
+            { label: ctx.theme.texts.median, value: f(s.med) },
+            { label: ctx.theme.texts.quartiles, value: `${f(s.q1)} → ${f(s.q3)}` },
+            { label: ctx.theme.texts.observations, value: String(s.n) },
           ],
         };
       },

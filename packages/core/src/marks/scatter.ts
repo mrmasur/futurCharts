@@ -12,6 +12,7 @@ import { categoriesOf, need } from './charts';
 import { dashed, pushRect, pushSegment, pushVertex } from './primitives';
 import { emptyHit, type BuildContext, type MarkDefinition, type MarkDraw, type MarkLabel, type ShapeHit } from './registry';
 import { textWidth } from './shapes';
+import { fillText } from '../theme/texts';
 
 // ------------------------------------------------------------------ helpers
 
@@ -297,7 +298,7 @@ export const quadrant: MarkDefinition = {
     const tx = Math.min(1, Math.max(0, ctx.x.norm(xt)));
     const ty = Math.min(1, Math.max(0, ctx.y.norm(yt)));
     const zoneNames: string[] = [0, 1, 2, 3].map((q) => String((Array.isArray(style.quadrants) ? style.quadrants[q] : undefined) ?? ''));
-    const zoneColors = zoneNames.map((n, q) => ctx.categorical(n || `Quadrant ${q + 1}`));
+    const zoneColors = zoneNames.map((n, q) => ctx.categorical(n || fillText(ctx.theme.texts.quadrantN, { n: q + 1 })));
     const [W, H] = [1 / ctx.pixel[0], 1 / ctx.pixel[1]];
     const narrow = W < 300;
 
@@ -634,7 +635,7 @@ export const marginal: MarkDefinition = {
     const labels: MarkLabel[] = [];
     if (style.labels && !narrow) {
       const int = new Intl.NumberFormat();
-      labels.push({ tx: f, ty: 1, text: `max. ${int.format(xMax)}`, color: theme.text.muted, size: 10, align: 'left', baseline: 'top', dx: 8, dy: 0, free: true });
+      labels.push({ tx: f, ty: 1, text: fillText(ctx.theme.texts.max, { value: int.format(xMax) }), color: theme.text.muted, size: 10, align: 'left', baseline: 'top', dx: 8, dy: 0, free: true });
     }
 
     const data = pointData(dots);
@@ -647,9 +648,9 @@ export const marginal: MarkDefinition = {
     const binHit = (field: string, bins: typeof xb, counts: number[][], i: number): ShapeHit | null => {
       if (i < 0 || i >= bins.count) return null;
       const a = bins.start + i * bins.step;
-      const rows = groups.map((g, gi) => ({ label: grouped ? g.key : 'Observations', value: int.format(counts[gi][i]) })).filter((row) => !grouped || row.value !== '0');
-      if (grouped && groups.length > 1) rows.push({ label: 'Total', value: int.format(counts.reduce((s, c) => s + c[i], 0)) });
-      return { title: `${fieldLabel(ctx, field)} : ${ctx.format(a, field)} – ${ctx.format(a + bins.step, field)}`, rows };
+      const rows = groups.map((g, gi) => ({ label: grouped ? g.key : ctx.theme.texts.observations, value: int.format(counts[gi][i]) })).filter((row) => !grouped || row.value !== '0');
+      if (grouped && groups.length > 1) rows.push({ label: ctx.theme.texts.total, value: int.format(counts.reduce((s, c) => s + c[i], 0)) });
+      return { title: fillText(ctx.theme.texts.labelValue, { label: fieldLabel(ctx, field), value: `${ctx.format(a, field)} – ${ctx.format(a + bins.step, field)}` }), rows };
     };
     return {
       draws,

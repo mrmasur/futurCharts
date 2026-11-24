@@ -33,6 +33,8 @@ import {
   type Ecdf,
   type QQPoint,
 } from './statsMath';
+import { fillText } from '../theme/texts';
+import type { Theme } from '../theme/theme';
 
 const fieldLabel = (ctx: BuildContext, f: string) => ctx.fields[f]?.label ?? f;
 
@@ -189,7 +191,7 @@ export const dotplot: MarkDefinition = {
           title: grouped ? groups[groupOf.get(p.row)!].key : fieldLabel(ctx, xf),
           rows: [
             { label: fieldLabel(ctx, xf), value: ctx.format(xs[p.row], xf) },
-            { label: 'Dans la pile', value: integer(p.pile) },
+            { label: ctx.theme.texts.inStack, value: integer(p.pile) },
           ],
         };
       },
@@ -199,7 +201,7 @@ export const dotplot: MarkDefinition = {
 
 // -------------------------------------------------------------------- ecdf
 
-const quantileName = (q: number) => (q === 0.5 ? 'Médiane' : q === 0.25 ? 'Q1' : q === 0.75 ? 'Q3' : `p${Math.round(q * 1000) / 10}`);
+const quantileName = (q: number, texts: Theme['texts']) => (q === 0.5 ? texts.median : q === 0.25 ? 'Q1' : q === 0.75 ? 'Q3' : `p${Math.round(q * 1000) / 10}`);
 
 /**
  * `ecdf`: the empirical cumulative distribution of `x` as a staircase (the share of rows at or
@@ -238,7 +240,7 @@ export const ecdfMark: MarkDefinition = {
       const reach = Math.max(...at.map((v) => ctx.x.norm(v)));
       dashed(guides, [4, 4], ctx.pixel, muted, 1).segment(0, q, reach, q);
       // The name sits over the level, left of every curve (they only rise to the right of their quantile): only when there is room.
-      const name = quantileName(q);
+      const name = quantileName(q, ctx.theme.texts);
       if (style.labels && Math.min(...at.map((v) => ctx.x.norm(v))) / ctx.pixel[0] > name.length * 6.5 + 14) {
         labels.push({ tx: 0, ty: q, text: name, color: theme.text.secondary, size: 10.5, weight: 600, align: 'left', baseline: 'bottom', dx: 5, dy: -4 });
       }
@@ -283,7 +285,7 @@ export const ecdfMark: MarkDefinition = {
         const v = ctx.x.invert(tx);
         return {
           title: `${fieldLabel(ctx, xf)} ≤ ${ctx.format(v, xf)}`,
-          rows: curves.map((c) => ({ label: grouped ? c.g.key : 'Part des observations', value: percent(ecdfAt(c.e, v), 1) })),
+          rows: curves.map((c) => ({ label: grouped ? c.g.key : ctx.theme.texts.shareOfObservations, value: percent(ecdfAt(c.e, v), 1) })),
         };
       },
     };
@@ -415,11 +417,11 @@ export const qq: MarkDefinition = {
       pick(tx, ty): ShapeHit | null {
         const p = nearest(dots, tx, ty, ctx.pixel, Math.max(8, style.size));
         if (!p) return null;
-        const title = `Rang ${integer(p.rank)} sur ${integer(p.n)}`;
+        const title = fillText(ctx.theme.texts.rankOutOf, { rank: integer(p.rank), n: integer(p.n) });
         if (ys) {
           return { title, rows: [{ label: fieldLabel(ctx, xf), value: ctx.format(p.q.theoretical, xf) }, { label: fieldLabel(ctx, yf!), value: ctx.format(p.q.sample, yf) }] };
         }
-        const rows = [{ label: fieldLabel(ctx, xf), value: ctx.format(p.q.sample, xf) }, { label: 'Quantile normal', value: z.format(p.q.theoretical) }];
+        const rows = [{ label: fieldLabel(ctx, xf), value: ctx.format(p.q.sample, xf) }, { label: ctx.theme.texts.normalQuantile, value: z.format(p.q.theoretical) }];
         return { title: grouped ? `${p.group} · ${title.toLowerCase()}` : title, rows };
       },
     };
@@ -562,7 +564,7 @@ export const contour: MarkDefinition = {
         const p = nearest(dots, tx, ty, ctx.pixel, 6);
         if (p) {
           return {
-            title: grouped ? p.group : 'Observation',
+            title: grouped ? p.group : ctx.theme.texts.observation,
             rows: [{ label: fieldLabel(ctx, xf), value: ctx.format(xs[p.row], xf) }, { label: fieldLabel(ctx, yf), value: ctx.format(ys[p.row], yf) }],
           };
         }
@@ -575,7 +577,7 @@ export const contour: MarkDefinition = {
         if (!best || best.t < 1 / (levels + 1)) return null;
         return {
           title: grouped ? best.key : `${ctx.format(ctx.x.invert(tx), xf)} · ${ctx.format(ctx.y.invert(ty), yf)}`,
-          rows: [{ label: 'Densité (part du sommet)', value: percent(best.t) }, { label: 'Observations', value: integer(best.n) }],
+          rows: [{ label: ctx.theme.texts.density, value: percent(best.t) }, { label: ctx.theme.texts.observations, value: integer(best.n) }],
         };
       },
     };
@@ -707,11 +709,11 @@ export const raincloud: MarkDefinition = {
         return {
           title: s.cat,
           rows: [
-            { label: 'Effectif', value: integer(s.b.n) },
-            { label: 'Médiane', value: ctx.format(s.b.median, xf) },
-            { label: 'Moyenne', value: ctx.format(s.mean, xf) },
+            { label: ctx.theme.texts.count, value: integer(s.b.n) },
+            { label: ctx.theme.texts.median, value: ctx.format(s.b.median, xf) },
+            { label: ctx.theme.texts.mean, value: ctx.format(s.mean, xf) },
             { label: 'Q1 – Q3', value: `${ctx.format(s.b.q1, xf)} – ${ctx.format(s.b.q3, xf)}` },
-            { label: 'Min – max', value: `${ctx.format(s.sorted[0], xf)} – ${ctx.format(quantileSorted(s.sorted, 1), xf)}` },
+            { label: ctx.theme.texts.minMax, value: `${ctx.format(s.sorted[0], xf)} – ${ctx.format(quantileSorted(s.sorted, 1), xf)}` },
           ],
         };
       },

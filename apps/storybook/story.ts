@@ -174,7 +174,8 @@ export function entryStory(title: string): StoryObj {
         ...spec,
         ...(i === 0 && state ? { data: state.data } : {}),
         layers: i === 0 ? spec.layers.map((l, k) => (k === li ? { ...l, style, labels: { ...l.labels, ...labels } } : l)) : spec.layers,
-        theme,
+        // The spec's own theme (an example's `texts`) stays under the chosen one.
+        theme: spec.theme && typeof spec.theme === 'object' ? { ...spec.theme, extends: theme } : theme,
         animation: a.animation ? spec.animation : false,
       })) as ChartSpec[];
       const id = (context as { canvasElement?: HTMLElement }).canvasElement ?? context.id;

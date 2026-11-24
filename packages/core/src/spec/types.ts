@@ -19,6 +19,13 @@ export interface ChartSpec {
   fields?: Record<string, FieldSpec>;
   title?: string;
   subtitle?: string;
+  /**
+   * What a screen reader says of the chart, after the title and subtitle. By default a summary is
+   * generated from the data (kind of chart, series, categories, value range and where its extremes
+   * are, with the catalog's labels and formats): set this to say what the chart means instead.
+   * `"Le chiffre d’affaires double entre 2020 et 2024, porté par l’export."`
+   */
+  description?: string;
   theme?: ThemeSpec;
   layers: LayerSpec[];
   /**
@@ -492,4 +499,10 @@ export interface InteractionSpec {
   navigator?: boolean;
   /** Play button and scrubber for marks that play through time (`race`). Hide it for previews. */
   player?: boolean;
+  /**
+   * Keyboard walk through the data: the plot is a tab stop, the arrows move from datum to datum
+   * (left / right) and from series to series (up / down) with the tooltip, Enter clicks, Escape leaves.
+   * Default true; `false` takes the plot out of the tab order.
+   */
+  keyboard?: boolean;
 }

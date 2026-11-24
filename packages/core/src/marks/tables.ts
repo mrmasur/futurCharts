@@ -12,6 +12,7 @@ import { emptyHit, type BuiltMark, type MarkDefinition, type MarkLabel, type Sha
 import { textWidth } from './shapes';
 import { ellipsis, tableColumns, tableRows, type ColumnNeed } from './tablesLayout';
 import { batchOf, calendarMonth, confusion, matrix } from './tablesMatrix';
+import { fillText } from '../theme/texts';
 
 type Kind = NonNullable<TableColumn['type']>;
 
@@ -285,7 +286,7 @@ export const table: MarkDefinition = {
     let y = headH + shown.length * rowH;
     if (rowsFit.more > 0) {
       pushSegment(rules, 0, Y(y), 1, Y(y), withAlpha(grid, grid[3] * 0.7), 1);
-      labels.push({ tx: X(pad / 2), ty: Y(y + 9), text: `+ ${rowsFit.more} ligne${rowsFit.more > 1 ? 's' : ''}`, color: theme.text.muted, size: 11, weight: 500, align: 'left', baseline: 'middle' });
+      labels.push({ tx: X(pad / 2), ty: Y(y + 9), text: fillText(rowsFit.more > 1 ? ctx.theme.texts.moreRows : ctx.theme.texts.moreRow, { n: rowsFit.more }), color: theme.text.muted, size: 11, weight: 500, align: 'left', baseline: 'middle' });
       y += 18;
     }
     const totalY = y;

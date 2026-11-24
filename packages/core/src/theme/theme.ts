@@ -1,5 +1,6 @@
 import type { PointShape } from '../render/layouts';
 import { deepMerge, type DeepPartial } from '../util/merge';
+import { frenchTexts } from './texts';
 
 export interface LineStyle {
   visible: boolean;
@@ -1158,6 +1159,277 @@ export interface Theme {
       curve: 'linear' | 'step' | 'smooth';
     };
   };
+  /**
+   * Texts the marks write for the reader (tooltip rows, headers, captions), French by default. Override one
+   * (`theme: { texts: { median: 'Median' } }`) or all of them (`englishTexts`). `{name}` is filled at drawing
+   * time; keep the same names in a translation. Dates and numbers follow the browser's language instead.
+   */
+  texts: {
+    /** Number of rows in a group (box plot, violin, cohort header, confusion cell). */
+    count: string;
+    /** Number of items when no field names it (chord, calendar). */
+    number: string;
+    /** A node's value when the field has no label (flow). */
+    value: string;
+    /** An arrow's value when the field has no label (flow). */
+    volume: string;
+    /** Middle value of a distribution (box plot, ridgeline, fan, ECDF line). */
+    median: string;
+    /** Arithmetic mean (box plot, raincloud). */
+    mean: string;
+    /** Mean of one series (cycle plot): `{name}` the series. */
+    meanOf: string;
+    /** Row of the average cohort and its tooltip title (cohort). */
+    average: string;
+    /** Interquartile range (violin). */
+    quartiles: string;
+    /** Smallest to largest value (raincloud). */
+    minMax: string;
+    /** Lowest value of a row (sparkline table). */
+    minimum: string;
+    /** Highest value of a row (sparkline table). */
+    maximum: string;
+    /** Caption of the largest marginal bar: `{value}` the count. */
+    max: string;
+    /** Tooltip title of one point (contour). */
+    observation: string;
+    /** Number of observations (violin, contour, marginal histogram). */
+    observations: string;
+    /** Share of the whole (pie, donut, treemap, waffle, parliament, polar stacks…). */
+    share: string;
+    /** Share of the grand total (hierarchies, sets, bubbles, marimekko). */
+    shareOfTotal: string;
+    /** Share of a parent or a source: `{name}` the parent. */
+    shareOf: string;
+    /** Share of the row's total (pivot table). */
+    shareOfRow: string;
+    /** Share of the largest value (radial bars). */
+    shareOfMax: string;
+    /** Share of rows at or below a value (ECDF). */
+    shareOfObservations: string;
+    /** Total of a row, a stack or a group (pivot, stacked bars, maps, decomposition root). */
+    total: string;
+    /** Header of the sparkline column (pivot, sparkline table). */
+    trend: string;
+    /** Change over the period (bridge, bar race tooltip, sparkline table header). */
+    change: string;
+    /** Header of the bar column (sparkline table). */
+    comparison: string;
+    /** Running total (bridge). */
+    cumulative: string;
+    /** Change under a KPI: `{value}` the arrow and the percentage. */
+    versusPrevious: string;
+    /** Change since the first value (funnel, sparkline table). */
+    sinceStart: string;
+    /** Conversion from the step before (funnel, funnel comparison). */
+    sincePrevious: string;
+    /** Conversion from the first step (funnel comparison). */
+    sinceFirst: string;
+    /** Rows that do not reach the next step (funnel comparison). */
+    lostAtStep: string;
+    /** Header of the overall conversion row (funnel comparison). */
+    conversion: string;
+    /** Rate between two steps (funnel comparison): `{percent}` the rate. */
+    passThrough: string;
+    /** Position in a ranking (bar race, bump chart, rank bars). */
+    rank: string;
+    /** Rank and the one before (rank bars): `{rank}`, `{previous}`. */
+    rankWas: string;
+    /** Tooltip title of a QQ point: `{rank}` and `{n}` the count. */
+    rankOutOf: string;
+    /** The current period (bar race). */
+    period: string;
+    /** Difference (variance chart, difference chart). */
+    gap: string;
+    /** Relative difference (variance chart). */
+    gapPercent: string;
+    /** Difference with the budget (period bars). */
+    gapToBudget: string;
+    /** Difference with the series mean (cycle plot). */
+    gapToMean: string;
+    /** Right side of a diverging scale when it has no label (Likert). */
+    favorable: string;
+    /** Left side of a diverging scale when it has no label (Likert). */
+    unfavorable: string;
+    /** Reference line of a tornado: `{value}` the base value. */
+    base: string;
+    /** Spread between the two bars (tornado). */
+    amplitude: string;
+    /** Area of a column (variwide). */
+    heightTimesWidth: string;
+    /** Share of the target reached (bullet, bar in bar, activity rings). */
+    achieved: string;
+    /** Target when the field has no label (bullet, activity rings). */
+    target: string;
+    /** Qualitative band reached, or fill level (bullet, LED gauge). */
+    level: string;
+    /** Fill level (liquid gauge). */
+    fill: string;
+    /** Unit of a pictorial chart: `{value}` what one symbol stands for. */
+    symbolUnit: string;
+    /** A node's or a row's group (flow, chord, network, edge bundle, adjacency matrix). */
+    group: string;
+    /** A label and its value in a tooltip title (histogram bin, parallel sets): `{label}`, `{value}`. */
+    labelValue: string;
+    /** Number of rows (indented tree, decomposition, parallel sets). */
+    rows: string;
+    /** Tooltip title of a row without a key (parallel coordinates): `{n}` its number. */
+    rowN: string;
+    /** Number of points (hexbin). */
+    points: string;
+    /** Tooltip title of a point without a key (3D scatter): `{n}` its number. */
+    pointN: string;
+    /** Name of a quadrant without a label: `{n}` its number. */
+    quadrantN: string;
+    /** Rows left out for lack of room, one (indented tree, table): `{n}`. */
+    moreRow: string;
+    /** Rows left out for lack of room, several: `{n}`. */
+    moreRows: string;
+    /** Nodes left out of a column, one (decomposition tree): `{n}`. */
+    moreOther: string;
+    /** Nodes left out of a column, several: `{n}`. */
+    moreOthers: string;
+    /** Labels left out of a timeline: `{n}` how many. */
+    hiddenLabels: string;
+    /** Back button after a click on a slice (pie, donut). */
+    allParts: string;
+    /** Back button after a click on a series (stacked bars). */
+    allSeries: string;
+    /** Back button at the root (sunburst drill-down). */
+    showAll: string;
+    /** One link (arc diagram, timeline item with a URL). */
+    link: string;
+    /** Links of a node (arc diagram). */
+    links: string;
+    /** Value of the link row (timeline). */
+    openLink: string;
+    /** Flow into a node (chord). */
+    incoming: string;
+    /** Flow out of a node (chord, Sankey). */
+    outgoing: string;
+    /** Links into a node (edge bundle). */
+    incomingLinks: string;
+    /** Links out of a node (edge bundle). */
+    outgoingLinks: string;
+    /** Number of nodes of a group (network). */
+    nodes: string;
+    /** Number of children (tree). */
+    children: string;
+    /** Share of a cohort still active (cohort). */
+    retention: string;
+    /** Rows in the cohort at the start (cohort). */
+    cohortSize: string;
+    /** Position in a stack of dots (dot plot). */
+    inStack: string;
+    /** Theoretical value (QQ plot). */
+    normalQuantile: string;
+    /** Density as a share of the highest (contour). */
+    density: string;
+    /** Name of a prediction band (fan chart): `{n}` its width in percent. */
+    interval: string;
+    /** A week of a cycle plot by weekday: `{date}` its middle. */
+    weekOf: string;
+    /** A quarter (cycle plot): `{n}` from 1 to 4. */
+    quarterN: string;
+    /** An hour (cycle plot, polar day): `{n}`; also a duration in whole hours (Gantt). */
+    hours: string;
+    /** A duration in hours and minutes (Gantt): `{h}`, `{m}`. */
+    hoursMinutes: string;
+    /** A duration in minutes (Gantt): `{n}`. */
+    minutes: string;
+    /** A duration in days (Gantt): `{n}`, with `decimalSeparator`. */
+    days: string;
+    /** Decimal mark of a duration in days (Gantt). */
+    decimalSeparator: string;
+    /** Start of a task when the field has no label (Gantt, schedule). */
+    start: string;
+    /** End of a task when the field has no label (Gantt, schedule). */
+    end: string;
+    /** Length of a task (Gantt, schedule). */
+    duration: string;
+    /** Date of a milestone (Gantt). */
+    milestone: string;
+    /** Completion of a task when the field has no label (Gantt). */
+    progress: string;
+    /** Group of a task when the field has no label (Gantt). */
+    phase: string;
+    /** Tasks that come before (Gantt). */
+    after: string;
+    /** Row of a schedule when the field has no label. */
+    resource: string;
+    /** Size of a set when no field names it (UpSet). */
+    elements: string;
+    /** Number of sets in a combination (UpSet). */
+    combinedSets: string;
+    /** The single set of a combination (UpSet). */
+    only: string;
+    /** Kind of a node (flow). */
+    type: string;
+    /** Description of a node (flow). */
+    note: string;
+    /** Label of an arrow (flow). */
+    condition: string;
+    /** Nodes that feed a node (pipeline flow). */
+    from: string;
+    /** Arrows into and out of a node (flow). */
+    inputsOutputs: string;
+    /** Flow chart shape names: process step. */
+    flowStep: string;
+    /** Flow chart: start. */
+    flowStart: string;
+    /** Flow chart: end. */
+    flowEnd: string;
+    /** Flow chart: decision. */
+    flowDecision: string;
+    /** Flow chart: input or output. */
+    flowIo: string;
+    /** Flow chart: subprocess. */
+    flowSubprocess: string;
+    /** Pipeline shape names: source. */
+    pipeSource: string;
+    /** Pipeline: step. */
+    pipeStep: string;
+    /** Pipeline: subflow. */
+    pipeSubflow: string;
+    /** Pipeline: join or choice. */
+    pipeJoin: string;
+    /** Pipeline: union. */
+    pipeUnion: string;
+    /** Pipeline: output. */
+    pipeOutput: string;
+    /** Total sent by a row (adjacency matrix). */
+    sent: string;
+    /** Total received by a column (adjacency matrix). */
+    received: string;
+    /** Actual class when the field has no label (confusion matrix). */
+    actual: string;
+    /** Predicted class when the field has no label (confusion matrix). */
+    predicted: string;
+    /** Confusion matrix margin: share of a predicted class that is right. */
+    precision: string;
+    /** Confusion matrix margin: share of an actual class that is found. */
+    recall: string;
+    /** Share of all cases rightly classified (confusion matrix tooltip). */
+    accuracy: string;
+    /** The same, as the small caption of the corner cell. */
+    accuracyCaption: string;
+    /** Rightly classified cases (confusion matrix). */
+    correct: string;
+    /** Title of a diagonal cell (confusion matrix): `{name}` the class. */
+    correctOf: string;
+    /** Title of an off-diagonal cell (confusion matrix): `{actual}`, `{predicted}`. */
+    classifiedAs: string;
+    /** Share of a class (confusion matrix): `{kind}` the axis title in lower case, `{name}` the class. */
+    shareOfClass: string;
+    /** Number of cases (confusion matrix corner). */
+    cases: string;
+    /** Cases of an actual class (confusion matrix). */
+    actualCases: string;
+    /** Cases of a predicted class (confusion matrix). */
+    predictedCases: string;
+    /** Eight compass points, clockwise from north (wind rose with `compass`). */
+    compass: string[];
+  };
   tooltip: {
     background: string;
     color: string;
@@ -1311,6 +1583,7 @@ export const lightTheme: Theme = {
     periodBars: { width: 0.78, radius: 2, labels: true, upIsGood: true, good: 'auto', bad: 'auto' },
     flow: { variant: 'pipeline', editable: true, direction: 'LR', rankGap: 56, nodeGap: 28, fontSize: 13, edge: 'auto', edgeWidth: 1.5, tint: 0.16, radius: 6, lanes: false, laneOrder: [], routing: 'curved' },
   },
+  texts: frenchTexts,
   tooltip: {
     background: '#ffffff',
     color: '#0b0b0b',

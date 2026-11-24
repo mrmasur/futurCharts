@@ -7,6 +7,7 @@ import { batches, need, share } from './charts';
 import { Tween } from './animate';
 import { pushArc, pushRect, pushVertex } from './primitives';
 import { emptyHit, type MarkDefinition, type MarkLabel, type ShapeHit } from './registry';
+import { fillText } from '../theme/texts';
 
 const TAU = Math.PI * 2;
 const DAY = 86400000;
@@ -242,7 +243,7 @@ export const sankey: MarkDefinition = {
           const incoming = n.in.reduce((a, l) => a + l.value, 0);
           const outgoing = n.out.reduce((a, l) => a + l.value, 0);
           const rows = [{ label, value: ctx.format(n.value, vf) }];
-          if (incoming && outgoing) rows.push({ label: 'Sortant', value: share(outgoing, incoming) });
+          if (incoming && outgoing) rows.push({ label: ctx.theme.texts.outgoing, value: share(outgoing, incoming) });
           return { title: n.name, rows };
         }
         // Topmost ribbon under the pointer (the last drawn).
@@ -259,7 +260,7 @@ export const sankey: MarkDefinition = {
               title: `${l.source.name} → ${l.target.name}`,
               rows: [
                 { label, value: ctx.format(l.value, vf) },
-                { label: `Part de ${l.source.name}`, value: share(l.value, l.source.value) },
+                { label: fillText(ctx.theme.texts.shareOf, { name: l.source.name }), value: share(l.value, l.source.value) },
               ],
             };
           }
@@ -451,14 +452,14 @@ export const sunburst: MarkDefinition = {
       legend,
       pick(tx, ty): ShapeHit | null {
         const { r } = polar(tx, ty);
-        if (r < hole) return focus === root ? null : { title: `↑ ${focus.parent && focus.parent !== root ? focus.parent.name : 'Tout afficher'}`, rows: [] };
+        if (r < hole) return focus === root ? null : { title: `↑ ${focus.parent && focus.parent !== root ? focus.parent.name : ctx.theme.texts.showAll}`, rows: [] };
         const n = hit(tx, ty);
         if (!n) return null;
         const rows = [
           { label, value: ctx.format(n.value, vf) },
-          { label: 'Part du total', value: share(n.value, root.value) },
+          { label: ctx.theme.texts.shareOfTotal, value: share(n.value, root.value) },
         ];
-        if (n.parent && n.parent !== root) rows.push({ label: `Part de ${n.parent.name}`, value: share(n.value, n.parent.value) });
+        if (n.parent && n.parent !== root) rows.push({ label: fillText(ctx.theme.texts.shareOf, { name: n.parent.name }), value: share(n.value, n.parent.value) });
         return { title: n.path.join(' › '), rows };
       },
       click(tx, ty) {

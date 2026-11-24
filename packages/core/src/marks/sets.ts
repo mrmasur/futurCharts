@@ -12,6 +12,7 @@ import { emptyHit, type MarkDefinition, type MarkLabel, type ShapeHit } from './
 import { textWidth } from './shapes';
 import { bundle } from './setsBundle';
 import { upset } from './setsUpset';
+import { fillText } from '../theme/texts';
 
 // ----------------------------------------------------------------- parsets
 
@@ -297,7 +298,7 @@ export const parsets: MarkDefinition = {
       }
     });
 
-    const valueLabel = vf ? (ctx.fields[vf]?.label ?? vf) : 'Lignes';
+    const valueLabel = vf ? (ctx.fields[vf]?.label ?? vf) : ctx.theme.texts.rows;
     const draws = batches(ctx, [], mesh, []);
     const bars = batches(ctx, rects, [], [], false);
     if (bars[0]) Object.assign(bars[0], { keys, data: new Float32Array(rects) });
@@ -313,7 +314,7 @@ export const parsets: MarkDefinition = {
           const col = columns[d];
           if (x < col.x0 - 2 || x > col.x1 + 2) continue;
           const c = col.cats.find((e) => y >= e.y0 && y <= e.y1);
-          if (c) return { title: `${dimLabel(d)} : ${c.name}`, rows: [{ label: valueLabel, value: fmt(c.value) }, { label: 'Part du total', value: share(c.value, total) }] };
+          if (c) return { title: fillText(ctx.theme.texts.labelValue, { label: dimLabel(d), value: c.name }), rows: [{ label: valueLabel, value: fmt(c.value) }, { label: ctx.theme.texts.shareOfTotal, value: share(c.value, total) }] };
         }
         for (let i = shapes.length - 1; i >= 0; i--) {
           const { run, xs, top: tops } = shapes[i];
@@ -325,7 +326,7 @@ export const parsets: MarkDefinition = {
           if (y < t0 || y > t0 + run.height) continue;
           const a = columns[run.col].cats[run.source];
           const b = columns[run.col + 1].cats[run.target];
-          const rows = [{ label: valueLabel, value: fmt(run.value) }, { label: `Part de ${a.name}`, value: share(run.value, a.value) }];
+          const rows = [{ label: valueLabel, value: fmt(run.value) }, { label: fillText(ctx.theme.texts.shareOf, { name: a.name }), value: share(run.value, a.value) }];
           // The colored dimension, when it is not one of the two ends.
           const tint = [...run.colors.keys()];
           if (tint.length === 1 && colored !== run.col && colored !== run.col + 1) rows.unshift({ label: ctx.fields[cf]?.label ?? cf, value: tint[0] });

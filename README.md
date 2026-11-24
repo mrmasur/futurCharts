@@ -316,6 +316,22 @@ palette a été validée : séparation pour les daltoniens entre couleurs voisin
 bande de luminosité et contraste avec le fond. Une palette se passe dans le thème :
 `theme: { extends: 'dark', palette: { categorical: [...], sequential: [...] } }`.
 
+## Langue des textes
+
+Les textes que les marques écrivent elles-mêmes (en-têtes « Effectif », « Conversion », lignes d'infobulle
+« Médiane », « Part du total », compteurs « + 3 lignes », caps de la rose des vents…) viennent de `theme.texts`,
+en français par défaut. Un jeu anglais est fourni, et chaque clé se surcharge seule :
+
+```ts
+import { englishTexts } from '@futurcharts/core';
+const spec = { theme: { texts: englishTexts }, ... };          // tout en anglais
+const spec2 = { theme: { texts: { median: 'Median' } }, ... }; // une seule clé
+```
+
+Les textes à valeur variable sont des gabarits (`'+ {n} lignes'`, `'Part de {name}'`) : une traduction garde les
+mêmes `{noms}`. Chaque clé est décrite dans le type `Theme['texts']`. Les dates et les nombres suivent la langue du
+navigateur (Intl). Exemple : « Graphiques en anglais » dans la galerie.
+
 ## Wrappers
 
 Tous reposent sur `mountChart` (dans le cœur), qui gère la création asynchrone, les mises à jour et la
@@ -399,6 +415,39 @@ La bibliothèque s'adapte seule, et la spec dit le reste :
 
 Audit : dans la console de `gallery.html`, `await fcAudit(343, 260)` monte chaque exemple à cette taille et signale
 ceux dont le dessin est trop à l'étroit.
+
+## Accessibilité
+
+Tout est dessiné sur canvas : sans aide, un lecteur d'écran ne lirait rien et le clavier ne ferait rien. Chaque
+graphique fournit donc, sans rien changer à l'image :
+
+- **Un nom** : la racine du graphique est une `figure` (`role="figure"`) dont l'`aria-label` donne le titre, le
+  sous-titre, puis un résumé généré depuis les données, avec les libellés et formats du catalogue de champs :
+  « Barres, 6 catégories, de 704 k€ (Helios) à 4 276 k€ (Atlas) ». Selon le cas : nombre de séries et leurs noms,
+  nombre de points et étendue de l'axe x continu, extrêmes de chaque mesure sur un double axe. Pour dire ce que le
+  graphique signifie plutôt que ce qu'il contient, la spec donne son propre texte :
+
+```json
+"description": "Le chiffre d’affaires double entre 2020 et 2024, porté par l’export."
+```
+
+- **Un tableau de données caché** (masqué visuellement, pas `display: none`, donc lu par les lecteurs d'écran) : une
+  ligne par catégorie et une colonne par série, valeurs formatées comme dans l'infobulle ; une ligne par point pour un
+  nuage ; 50 lignes au plus, suivies de « + n lignes ». Pour une marque sans x / y (camembert, treemap, entonnoir…) :
+  les lignes de la table du calque, une colonne par champ encodé. Rien pour un diagramme décrit par `graph` (le
+  résumé donne alors le nombre d'étapes et de liens) ni pour une carte sans données.
+- **Le clavier** : la zone de tracé est un arrêt de tabulation (contour visible seulement au focus). Gauche / droite
+  parcourent les points d'une série dans l'ordre (Début / Fin : premier et dernier), haut / bas changent de série ;
+  le point courant reçoit l'infobulle et le survol, et sa valeur est annoncée par une région `aria-live`
+  (« Suède : 889 k€, 2 sur 10 »). Entrée émet `click` comme un clic sur ce point, Échap quitte.
+  `"interactions": { "keyboard": false }` retire la zone de l'ordre de tabulation (le nom et le tableau restent).
+- **Petits multiples** : la racine est une `figure` nommée « Petits multiples, n panneaux par … » (ou par
+  `description`), chaque panneau est un graphique complet avec son nom, son tableau et son parcours au clavier.
+
+Limites : les marques « surfaces » sans points (cartes de pays, treemap, Sankey…) ne se parcourent pas encore au
+clavier (elles n'ont que `pick`) ; elles ne sont alors pas un arrêt de tabulation. Les textes (résumé, annonces) sont
+en français. Pas encore essayé avec un vrai lecteur d'écran (VoiceOver, NVDA) : seulement vérifié dans l'arbre
+d'accessibilité et par les tests.
 
 ## Annotations
 

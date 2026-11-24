@@ -3,6 +3,7 @@
  * cohort retention table, decomposition tree columns, compared funnel.
  */
 import type { HNode } from './hierarchyLayout';
+import { frenchTexts } from '../theme/texts';
 
 // ------------------------------------------------------------------- cohort
 
@@ -130,7 +131,7 @@ export interface FunnelComparison {
   worst: number[];
 }
 
-export function funnelComparison(stage: ArrayLike<unknown>, segment: ArrayLike<unknown> | undefined, value: ArrayLike<number>, only = 'Total'): FunnelComparison {
+export function funnelComparison(stage: ArrayLike<unknown>, segment: ArrayLike<unknown> | undefined, value: ArrayLike<number>, only = frenchTexts.total): FunnelComparison {
   const stages: string[] = [];
   const segments: string[] = [];
   for (let i = 0; i < stage.length; i++) {

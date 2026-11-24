@@ -24,6 +24,7 @@ import {
 import { luminance, pushRect, pushSegment } from './primitives';
 import { emptyHit, type BuildContext, type MarkDefinition, type MarkDraw, type MarkLabel, type ShapeHit } from './registry';
 import { textWidth } from './shapes';
+import { fillText } from '../theme/texts';
 
 const unitScales = () => ({ x: new LinearScale(0, 1), y: new LinearScale(0, 1) });
 const fieldLabel = (ctx: BuildContext, f: string) => ctx.fields[f]?.label ?? f;
@@ -231,8 +232,8 @@ export const likert: MarkDefinition = {
         const line = (l: number) => ({ label: levels[l], value: `${percent0(d.values[l] / d.total)} · ${ctx.format(d.values[l], vf)}` });
         const out = over ? [line(over.level)] : levels.map((_, l) => line(l));
         if (over) {
-          out.push({ label: negLabel || 'Défavorable', value: percent0(d.negative) });
-          out.push({ label: posLabel || 'Favorable', value: percent0(d.positive) });
+          out.push({ label: negLabel || ctx.theme.texts.unfavorable, value: percent0(d.negative) });
+          out.push({ label: posLabel || ctx.theme.texts.favorable, value: percent0(d.positive) });
         }
         return { title: d.key, rows: out };
       },
@@ -395,7 +396,7 @@ export const tornado: MarkDefinition = {
         const yA = bands.top - 3;
         const yB = bands.top + items.length * bands.rowH + 2;
         pushSegment(lines, X(bx), Y(yA), X(bx), Y(yB), parseColor(theme.text.secondary), 1);
-        labels.unshift({ tx: X(bx), ty: Y(yA - 4), text: `Base : ${ctx.format(base, fields[0])}`, color: theme.text.secondary, size: 11, weight: 600, align: 'center', baseline: 'bottom' });
+        labels.unshift({ tx: X(bx), ty: Y(yA - 4), text: fillText(ctx.theme.texts.base, { value: ctx.format(base, fields[0]) }), color: theme.text.secondary, size: 11, weight: 600, align: 'center', baseline: 'bottom' });
       }
     }
 
@@ -413,7 +414,7 @@ export const tornado: MarkDefinition = {
         const d = items[i];
         if (!d || tx < 0 || tx > 1 || y < bands.top) return null;
         const out = ([0, 1] as const).filter((s) => text(d, s)).map((s) => ({ label: names[s], value: text(d, s) }));
-        if (sensitivity) out.push({ label: 'Amplitude', value: ctx.format(tornadoAmplitude(d, base), fields[0]) });
+        if (sensitivity) out.push({ label: ctx.theme.texts.amplitude, value: ctx.format(tornadoAmplitude(d, base), fields[0]) });
         return { title: d.key, rows: out };
       },
     };
@@ -557,7 +558,7 @@ export const variwide: MarkDefinition = {
           rows: [
             { label: fieldLabel(ctx, vf), value: ctx.format(d.value, vf) },
             { label: fieldLabel(ctx, wf), value: ctx.format(d.size, wf) },
-            { label: 'Hauteur × largeur', value: plain.format(d.value * d.size) },
+            { label: ctx.theme.texts.heightTimesWidth, value: plain.format(d.value * d.size) },
           ],
         };
       },
@@ -681,9 +682,9 @@ export const barRank: MarkDefinition = {
         const out = [{ label: fieldLabel(ctx, vf), value: valueText[i] }];
         if (pf && Number.isFinite(d.previous)) {
           out.push({ label: fieldLabel(ctx, pf), value: ctx.format(d.previous, pf) });
-          out.push({ label: 'Variation', value: changeText(d) });
+          out.push({ label: ctx.theme.texts.change, value: changeText(d) });
         }
-        out.push({ label: 'Rang', value: Number.isFinite(d.previousRank) && d.previousRank !== d.rank ? `${d.rank} (était ${d.previousRank})` : String(d.rank) });
+        out.push({ label: ctx.theme.texts.rank, value: Number.isFinite(d.previousRank) && d.previousRank !== d.rank ? fillText(ctx.theme.texts.rankWas, { rank: d.rank, previous: d.previousRank }) : String(d.rank) });
         return { title: d.key, rows: out };
       },
     };
@@ -793,7 +794,7 @@ export const barInBar: MarkDefinition = {
         const out = [{ label: names[0], value: valueText[i] }];
         if (Number.isFinite(d.target)) {
           out.push({ label: names[1], value: ctx.format(d.target, tf) });
-          out.push({ label: 'Réalisé', value: shareText(d) });
+          out.push({ label: ctx.theme.texts.achieved, value: shareText(d) });
         }
         return { title: d.key, rows: out };
       },

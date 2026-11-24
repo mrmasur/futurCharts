@@ -12,6 +12,7 @@ import { pushArc } from './primitives';
 import { pushRect, pushSegment, pushVertex } from './primitives';
 import { emptyHit, type BuildContext, type MarkDefinition, type MarkLabel, type ShapeHit } from './registry';
 import { textWidth } from './shapes';
+import { fillText } from '../theme/texts';
 
 const fieldLabel = (ctx: BuildContext, f: string) => ctx.fields[f]?.label ?? f;
 
@@ -146,9 +147,9 @@ export const ridgeline: MarkDefinition = {
         return {
           title: d.g,
           rows: [
-            { label: 'Effectif', value: String(d.v.length) },
-            { label: 'Médiane', value: ctx.format(quantile(d.v, 0.5), xf) },
-            { label: 'Moyenne', value: ctx.format(mean, xf) },
+            { label: ctx.theme.texts.count, value: String(d.v.length) },
+            { label: ctx.theme.texts.median, value: ctx.format(quantile(d.v, 0.5), xf) },
+            { label: ctx.theme.texts.mean, value: ctx.format(mean, xf) },
             { label: 'Q1 – Q3', value: `${ctx.format(quantile(d.v, 0.25), xf)} – ${ctx.format(quantile(d.v, 0.75), xf)}` },
           ],
         };
@@ -403,7 +404,7 @@ export const pictorial: MarkDefinition = {
       }
       labels.push({ tx: (nameW + Math.ceil(n) * step) * px, ty: cy, text: ctx.format(d.value, vf), color: theme.text.secondary, size: 11, align: 'left', baseline: 'middle', dx: 8 });
     });
-    labels.push({ tx: 1, ty: 0, text: `1 symbole = ${ctx.format(unit, vf)}`, color: theme.text.muted, size: 10, align: 'right', baseline: 'bottom', dy: -2 });
+    labels.push({ tx: 1, ty: 0, text: fillText(ctx.theme.texts.symbolUnit, { value: ctx.format(unit, vf) }), color: theme.text.muted, size: 10, align: 'right', baseline: 'bottom', dy: -2 });
     return {
       draws: [{ batch: batch(ctx, 'point', out), enter: 'fade' }],
       hit: emptyHit(),
@@ -414,7 +415,7 @@ export const pictorial: MarkDefinition = {
         const d = items[i];
         if (!d) return null;
         const total = items.reduce((a, q) => a + q.value, 0);
-        return { title: d.key, rows: [{ label: fieldLabel(ctx, vf), value: ctx.format(d.value, vf) }, { label: 'Part', value: share(d.value, total) }] };
+        return { title: d.key, rows: [{ label: fieldLabel(ctx, vf), value: ctx.format(d.value, vf) }, { label: ctx.theme.texts.share, value: share(d.value, total) }] };
       },
     };
   },
@@ -828,7 +829,7 @@ export const splom: MarkDefinition = {
         }
         if (best < 0) return null;
         const rows = fields.map((f, k) => ({ label: fieldLabel(ctx, f), value: ctx.format(cols[k][best], f) }));
-        return { title: gf ? String(groups![best]) : `Ligne ${best + 1}`, rows };
+        return { title: gf ? String(groups![best]) : fillText(ctx.theme.texts.rowN, { n: best + 1 }), rows };
       },
     };
   },
@@ -974,7 +975,7 @@ export const scatter3d: MarkDefinition = {
             const r = pts[p.i].row;
             const row = table.row(r);
             return {
-              title: gf && !numericColor ? String(row[gf]) : `Point ${r + 1}`,
+              title: gf && !numericColor ? String(row[gf]) : fillText(ctx.theme.texts.pointN, { n: r + 1 }),
               rows: [xf, yf, zf].map((f) => ({ label: fieldLabel(ctx, f), value: ctx.format(row[f] as number, f) })),
             };
           }

@@ -45,7 +45,8 @@ async function mount(): Promise<void> {
     else if (entry.tiles) box.style.height = '156px';
     else if (!spec.facet) box.style.height = `${height}px`;
     cadre.appendChild(box);
-    const themed: ChartSpec = dark ? { ...spec, theme: 'dark' } : spec;
+    // The spec's own theme (an example's `texts`) stays under the dark one.
+    const themed: ChartSpec = dark ? { ...spec, theme: spec.theme && typeof spec.theme === 'object' ? { ...spec.theme, extends: 'dark' } : 'dark' } : spec;
     try {
       (window.__graphiques ??= []).push(await createChart(box, themed));
     } catch (error) {

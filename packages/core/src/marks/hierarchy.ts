@@ -13,6 +13,7 @@ import {
 import { pushRect, pushSegment, pushVertex } from './primitives';
 import { emptyHit, type BuildContext, type BuiltMark, type MarkDefinition, type MarkLabel, type ShapeHit } from './registry';
 import { textWidth } from './shapes';
+import { fillText } from '../theme/texts';
 
 const fieldLabel = (ctx: BuildContext, f: string) => ctx.fields[f]?.label ?? f;
 
@@ -207,9 +208,9 @@ export const voronoi: MarkDefinition = {
         if (!c) return null;
         const rows = [
           ...(vf ? [{ label: fieldLabel(ctx, vf), value: ctx.format(c.leaf.value, vf) }] : []),
-          { label: 'Part du total', value: share(c.leaf.value, root.value) },
+          { label: ctx.theme.texts.shareOfTotal, value: share(c.leaf.value, root.value) },
         ];
-        if (c.leaf !== c.top) rows.push({ label: `Part de ${c.top.name}`, value: share(c.leaf.value, c.top.value) });
+        if (c.leaf !== c.top) rows.push({ label: fillText(ctx.theme.texts.shareOf, { name: c.top.name }), value: share(c.leaf.value, c.top.value) });
         return { title: c.leaf === c.top ? c.leaf.name : `${c.top.name} › ${c.leaf.name}`, rows };
       },
     };
@@ -307,7 +308,7 @@ export const indentedTree: MarkDefinition = {
       });
       if (fit.more) {
         labels.push({
-          tx: 16 * px, ty: ty((shown.length + 0.5) * rowH), text: `+ ${fit.more} ${fit.more > 1 ? 'lignes' : 'ligne'}`,
+          tx: 16 * px, ty: ty((shown.length + 0.5) * rowH), text: fillText(fit.more > 1 ? ctx.theme.texts.moreRows : ctx.theme.texts.moreRow, { n: fit.more }),
           align: 'left', baseline: 'middle', size: 11, color: theme.text.muted,
         });
       }
@@ -332,13 +333,13 @@ export const indentedTree: MarkDefinition = {
         const n = row.node;
         const rows = [
           ...(vf ? [{ label: fieldLabel(ctx, vf), value: text(n) }] : []),
-          { label: 'Part du total', value: share(n.value, root.value) },
+          { label: ctx.theme.texts.shareOfTotal, value: share(n.value, root.value) },
         ];
         if (n.depth > 1) {
           const parent = everyNode.find((p) => pathKey(p.path) === pathKey(n.path.slice(0, -1)));
-          if (parent) rows.push({ label: `Part de ${parent.name}`, value: share(n.value, parent.value) });
+          if (parent) rows.push({ label: fillText(ctx.theme.texts.shareOf, { name: parent.name }), value: share(n.value, parent.value) });
         }
-        if (n.children.length) rows.push({ label: 'Lignes', value: String(n.children.length) });
+        if (n.children.length) rows.push({ label: ctx.theme.texts.rows, value: String(n.children.length) });
         return { title: n.path.join(' › '), rows };
       },
       click(tx, t) {

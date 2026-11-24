@@ -12,6 +12,8 @@ import { categoriesOf, need, totals, valueColor } from './charts';
 import { pushArc, pushSegment, pushVertex } from './primitives';
 import { emptyHit, type BuildContext, type MarkDefinition, type MarkDraw, type MarkLabel, type ShapeHit } from './registry';
 import { textWidth } from './shapes';
+import { fillText } from '../theme/texts';
+import type { Theme } from '../theme/theme';
 
 const TAU = Math.PI * 2;
 const DAY = 86400000;
@@ -271,8 +273,6 @@ function fitting(ctx: BuildContext, f: Frame, sets: AngleTick[][], size: number)
   return sets[sets.length - 1] ?? [];
 }
 
-const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
-
 interface AngleAxis {
   /** Angle keys in drawing order (clockwise), as the strings `totals` produces. */
   keys: string[];
@@ -303,7 +303,7 @@ function angleAxis(ctx: BuildContext, f: Frame, field: string, size: number): An
   // On a cycle, order by angle: 350° comes before 10° only if it does around the circle.
   if (cyclic) keys.sort((p, q) => turn(Number(p)) - turn(Number(q)));
   const text = (v: number, n: number) => {
-    if (style.compass && Math.abs(period - 360) < 1e-9 && (n === 4 || n === 8)) return COMPASS[(Math.round(((v - origin) / 360) * 8) + 8) % 8];
+    if (style.compass && Math.abs(period - 360) < 1e-9 && (n === 4 || n === 8)) return ctx.theme.texts.compass[(Math.round(((v - origin) / 360) * 8) + 8) % 8] ?? '';
     return ctx.format(v, field);
   };
   const sets: AngleTick[][] = [];
@@ -446,7 +446,7 @@ export function quietRay(spokes: number[], angles: number[]): number {
 const monthStarts = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334].map((d) => d / 365);
 
 /** Graduations of one turn: where the separators go and what to write between (or on) them. */
-function spiralTicks(turn: SpiralTurn | 'count', count: number): { lines: number[]; sets: AngleTick[][] } {
+function spiralTicks(turn: SpiralTurn | 'count', count: number, texts: Theme['texts']): { lines: number[]; sets: AngleTick[][] } {
   if (turn === 'year') {
     const short = new Intl.DateTimeFormat(undefined, { month: 'short', timeZone: 'UTC' });
     const narrow = new Intl.DateTimeFormat(undefined, { month: 'narrow', timeZone: 'UTC' });
@@ -464,7 +464,7 @@ function spiralTicks(turn: SpiralTurn | 'count', count: number): { lines: number
     return { lines: Array.from({ length: 7 }, (_, d) => (d / 7) * TAU), sets: [f('short'), f('narrow')] };
   }
   if (turn === 'day') {
-    const set = (n: number) => Array.from({ length: n }, (_, i) => ({ a: (i / n) * TAU, text: `${(24 / n) * i} h` }));
+    const set = (n: number) => Array.from({ length: n }, (_, i) => ({ a: (i / n) * TAU, text: fillText(texts.hours, { n: (24 / n) * i }) }));
     return { lines: Array.from({ length: 8 }, (_, i) => (i / 8) * TAU), sets: [set(12), set(8), set(4)] };
   }
   const n = Math.max(1, Math.round(count));
@@ -555,7 +555,7 @@ export const spiral: MarkDefinition = {
     const turns = Math.max(1, Math.ceil(Math.max(0, ...pos) + L.span / 2));
     if (style.labels) {
       const size = f.px < 110 ? 9 : 11;
-      const T = spiralTicks(unit, style.turnCount > 0 ? style.turnCount : 12);
+      const T = spiralTicks(unit, style.turnCount > 0 ? style.turnCount : 12, ctx.theme.texts);
       // Period separators, drawn over the ribbon in the surface color.
       const sep = withAlpha(ctx.surface, 0.5);
       const lines: number[] = [];
@@ -914,7 +914,7 @@ export const radialArea: MarkDefinition = {
         const k = t < 0.5 ? i0 : i1;
         const v = val(shown[j], k);
         const rows = [{ label: fieldLabel(ctx, vf), value: ctx.format(v, vf) }];
-        if (sums[k] > 0 && shown.length > 1) rows.push({ label: 'Part', value: `${Math.round((v / sums[k]) * 100)} %` });
+        if (sums[k] > 0 && shown.length > 1) rows.push({ label: ctx.theme.texts.share, value: `${Math.round((v / sums[k]) * 100)} %` });
         return { title: sf ? `${shown[j].name} · ${axis.label(axis.keys[k])}` : axis.label(axis.keys[k]), rows };
       },
     };

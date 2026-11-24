@@ -52,8 +52,13 @@ La branche `graphiques-2026-11-23` porte les tests visuels et 103 exemples nouve
   format par ligne dans `ctx.format` ; pas de symbole à taille en px ancré en espace d'échelle ; `MarkStyle` en
   intersection (deux options de même nom et de types différents se cassent) ; chaque famille réécrit sa mise en
   page en px (colonnes nom / barres / chiffres) : une aide commune manque.
-- **Libellés en dur en français** dans plusieurs marques (« Médiane », « Écart », caps de la rose des vents…) :
-  à sortir dans le thème ou les options le jour où une autre langue est visée.
+- ~~**Libellés en dur en français** dans les marques~~ : fait le 2026-11-24. Les textes écrits par les marques
+  (en-têtes, légendes, infobulles, compteurs « + n lignes », caps de la rose des vents) sont dans `theme.texts`
+  (`theme/texts.ts`, jeu `englishTexts`, gabarits `{n}` remplis par `fillText`), un test (`textes.test.ts`) interdit
+  de les réécrire en dur dans `marks/`. Restent hors de `texts` : les dates et nombres (Intl, langue du navigateur),
+  les libellés déjà réglables par les options (`todayLabel` du Gantt, `rootLabel`…), les notations Q1 / Q3 / pN,
+  l'espace avant « % » des pourcentages calculés à la main, et les textes de `chart/` (légende, barre de lecture,
+  accessibilité), hors du périmètre de ce chantier.
 
 ## Priorité 1 — sécuriser (avant toute nouvelle fonctionnalité)
 

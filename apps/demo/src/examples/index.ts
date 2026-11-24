@@ -21,6 +21,7 @@ import { FAMILIES as flux } from './flux';
 import { FAMILIES as transitions } from './transitions';
 import { FAMILIES as produit } from './produit';
 import { FAMILIES as pilotage } from './pilotage';
+import { FAMILIES as langues } from './langues';
 
 export interface Family {
   /** Gallery section: an existing one (its examples follow the others) or a new one. */
@@ -28,4 +29,4 @@ export interface Family {
   entries: Entry[];
 }
 
-export const EXTRA: Family[] = [...bourse, ...jauges, ...gantt, ...polaires, ...ensembles, ...series, ...axes, ...stats, ...cartes, ...comparaison, ...tables, ...contrat, ...hierarchies, ...correlation, ...flux, ...transitions, ...produit, ...pilotage];
+export const EXTRA: Family[] = [...bourse, ...jauges, ...gantt, ...polaires, ...ensembles, ...series, ...axes, ...stats, ...cartes, ...comparaison, ...tables, ...contrat, ...hierarchies, ...correlation, ...flux, ...transitions, ...produit, ...pilotage, ...langues];

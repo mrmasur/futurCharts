@@ -268,3 +268,109 @@ declare global {
     __graphiques?: unknown[];
   }
 }
+
+test.describe('accessibilité', () => {
+  type Item = { xLabel: string; valueLabel: string; series: string };
+  type Chartish = {
+    getSpec(): { data: { country: string; revenue: number }[]; interactions?: object } & Record<string, unknown>;
+    update(spec: unknown): void;
+    on(t: 'click', h: (p: { items: Item[] }) => void): void;
+  };
+  const NOM = 'barres-horizontales-triees';
+  const figure = (page: Page) => page.locator('#cadre [role="figure"]').first();
+  const zone = (page: Page) => page.locator('#cadre [role="application"]').first();
+  const live = (page: Page) => page.locator('#cadre [aria-live="polite"]').first();
+
+  test('la figure est nommée : titre, sous-titre et résumé des données', async ({ page }) => {
+    const errors = watchErrors(page);
+    await open(page, NOM);
+    const label = (await figure(page).getAttribute('aria-label'))!;
+    const data = await page.evaluate(() => (window.__graphiques![0] as Chartish).getSpec().data);
+    const min = data.reduce((a, b) => (b.revenue < a.revenue ? b : a));
+    const max = data.reduce((a, b) => (b.revenue > a.revenue ? b : a));
+    const fmt = (v: number) => `${v.toLocaleString('fr-FR')} k€`;
+    expect(label).toBe(`Chiffre d’affaires par pays. En milliers d’euros. Barres, ${data.length} catégories, de ${fmt(min.revenue)} (${min.country}) à ${fmt(max.revenue)} (${max.country})`);
+    // `description` replaces the generated summary.
+    await page.evaluate(() => {
+      const c = window.__graphiques![0] as Chartish;
+      c.update({ ...c.getSpec(), description: 'L’Allemagne mène.' });
+    });
+    await expect(figure(page)).toHaveAttribute('aria-label', 'Chiffre d’affaires par pays. En milliers d’euros. L’Allemagne mène');
+    expect(errors).toEqual([]);
+  });
+
+  test('un tableau de données caché, une ligne par catégorie', async ({ page }) => {
+    const errors = watchErrors(page);
+    await open(page, NOM);
+    const count = await page.evaluate(() => (window.__graphiques![0] as Chartish).getSpec().data.length);
+    const table = figure(page).locator('table');
+    await expect(table).toHaveCount(1);
+    await expect(table.locator('tbody tr')).toHaveCount(Math.min(50, count));
+    await expect(table.locator('thead th')).toHaveText(['country', 'CA']);
+    // Invisible but present for assistive technologies (not `display: none`).
+    const box = await table.evaluate((t) => {
+      const r = t.parentElement!.getBoundingClientRect();
+      return { w: r.width, h: r.height, display: getComputedStyle(t.parentElement!).display };
+    });
+    expect(box.w).toBeLessThanOrEqual(1);
+    expect(box.h).toBeLessThanOrEqual(1);
+    expect(box.display).not.toBe('none');
+    expect(errors).toEqual([]);
+  });
+
+  test('clavier : Tab, flèches (infobulle et annonce), Entrée émet click, Échap quitte', async ({ page }) => {
+    const errors = watchErrors(page);
+    await open(page, NOM);
+    await page.evaluate(() => {
+      const w = window as unknown as { __clics: Item[][] };
+      w.__clics = [];
+      (window.__graphiques![0] as Chartish).on('click', (p) => w.__clics.push(p.items));
+    });
+    await page.keyboard.press('Tab');
+    expect(await zone(page).evaluate((z) => z === document.activeElement)).toBe(true);
+    expect(await zone(page).evaluate((z) => z.style.outline)).not.toBe('');
+    expect(await tooltipShown(page)).toBe(false);
+
+    const tipText = () =>
+      page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#cadre div')].find((d) => d.style.pointerEvents === 'none' && d.style.opacity === '1' && !!d.textContent?.trim())?.textContent ?? '');
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(() => tooltipShown(page)).toBe(true);
+    const first = (await live(page).textContent())!;
+    expect(first).toMatch(/ : .+ k€, 1 sur \d+$/);
+    const tip1 = await tipText();
+    await page.keyboard.press('ArrowRight');
+    await expect(live(page)).toHaveText(/, 2 sur \d+$/);
+    expect(await tipText()).not.toBe(tip1);
+
+    await page.keyboard.press('Enter');
+    const clicks = await page.evaluate(() => (window as unknown as { __clics: Item[][] }).__clics);
+    expect(clicks).toHaveLength(1);
+    expect((await live(page).textContent())!.startsWith(`${clicks[0][0].xLabel} : ${clicks[0][0].valueLabel}`)).toBe(true);
+
+    await page.keyboard.press('Escape');
+    await expect.poll(() => tooltipShown(page)).toBe(false);
+    await expect(live(page)).toHaveText('');
+    expect(errors).toEqual([]);
+  });
+
+  test('interactions.keyboard: false coupe la navigation au clavier', async ({ page }) => {
+    const errors = watchErrors(page);
+    await open(page, NOM);
+    await page.evaluate(() => {
+      const c = window.__graphiques![0] as Chartish;
+      const spec = c.getSpec();
+      c.update({ ...spec, interactions: { ...spec.interactions, keyboard: false } });
+    });
+    await page.waitForTimeout(200);
+    expect(await zone(page).getAttribute('tabindex')).toBeNull();
+    await page.keyboard.press('Tab');
+    expect(await zone(page).evaluate((z) => z === document.activeElement)).toBe(false);
+    await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(100);
+    expect(await tooltipShown(page)).toBe(false);
+    await expect(live(page)).toHaveText('');
+    // The description and the table stay: only the keyboard walk is off.
+    await expect(figure(page).locator('table')).toHaveCount(1);
+    expect(errors).toEqual([]);
+  });
+});

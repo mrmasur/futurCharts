@@ -237,8 +237,8 @@ export const race: MarkDefinition = {
           title: entities[b.e],
           rows: [
             { label: ctx.fields[vf]?.label ?? vf, value: fmtValue(b.v) },
-            { label: 'Rang', value: String(Math.round(b.r) + 1) },
-            { label: ctx.fields[tf]?.label ?? 'Période', value: frames[Math.min(F - 1, Math.round(t))] },
+            { label: ctx.theme.texts.rank, value: String(Math.round(b.r) + 1) },
+            { label: ctx.fields[tf]?.label ?? ctx.theme.texts.period, value: frames[Math.min(F - 1, Math.round(t))] },
           ],
         };
       },

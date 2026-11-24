@@ -16,6 +16,8 @@ import { dashed, pushRect, pushSegment, pushVertex } from './primitives';
 import { emptyHit, type BuildContext, type BuiltMark, type MarkDefinition, type MarkLabel, type ShapeHit } from './registry';
 import { textWidth } from './shapes';
 import { bumpArea } from './seriesBump';
+import { fillText } from '../theme/texts';
+import { lightTheme, type Theme } from '../theme/theme';
 
 const DAY = 86400000;
 
@@ -198,7 +200,7 @@ export const difference: MarkDefinition = {
           rows: [
             { label: s.key, value: ctx.format(s.y1[i], f1) },
             { label: refName, value: ctx.format(s.y0[i], f2) },
-            { label: 'Écart', value: `${sign(gap)}${ctx.format(Math.abs(gap), f1)}${rel}` },
+            { label: ctx.theme.texts.gap, value: `${sign(gap)}${ctx.format(Math.abs(gap), f1)}${rel}` },
           ],
         };
       },
@@ -247,7 +249,7 @@ interface FanStep {
   anchor?: boolean;
 }
 
-const bandName = ([lo, hi]: [number, number]) => `Intervalle ${Math.round((hi - lo) * 100)} %`;
+const bandName = (texts: Theme['texts'], [lo, hi]: [number, number]) => fillText(texts.interval, { n: Math.round((hi - lo) * 100) });
 
 /**
  * `fan`: a forecast as nested quantile bands around its median, after the history
@@ -321,7 +323,7 @@ export const fan: MarkDefinition = {
     }
     bands = bands.filter((_, k) => complete[k]);
     const B = bands.length;
-    const names = bands.map(bandName);
+    const names = bands.map((b) => bandName(ctx.theme.texts, b));
     const alpha = (k: number) => (style.opacity * (k + 1)) / B;
 
     const mesh: number[] = [];
@@ -404,7 +406,7 @@ export const fan: MarkDefinition = {
         return {
           title,
           rows: [
-            { label: 'Médiane', value: ctx.format(f.value, vf) },
+            { label: ctx.theme.texts.median, value: ctx.format(f.value, vf) },
             ...bands.map((_, k) => ({ label: names[k], value: `${ctx.format(f.lo[k], vf)} – ${ctx.format(f.hi[k], vf)}` })).reverse(),
           ],
         };
@@ -498,7 +500,7 @@ export function cyclePanels(
 const dateLabel = (ms: number, options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat(undefined, { ...options, timeZone: 'UTC' }).format(ms);
 
 /** Read a cycle plot's layer: its panels, and how to name periods and positions. */
-function cycleModel(layer: LayerSpec, table: Table) {
+function cycleModel(layer: LayerSpec, table: Table, texts: Theme['texts']) {
   const xf = need(layer, 'x', 'cycle');
   const vf = layer.encode.y ?? need(layer, 'value', 'cycle');
   const xcol = table.column(xf);
@@ -518,10 +520,10 @@ function cycleModel(layer: LayerSpec, table: Table) {
       period === 'month' ? (i, form) => dateLabel(Date.UTC(2021, i, 1), { month: form })
       // 2021-02-01 was a Monday.
       : period === 'weekday' ? (i, form) => dateLabel(Date.UTC(2021, 1, 1 + i), { weekday: form })
-      : period === 'quarter' ? (i) => `T${i + 1}`
-      : (i, form) => (form === 'narrow' ? String(i) : `${i} h`);
+      : period === 'quarter' ? (i) => fillText(texts.quarterN, { n: i + 1 })
+      : (i, form) => (form === 'narrow' ? String(i) : fillText(texts.hours, { n: i }));
     orderLabel =
-      period === 'weekday' ? (o) => `semaine du ${dateLabel((o * 7 - 3) * DAY, { day: 'numeric', month: 'short', year: 'numeric' })}`
+      period === 'weekday' ? (o) => fillText(texts.weekOf, { date: dateLabel((o * 7 - 3) * DAY, { day: 'numeric', month: 'short', year: 'numeric' }) })
       : period === 'hour' ? (o) => dateLabel(o * DAY, { day: 'numeric', month: 'short', year: 'numeric' })
       : (o) => String(o);
   } else {
@@ -554,8 +556,8 @@ export const cycle: MarkDefinition = {
   // Period names shorten and dots shrink with the panels.
   sizeDependent: true,
   symbol: 'line',
-  scales({ layer, table, fields, size }) {
-    const m = cycleModel(layer, table);
+  scales({ layer, table, fields, size, theme }) {
+    const m = cycleModel(layer, table, (theme ?? lightTheme).texts);
     const zero = (layer.style as { zero?: boolean } | undefined)?.zero;
     let [lo, hi] = m.lo <= m.hi ? [m.lo, m.hi] : [0, 1];
     if (zero) [lo, hi] = [Math.min(0, lo), Math.max(0, hi)];
@@ -574,7 +576,7 @@ export const cycle: MarkDefinition = {
   build(ctx) {
     const { layer, table } = ctx.data;
     const { style, theme } = ctx;
-    const m = cycleModel(layer, table);
+    const m = cycleModel(layer, table, ctx.theme.texts);
     const multi = !!layer.encode.color;
     const valueLabel = labelOf(ctx.fields, m.vf);
     const colorOf = (key: string) => (multi ? ctx.categorical(key) : layer.style?.color ? parseColor(layer.style.color) : ctx.categorical(valueLabel));
@@ -639,8 +641,8 @@ export const cycle: MarkDefinition = {
           title: `${name} · ${m.orderLabel(p.order)}`,
           rows: [
             { label: multi ? line.key : valueLabel, value: ctx.format(p.value, m.vf) },
-            { label: `Moyenne (${name})`, value: ctx.format(line.mean, m.vf) },
-            { label: 'Écart à la moyenne', value: `${sign(gap)}${ctx.format(Math.abs(gap), m.vf)}` },
+            { label: fillText(ctx.theme.texts.meanOf, { name }), value: ctx.format(line.mean, m.vf) },
+            { label: ctx.theme.texts.gapToMean, value: `${sign(gap)}${ctx.format(Math.abs(gap), m.vf)}` },
           ],
         };
       },
@@ -766,9 +768,9 @@ export const sparktable: MarkDefinition = {
     const headers: Record<'name' | SparkColumn, string> = {
       name: ctx.fields[kf]?.label ?? '',
       value: valueLabel,
-      change: 'Variation',
-      spark: 'Tendance',
-      bar: 'Comparaison',
+      change: ctx.theme.texts.change,
+      spark: ctx.theme.texts.trend,
+      bar: ctx.theme.texts.comparison,
     };
     const widest = (texts: string[], font: string) => Math.max(0, ...texts.map((t) => textWidth(t, font)));
     const cols = sparkColumns(
@@ -899,9 +901,9 @@ export const sparktable: MarkDefinition = {
           title: r.name,
           rows: [
             { label: valueLabel, value: ctx.format(r.last, vf) },
-            { label: style.change === 'first' ? 'Depuis le début' : 'Variation', value: Number.isNaN(r.change) ? '–' : `${sign(r.change)}${percent(Math.abs(r.change))}` },
-            { label: 'Minimum', value: ctx.format(Math.min(...r.values), vf) },
-            { label: 'Maximum', value: ctx.format(Math.max(...r.values), vf) },
+            { label: style.change === 'first' ? ctx.theme.texts.sinceStart : ctx.theme.texts.change, value: Number.isNaN(r.change) ? '–' : `${sign(r.change)}${percent(Math.abs(r.change))}` },
+            { label: ctx.theme.texts.minimum, value: ctx.format(Math.min(...r.values), vf) },
+            { label: ctx.theme.texts.maximum, value: ctx.format(Math.max(...r.values), vf) },
           ],
         };
       },

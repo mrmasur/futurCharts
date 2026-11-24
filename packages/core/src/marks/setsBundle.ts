@@ -410,10 +410,10 @@ export const bundle: MarkDefinition = {
         const l = leafAt(px, py);
         if (!l) return null;
         const rows = [
-          { label: 'Liens sortants', value: String(outOf.get(l.id) ?? 0) },
-          { label: 'Liens entrants', value: String(inOf.get(l.id) ?? 0) },
+          { label: ctx.theme.texts.outgoingLinks, value: String(outOf.get(l.id) ?? 0) },
+          { label: ctx.theme.texts.incomingLinks, value: String(inOf.get(l.id) ?? 0) },
         ];
-        if (l.path.length) rows.unshift({ label: 'Groupe', value: l.path.join(' › ') });
+        if (l.path.length) rows.unshift({ label: ctx.theme.texts.group, value: l.path.join(' › ') });
         return { title: known.get(l.id)!.label, rows };
       },
       hover(at) {

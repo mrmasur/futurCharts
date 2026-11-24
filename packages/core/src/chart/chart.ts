@@ -12,6 +12,7 @@ import type { AxisSpec, ChartSpec } from '../spec/types';
 import { resolveTheme, type Theme } from '../theme/theme';
 import { parseColor } from '../util/color';
 import { deepMerge } from '../util/merge';
+import { announce, chartLabel, chartSummary, createA11yDom, dataTable, NAV_KEYS, navGroups, navMove, placeFocus, renderTable, setFocusable, type A11yDom, type A11yInput, type NavGroup, type NavPos } from './a11y';
 import { drawAxes, gridLines } from './axes';
 import { buildAnnotationLayer, buildLayer } from './build';
 import { cartesianPlan, cartesianScales, categoryOrder, projectionScales } from './cartesian';
@@ -118,6 +119,11 @@ export class Chart implements SyncMember {
   private destroyed = false;
   /** Unsubscribes from the renderer's device restore. */
   private stopRestore?: () => void;
+  /** Focusable plot, live region and hidden data table (chart/a11y.ts). */
+  private a11y!: A11yDom;
+  /** Keyboard walk: the series in order (made on the first key) and where the keyboard is. */
+  private nav?: NavGroup[];
+  private navPos?: NavPos;
 
   private constructor(private container: HTMLElement, private options: ChartOptions) {}
 
@@ -147,6 +153,7 @@ export class Chart implements SyncMember {
     this.tip.style.cssText =
       'position:absolute;left:0;top:0;pointer-events:none;opacity:0;transition:opacity .12s;white-space:nowrap;z-index:1;';
     root.appendChild(this.tip);
+    this.a11y = createA11yDom(root);
     this.container.appendChild(root);
     this.ctx = this.overlay.getContext('2d')!;
     this.renderer = await createRenderer(gl, this.options.renderer);
@@ -163,6 +170,14 @@ export class Chart implements SyncMember {
     root.addEventListener('dblclick', () => this.resetZoom(), { signal });
     // Escape clears the selection (the chart root is focusable for that).
     root.addEventListener('keydown', (e) => e.key === 'Escape' && this.clearSelection(), { signal });
+    // Keyboard walk through the data, from the focusable plot zone.
+    const zone = this.a11y.focus;
+    zone.addEventListener('keydown', (e) => this.onKey(e), { signal });
+    zone.addEventListener('focus', () => (zone.style.outline = `2px solid ${this.theme.palette.categorical[0]}`), { signal });
+    zone.addEventListener('blur', () => {
+      zone.style.outline = '';
+      this.leaveKeyboard();
+    }, { signal });
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(this.container);
     if (typeof IntersectionObserver !== 'undefined') {
@@ -413,6 +428,7 @@ export class Chart implements SyncMember {
       this.val2 = undefined;
       this.legend = [];
       this.legendRamp = undefined;
+      this.refreshA11y();
       this.requestRender();
       return;
     }
@@ -546,6 +562,7 @@ export class Chart implements SyncMember {
     }
     this.joinSync();
     this.startMorph(before);
+    this.refreshA11y();
     this.requestRender();
   }
 
@@ -821,6 +838,7 @@ export class Chart implements SyncMember {
     if (this.destroyed || !this.gridBatch) return;
     const { theme } = this;
     let L = (this.layout = this.computeLayout());
+    placeFocus(this.a11y.focus, L.plot);
     // A diagram too big to read once fitted opens at its readable size, anchored top-left.
     if (this.minViewWidth && !this.userZoomed) {
       const k = Math.max(1, this.minViewWidth / L.view.width);
@@ -1261,6 +1279,69 @@ export class Chart implements SyncMember {
     const at = tooltipPosition(p, tip.offsetWidth, tip.offsetHeight, this.width, this.height);
     tip.style.transform = `translate(${at.x}px, ${at.y}px)`;
     tip.style.opacity = '1';
+  }
+
+  // ------------------------------------------------------------- accessibility
+
+  /** After each compile: the figure's name, the hidden table, and whether the plot is a tab stop. */
+  private refreshA11y(): void {
+    const input: A11yInput = { spec: this.spec, built: this.built, cat: this.cat, horizontal: this.horizontal, mode: this.tooltipMode(), describe: (p) => this.describe(p) };
+    this.root.setAttribute('aria-label', chartLabel(this.spec, chartSummary(input)));
+    renderTable(this.a11y.table, dataTable(input));
+    this.nav = undefined;
+    this.navPos = undefined;
+    const walkable = this.spec.interactions?.keyboard !== false && this.built.some((b) => b.data.index >= 0 && b.mark.hit.n > 0);
+    setFocusable(this.a11y.focus, walkable, this.spec.title);
+  }
+
+  /** Arrows walk the datums with the tooltip and the hover marker, Enter clicks, Escape leaves. */
+  private onKey(e: KeyboardEvent): void {
+    if (this.spec.interactions?.keyboard === false) return;
+    if (e.key === 'Escape') return this.leaveKeyboard();
+    if (e.key === 'Enter') {
+      const at = this.navPoint();
+      if (!at) return;
+      e.preventDefault();
+      this.emit('click', { items: this.describe(at.picked), x: at.x, y: at.y });
+      return;
+    }
+    if (!NAV_KEYS.has(e.key)) return;
+    e.preventDefault();
+    this.nav ??= navGroups(this.built);
+    const pos = navMove(this.nav, this.navPos, e.key);
+    if (!pos) return;
+    this.navPos = pos;
+    const at = this.navPoint();
+    if (!at) return;
+    this.setPicked(at.picked);
+    if (this.spec.interactions?.tooltip !== false) this.showTooltip(at);
+    this.shareHover();
+    const group = this.nav[pos.g];
+    const [item] = this.describe([group.points[pos.i]]);
+    this.a11y.live.textContent = announce(item, pos.i + 1, group.points.length, this.nav.length > 1);
+    this.emit('hover', { items: this.describe(at.picked), x: at.x, y: at.y });
+  }
+
+  /** The datum the keyboard is on: its place in px and what hovering it would pick (every series at its x in mode `x`). */
+  private navPoint(): { x: number; y: number; picked: Picked[] } | undefined {
+    const L = this.layout;
+    const p = this.navPos && this.nav?.[this.navPos.g]?.points[this.navPos.i];
+    if (!L || !p) return undefined;
+    const h = this.built[p.layer].mark.hit;
+    const T = L.transform;
+    const at = { x: T.ox + h.tx[p.index] * T.sx, y: T.oy + h.ty[p.index] * T.sy };
+    const picked = this.tooltipMode() === 'x' ? this.pick(at) : [];
+    return { ...at, picked: picked.length ? picked : [p] };
+  }
+
+  private leaveKeyboard(): void {
+    if (!this.navPos) return;
+    this.navPos = undefined;
+    this.a11y.live.textContent = '';
+    this.setPicked([]);
+    this.tip.style.opacity = '0';
+    if (this.syncGroup) broadcast(this.syncGroup, this, (m) => m.syncHover(null));
+    this.emit('leave', {});
   }
 
   private emit<K extends keyof ChartEvents>(type: K, payload: ChartEvents[K]): void {

@@ -11,6 +11,7 @@ import { pushRect } from './primitives';
 import { emptyHit, type BuildContext, type BuiltMark, type MarkDefinition, type MarkLabel, type ShapeHit } from './registry';
 import { textWidth } from './shapes';
 import { confusionStats, ellipsis, headerTexts, monthGrid, orderEntities } from './tablesLayout';
+import { fillText } from '../theme/texts';
 
 export function batchOf(ctx: BuildContext, kind: 'rect' | 'line' | 'point', data: number[]) {
   const b = ctx.renderer.createBatch(kind);
@@ -228,22 +229,22 @@ export const matrix: MarkDefinition = {
         if (received[e] > 0) pushRect(extras, { x0: X(xm - tw / 2), y0: Y(bottom + 6 + Math.max(1.5, tall)), x1: X(xm + tw / 2), y1: Y(bottom + 6), fill: bar, radii: [0, 0, 2, 2] });
       });
       if (!compact) {
-        labels.push({ tx: X(right + 8), ty: Y(bottom + 6 + (totalH - 8) / 2), text: 'Émis', color: theme.text.muted, size: 10, weight: 600, align: 'left', baseline: 'middle' });
-        labels.push({ tx: X(gx - strip - 4), ty: Y(bottom + 6 + (totalH - 8) / 2), text: 'Reçus', color: theme.text.muted, size: 10, weight: 600, align: 'right', baseline: 'middle' });
+        labels.push({ tx: X(right + 8), ty: Y(bottom + 6 + (totalH - 8) / 2), text: ctx.theme.texts.sent, color: theme.text.muted, size: 10, weight: 600, align: 'left', baseline: 'middle' });
+        labels.push({ tx: X(gx - strip - 4), ty: Y(bottom + 6 + (totalH - 8) / 2), text: ctx.theme.texts.received, color: theme.text.muted, size: 10, weight: 600, align: 'right', baseline: 'middle' });
       }
     }
 
     const draws: BuiltMark['draws'] = [];
     if (cells.length) draws.push(keyed(ctx, cells, keys));
     if (extras.length) draws.push({ batch: batchOf(ctx, 'rect', extras) });
-    const valueLabel = fieldLabel(ctx, vf, 'Nombre');
+    const valueLabel = fieldLabel(ctx, vf, ctx.theme.texts.number);
     const at = (starts: number[], step: number, v: number) => starts.findIndex((s) => v >= s && v < s + step);
     const entity = (e: number): ShapeHit => ({
       title: names[e],
       rows: [
-        ...(groups[e] ? [{ label: fieldLabel(ctx, gf, 'Groupe'), value: groups[e] }] : []),
-        { label: 'Émis', value: ctx.format(sent[e], vf) },
-        { label: 'Reçus', value: ctx.format(received[e], vf) },
+        ...(groups[e] ? [{ label: fieldLabel(ctx, gf, ctx.theme.texts.group), value: groups[e] }] : []),
+        { label: ctx.theme.texts.sent, value: ctx.format(sent[e], vf) },
+        { label: ctx.theme.texts.received, value: ctx.format(received[e], vf) },
       ],
     });
     return {
@@ -262,7 +263,7 @@ export const matrix: MarkDefinition = {
             title: `${names[a]} → ${names[b]}`,
             rows: [
               { label: valueLabel, value: ctx.format(v, vf) },
-              { label: `Part de ${names[a]}`, value: share(v, sent[a]) },
+              { label: fillText(ctx.theme.texts.shareOf, { name: names[a] }), value: share(v, sent[a]) },
             ],
           };
         }
@@ -339,7 +340,7 @@ export const confusion: MarkDefinition = {
     const titleH = 16;
     const headH = 18;
     const top = titleH + headH;
-    let nameW = Math.min(W * 0.28, Math.max(measure('Précision'), ...names.map(measure))) + 10;
+    let nameW = Math.min(W * 0.28, Math.max(measure(ctx.theme.texts.precision), ...names.map(measure))) + 10;
     let cw = 0;
     let ch = 0;
     const size = () => {
@@ -373,8 +374,8 @@ export const confusion: MarkDefinition = {
     const radii: [number, number, number, number] = [radius, radius, radius, radius];
     const ink = theme.text.primary;
 
-    labels.push({ tx: X(gx + (K * cw) / 2), ty: Y(titleH / 2), text: fieldLabel(ctx, pf, 'Prédit'), color: theme.text.muted, size: 11, weight: 600, align: 'center', baseline: 'middle' });
-    const actualLabel = ellipsis(fieldLabel(ctx, af, 'Réel'), nameW - 8, measure);
+    labels.push({ tx: X(gx + (K * cw) / 2), ty: Y(titleH / 2), text: fieldLabel(ctx, pf, ctx.theme.texts.predicted), color: theme.text.muted, size: 11, weight: 600, align: 'center', baseline: 'middle' });
+    const actualLabel = ellipsis(fieldLabel(ctx, af, ctx.theme.texts.actual), nameW - 8, measure);
     if (actualLabel) labels.push({ tx: X(gx - 8), ty: Y(titleH + headH / 2), text: actualLabel, color: theme.text.muted, size: 11, weight: 600, align: 'right', baseline: 'middle' });
     names.forEach((name, k) => {
       if (k % head.every === 0) labels.push({ tx: X(gx + (k + 0.5) * cw), ty: Y(titleH + headH / 2), text: head.texts[k], color: ink, size: 11, weight: 600, align: 'center', baseline: 'middle' });
@@ -407,8 +408,8 @@ export const confusion: MarkDefinition = {
       const my = bottom + marginGap;
       const pill = (x0: number, y0: number, w: number, h: number, fill: RGBA, stroke?: RGBA) =>
         pushRect(extras, { x0: X(x0 + gap / 2), y0: Y(y0 + h - gap / 2), x1: X(x0 + w - gap / 2), y1: Y(y0 + gap / 2), fill, radii, ...(stroke ? { stroke, strokeWidth: 1.5 } : {}) });
-      labels.push({ tx: X(mx + marginW / 2), ty: Y(titleH + headH / 2), text: 'Rappel', color: theme.text.muted, size: 11, weight: 600, align: 'center', baseline: 'middle' });
-      labels.push({ tx: X(gx - 8), ty: Y(my + marginH / 2), text: 'Précision', color: theme.text.muted, size: 11, weight: 600, align: 'right', baseline: 'middle' });
+      labels.push({ tx: X(mx + marginW / 2), ty: Y(titleH + headH / 2), text: ctx.theme.texts.recall, color: theme.text.muted, size: 11, weight: 600, align: 'center', baseline: 'middle' });
+      labels.push({ tx: X(gx - 8), ty: Y(my + marginH / 2), text: ctx.theme.texts.precision, color: theme.text.muted, size: 11, weight: 600, align: 'right', baseline: 'middle' });
       for (let k = 0; k < K; k++) {
         pill(mx, top + k * ch, marginW, ch, quiet);
         labels.push({ tx: X(mx + marginW / 2), ty: Y(top + (k + 0.5) * ch), text: percent(stats.recall[k]), color: ink, size: ch < 16 ? 9 : compact ? 11 : 12, weight: 600, align: 'center', baseline: 'middle' });
@@ -420,17 +421,17 @@ export const confusion: MarkDefinition = {
       pill(mx, my, marginW, marginH, corner, accent);
       const caption = marginH >= 36;
       labels.push({ tx: X(mx + marginW / 2), ty: Y(my + marginH / 2), dy: caption ? -6 : 0, text: percent(stats.accuracy, stats.accuracy < 0.995 ? 1 : 0), on: corner, size: compact ? 11 : 13, weight: 700, align: 'center', baseline: 'middle' });
-      if (caption) labels.push({ tx: X(mx + marginW / 2), ty: Y(my + marginH / 2), dy: 9, text: 'exactitude', on: corner, size: 9, weight: 500, align: 'center', baseline: 'middle' });
+      if (caption) labels.push({ tx: X(mx + marginW / 2), ty: Y(my + marginH / 2), dy: 9, text: ctx.theme.texts.accuracyCaption, on: corner, size: 9, weight: 500, align: 'center', baseline: 'middle' });
     }
 
     const draws: BuiltMark['draws'] = [];
     if (cells.length) draws.push(keyed(ctx, cells, keys));
     if (extras.length) draws.push({ batch: batchOf(ctx, 'rect', extras), enter: 'fade' });
-    const actualName = fieldLabel(ctx, af, 'Réel');
-    const predictedName = fieldLabel(ctx, pf, 'Prédit');
+    const actualName = fieldLabel(ctx, af, ctx.theme.texts.actual);
+    const predictedName = fieldLabel(ctx, pf, ctx.theme.texts.predicted);
     const scores = (k: number) => [
-      { label: 'Précision', value: percent(stats.precision[k], 1) },
-      { label: 'Rappel', value: percent(stats.recall[k], 1) },
+      { label: ctx.theme.texts.precision, value: percent(stats.precision[k], 1) },
+      { label: ctx.theme.texts.recall, value: percent(stats.recall[k], 1) },
     ];
     return {
       draws,
@@ -445,19 +446,19 @@ export const confusion: MarkDefinition = {
         const inCols = p >= 0 && p < K;
         if (inRows && inCols) {
           return {
-            title: a === p ? `${names[a]} · bien classés` : `${names[a]} classés ${names[p]}`,
+            title: a === p ? fillText(ctx.theme.texts.correctOf, { name: names[a] }) : fillText(ctx.theme.texts.classifiedAs, { actual: names[a], predicted: names[p] }),
             rows: [
-              { label: fieldLabel(ctx, vf, 'Effectif'), value: ctx.format(m[a][p], vf) },
-              { label: `Part des ${actualName.toLowerCase()} ${names[a]}`, value: share(m[a][p], stats.rows[a]) },
-              { label: `Part des ${predictedName.toLowerCase()} ${names[p]}`, value: share(m[a][p], stats.columns[p]) },
+              { label: fieldLabel(ctx, vf, ctx.theme.texts.count), value: ctx.format(m[a][p], vf) },
+              { label: fillText(ctx.theme.texts.shareOfClass, { kind: actualName.toLowerCase(), name: names[a] }), value: share(m[a][p], stats.rows[a]) },
+              { label: fillText(ctx.theme.texts.shareOfClass, { kind: predictedName.toLowerCase(), name: names[p] }), value: share(m[a][p], stats.columns[p]) },
             ],
           };
         }
         if (margins && x >= right && y >= bottom && x <= right + marginGap + marginW && y <= bottom + marginGap + marginH) {
-          return { title: 'Exactitude', rows: [{ label: 'Bien classés', value: percent(stats.accuracy, 1) }, { label: 'Cas', value: ctx.format(stats.total, vf) }] };
+          return { title: ctx.theme.texts.accuracy, rows: [{ label: ctx.theme.texts.correct, value: percent(stats.accuracy, 1) }, { label: ctx.theme.texts.cases, value: ctx.format(stats.total, vf) }] };
         }
-        if (inRows && x >= ox && x <= right + marginGap + marginW) return { title: names[a], rows: [...scores(a), { label: 'Cas réels', value: ctx.format(stats.rows[a], vf) }] };
-        if (inCols && y >= 0 && y <= bottom + marginGap + marginH) return { title: names[p], rows: [...scores(p), { label: 'Cas prédits', value: ctx.format(stats.columns[p], vf) }] };
+        if (inRows && x >= ox && x <= right + marginGap + marginW) return { title: names[a], rows: [...scores(a), { label: ctx.theme.texts.actualCases, value: ctx.format(stats.rows[a], vf) }] };
+        if (inCols && y >= 0 && y <= bottom + marginGap + marginH) return { title: names[p], rows: [...scores(p), { label: ctx.theme.texts.predictedCases, value: ctx.format(stats.columns[p], vf) }] };
         return null;
       },
     };
@@ -557,7 +558,7 @@ export const calendarMonth: MarkDefinition = {
         const w = Math.floor(((1 - ty) / py - headH) / ch);
         const k = g.cells.findIndex((d) => d.column === c && d.week === w);
         if (k < 0) return null;
-        return { title: full.format(new Date(year, month, k + 1)), rows: [{ label: fieldLabel(ctx, vf, 'Nombre'), value: Number.isNaN(sum[k]) ? '–' : ctx.format(sum[k], vf) }] };
+        return { title: full.format(new Date(year, month, k + 1)), rows: [{ label: fieldLabel(ctx, vf, ctx.theme.texts.number), value: Number.isNaN(sum[k]) ? '–' : ctx.format(sum[k], vf) }] };
       },
     };
   },

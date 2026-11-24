@@ -15,6 +15,8 @@ export type { DataInput, Column, ColumnType, Row } from './data/table';
 
 export { lightTheme, darkTheme, registerTheme, resolveTheme, themeColor, resolveThemeColors } from './theme/theme';
 export type { Theme, ThemeSpec } from './theme/theme';
+export { englishTexts, frenchTexts, fillText } from './theme/texts';
+export type { ThemeTexts } from './theme/texts';
 
 export { registerMark, getMark, hasMark, buildHit, emptyHit } from './marks/registry';
 export type { MarkDefinition, BuildContext, BuiltMark, HitData, MarkDraw, ShapeHit, MarkLabel, MarkScales, Timeline } from './marks/registry';

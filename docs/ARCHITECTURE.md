@@ -63,6 +63,18 @@ pures qui reçoivent ce qu'elles lisent (souvent un objet `…Input`) et sont te
 | `navigator.ts` | Fenêtre du navigateur : prise, glisser, dessin |
 | `controls.ts` | Barre de lecture d'une marque animée dans le temps (`Timeline`) |
 | `domains.ts`, `annotations.ts`, `sync.ts` | Étendues des calques, annotations, groupes synchronisés |
+| `a11y.ts` | Accessibilité : résumé du graphique (`aria-label` de la figure), tableau de données caché, ordre du parcours au clavier, annonces ; plus les quelques aides DOM (zone focalisable, région `aria-live`) |
+
+**Accessibilité** (2026-11-24, `a11y.ts`, testé dans `test/a11y.test.ts` et `tests/visual/interactions.pw.ts`). La
+racine est un `role="figure"` (et non `img`, dont les enfants seraient ignorés par les lecteurs d'écran : il faut
+que le tableau caché reste lisible). Après chaque `compile`, `Chart.refreshA11y` recalcule l'`aria-label` (titre,
+sous-titre, `spec.description` ou résumé), le tableau (50 lignes au plus) et l'état de la zone clavier ; le résumé
+et le tableau passent par `describeItems`, donc mêmes libellés et formats que l'infobulle. La zone clavier est un
+`<div role="application">` transparent, sans pointeur, posé sur `layout.plot` à chaque image (`placeFocus`) : seul son
+contour au focus se voit. L'ordre du parcours (`navGroups` : une série par groupe, triée par x, une ligne et ses points
+fusionnés) n'est calculé qu'à la première touche. Une marque sans `HitData` (seulement `pick`) n'est pas un arrêt de
+tabulation. Les textes sont en français, écrits dans `a11y.ts` (à brancher sur les textes du thème le jour où ils
+existent pour d'autres langues).
 
 Ce qui reste dans `Chart`, et pourquoi : les gestionnaires `onMove` / `onDown` / `onUp` / `onWheel` (ils
 enchaînent navigateur, glisser de marque, lasso, déplacement, légende, liens et exploration, et changent presque tout
@@ -278,7 +290,9 @@ briques Renko, de sièges d'hémicycle, de pictogrammes et de tirets plafonné.
 zoomé à la molette, glissé, puis quitté, sans erreur. Les exemples où aucune infobulle n'apparaît sont signalés en
 annotation dans le rapport (pas en échec : certains n'en ont pas par nature). Cinq tests vérifient qu'une
 interaction change vraiment le dessin : repli de l'arbre indenté, déploiement de l'arbre de décomposition, clic de
-légende (événement `legend` et série masquée), zoom à la molette, survol des faisceaux. `visual.html` expose les
+légende (événement `legend` et série masquée), zoom à la molette, survol des faisceaux. Quatre tests d'accessibilité
+(`test.describe('accessibilité')`) : nom de la figure et `description`, tableau caché, parcours au clavier (Tab,
+flèches, région `aria-live`, Entrée → `click`, Échap), `interactions.keyboard: false`. `visual.html` expose les
 graphiques créés dans `window.__graphiques` pour ces tests.
 
 ### Schéma de la spec (`npm run schema`)

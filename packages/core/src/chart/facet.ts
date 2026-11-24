@@ -1,6 +1,7 @@
 import { Table, type DataInput, type Row } from '../data/table';
 import type { ChartSpec } from '../spec/types';
 import { resolveTheme, themeColor } from '../theme/theme';
+import { facetLabel } from './a11y';
 import { Chart, type ChartEvents, type ChartOptions } from './chart';
 
 /**
@@ -84,6 +85,9 @@ export class FacetChart {
     const fields = spec.fields ?? {};
     const types = Object.fromEntries(Object.entries(fields).map(([k, f]) => [k, f.type]));
     if (!facet || !spec.data) {
+      // One chart: it is the figure itself.
+      this.root.removeAttribute('role');
+      this.root.removeAttribute('aria-label');
       const box = this.cell(this.root, '100%');
       this.panels = [await Chart.create(box, { ...spec, facet: undefined }, this.options)];
       return;
@@ -95,6 +99,9 @@ export class FacetChart {
       const v = String(keyCol.values[i]);
       if (!values.includes(v)) values.push(v);
     }
+    // A figure of figures: each panel is a chart with its own name, table and keyboard walk.
+    this.root.setAttribute('role', 'figure');
+    this.root.setAttribute('aria-label', facetLabel(spec, values.length));
 
     // Shared category order and series colors, from the whole data set.
     const ref = spec.layers.find((l) => l.encode.x && l.encode.y);
@@ -124,6 +131,8 @@ export class FacetChart {
       facet: undefined,
       title: v,
       subtitle: undefined,
+      // Each panel says what it shows itself: the whole chart's description is the facet root's.
+      description: undefined,
       legend: false,
       data: subset(spec.data!, indicesOf(table, facet.field, v)),
       scales: shared,
@@ -161,6 +170,8 @@ export class FacetChart {
         facet: undefined,
         title: v,
         subtitle: undefined,
+        // Each panel says what it shows itself: the whole chart's description is the facet root's.
+        description: undefined,
         legend: false,
         data: subset(spec.data, rows),
         scales: shared,

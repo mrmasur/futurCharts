@@ -12,6 +12,7 @@ import { pushRect, pushSegment } from './primitives';
 import { cohortTable, decompositionColumns, funnelComparison, type DecompositionColumn } from './productLayout';
 import { emptyHit, type BuildContext, type MarkDefinition, type MarkLabel, type ShapeHit } from './registry';
 import { textWidth } from './shapes';
+import { fillText } from '../theme/texts';
 
 const fieldLabel = (ctx: BuildContext, f: string) => ctx.fields[f]?.label ?? f;
 const percent = (v: number) => (Number.isFinite(v) ? new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 0 }).format(v) : '–');
@@ -53,7 +54,7 @@ export const cohort: MarkDefinition = {
     const H = 1 / py;
     const family = theme.font.family;
     const average = style.average && t.cohorts.length > 1;
-    const averageLabel = 'Moyenne';
+    const averageLabel = ctx.theme.texts.average;
 
     // Columns, px: cohort | size | one per period.
     const nameW = Math.min(W * 0.3, Math.ceil(Math.max(...[...t.cohorts, average ? averageLabel : ''].map((n) => textWidth(n, `600 11px ${family}`)))) + 10);
@@ -103,7 +104,7 @@ export const cohort: MarkDefinition = {
     // Header: the name of both leading columns, then the periods (one in two when they are too narrow).
     const head = { ty: ty(headerH / 2 - 1), baseline: 'middle' as const, size: 10, color: theme.text.muted };
     labels.push({ ...head, tx: 0, text: fieldLabel(ctx, cf), align: 'left', maxWidth: nameW - 6 });
-    if (sizeW) labels.push({ ...head, tx: (x0 - 12) * px, text: 'Effectif', align: 'right' });
+    if (sizeW) labels.push({ ...head, tx: (x0 - 12) * px, text: ctx.theme.texts.count, align: 'right' });
     const prefix: string = style.periodPrefix;
     const widest = Math.max(...t.periods.map((p) => textWidth(`${prefix}${p}`, `10px ${family}`)));
     const every = Math.max(1, Math.ceil((widest + 4) / cellW));
@@ -140,13 +141,13 @@ export const cohort: MarkDefinition = {
         if (tx / px < x0 || p < 0 || p >= t.periods.length || r < 0 || r >= rows) return null;
         const period = `${prefix}${t.periods[p]}`;
         if (r === t.cohorts.length) {
-          return Number.isNaN(t.average[p]) ? null : { title: `${averageLabel} · ${period}`, rows: [{ label: 'Rétention', value: percent(t.average[p]) }] };
+          return Number.isNaN(t.average[p]) ? null : { title: `${averageLabel} · ${period}`, rows: [{ label: ctx.theme.texts.retention, value: percent(t.average[p]) }] };
         }
         if (Number.isNaN(t.rate[r][p])) return null;
-        const out = [{ label: 'Rétention', value: percent(t.rate[r][p]) }];
+        const out = [{ label: ctx.theme.texts.retention, value: percent(t.rate[r][p]) }];
         if (!asRate) {
           out.push({ label: fieldLabel(ctx, vf), value: ctx.format(t.count[r][p], vf) });
-          out.push({ label: 'Taille de la cohorte', value: ctx.format(t.size[r], vf) });
+          out.push({ label: ctx.theme.texts.cohortSize, value: ctx.format(t.size[r], vf) });
         }
         return { title: `${t.cohorts[r]} · ${period}`, rows: out };
       },
@@ -187,7 +188,7 @@ export const decomposition: MarkDefinition = {
     // Columns, px. The total opens the tree when there is room for one more column.
     const withRoot = W / (path.length + 1) >= 118;
     const nCols = path.length + (withRoot ? 1 : 0);
-    const rootName: string = style.rootLabel || 'Total';
+    const rootName: string = style.rootLabel || ctx.theme.texts.total;
     const linkW = W < 480 ? 16 : Math.min(48, W * 0.05);
     const evenW = Math.min(250, (W - linkW * (nCols - 1)) / nCols);
     const headerH = 20;
@@ -273,7 +274,7 @@ export const decomposition: MarkDefinition = {
         col.nodes.forEach((n, i) => node(c, i, n.name, text(n), n.value / max, i === col.open, n.row));
         if (col.more) {
           labels.push({
-            tx: colX(c) * px, ty: ty(headerH + col.nodes.length * rowH + 9), text: `+ ${col.more} ${col.more > 1 ? 'autres' : 'autre'}`,
+            tx: colX(c) * px, ty: ty(headerH + col.nodes.length * rowH + 9), text: fillText(col.more > 1 ? ctx.theme.texts.moreOthers : ctx.theme.texts.moreOther, { n: col.more }),
             align: 'left', baseline: 'middle', size: 11, color: theme.text.muted,
           });
         }
@@ -307,13 +308,13 @@ export const decomposition: MarkDefinition = {
         const at = nodeAt(tx, t);
         if (!at) return null;
         const n = at.node;
-        if (at.level < 0) return { title: rootName, rows: [{ label: vf ? fieldLabel(ctx, vf) : 'Lignes', value: text(n) }] };
+        if (at.level < 0) return { title: rootName, rows: [{ label: vf ? fieldLabel(ctx, vf) : ctx.theme.texts.rows, value: text(n) }] };
         const rows = [
           ...(vf ? [{ label: fieldLabel(ctx, vf), value: text(n) }] : []),
-          { label: 'Part du total', value: share(n.value, root.value) },
+          { label: ctx.theme.texts.shareOfTotal, value: share(n.value, root.value) },
         ];
         const parent = columns[at.level].parent;
-        if (at.level > 0) rows.push({ label: `Part de ${parent.name}`, value: share(n.value, parent.value) });
+        if (at.level > 0) rows.push({ label: fillText(ctx.theme.texts.shareOf, { name: parent.name }), value: share(n.value, parent.value) });
         return { title: n.path.join(' › '), rows };
       },
       click(tx, t) {
@@ -393,7 +394,7 @@ export const funnelCompare: MarkDefinition = {
       });
     });
     if (overall) {
-      labels.push({ tx: 0, ty: ty(top(n - 1) + barH + overallH / 2 + 3), text: 'Conversion', align: 'left', baseline: 'middle', size: 11, color: theme.text.muted, maxWidth: nameW - 8 });
+      labels.push({ tx: 0, ty: ty(top(n - 1) + barH + overallH / 2 + 3), text: ctx.theme.texts.conversion, align: 'left', baseline: 'middle', size: 11, color: theme.text.muted, maxWidth: nameW - 8 });
     }
     f.segments.forEach((segment, s) => {
       const cx = nameW + (s + 0.5) * segW;
@@ -414,7 +415,7 @@ export const funnelCompare: MarkDefinition = {
           pushRect(ghosts, { x0: (cx - pw / 2) * px, y0, x1: (cx + pw / 2) * px, y1, fill: mix(color, ctx.surface, 0.84), radii });
           const worst = f.worst[s] === i && n > 2;
           labels.push({
-            tx: cx * px, ty: ty(top(i) - rateH / 2), text: segW >= 150 ? `${percent(f.pass[s][i])} passent` : `↓ ${percent(f.pass[s][i])}`, align: 'center', baseline: 'middle',
+            tx: cx * px, ty: ty(top(i) - rateH / 2), text: segW >= 150 ? fillText(ctx.theme.texts.passThrough, { percent: percent(f.pass[s][i]) }) : `↓ ${percent(f.pass[s][i])}`, align: 'center', baseline: 'middle',
             size: rateH < 15 ? 10 : 11, weight: worst ? 700 : 400, color: worst ? bad : theme.text.secondary,
           });
         }
@@ -455,9 +456,9 @@ export const funnelCompare: MarkDefinition = {
         const v = f.value[s][i];
         const rows = [{ label: fieldLabel(ctx, vf), value: ctx.format(v, vf) }];
         if (i > 0) {
-          rows.push({ label: 'Depuis l’étape précédente', value: percent(f.pass[s][i]) });
-          rows.push({ label: 'Perdus à cette étape', value: ctx.format(f.value[s][i - 1] - v, vf) });
-          rows.push({ label: 'Depuis le départ', value: percent(f.value[s][0] > 0 ? v / f.value[s][0] : NaN) });
+          rows.push({ label: ctx.theme.texts.sincePrevious, value: percent(f.pass[s][i]) });
+          rows.push({ label: ctx.theme.texts.lostAtStep, value: ctx.format(f.value[s][i - 1] - v, vf) });
+          rows.push({ label: ctx.theme.texts.sinceFirst, value: percent(f.value[s][0] > 0 ? v / f.value[s][0] : NaN) });
         }
         return { title: S > 1 || sf ? `${f.stages[i]} · ${f.segments[s]}` : f.stages[i], rows };
       },

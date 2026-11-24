@@ -316,12 +316,12 @@ export const bullet: MarkDefinition = {
         if (!d || tx < 0 || tx > 1) return null;
         const out = [{ label: fieldLabel(ctx, vf), value: d.text }];
         if (Number.isFinite(d.target)) {
-          out.push({ label: tf ? fieldLabel(ctx, tf) : 'Objectif', value: ctx.format(d.target, vf) });
-          if (d.target !== 0) out.push({ label: 'Réalisé', value: percent(d.value / d.target) });
+          out.push({ label: tf ? fieldLabel(ctx, tf) : ctx.theme.texts.target, value: ctx.format(d.target, vf) });
+          if (d.target !== 0) out.push({ label: ctx.theme.texts.achieved, value: percent(d.value / d.target) });
         }
         const band = d.ranges.findIndex((v) => d.value <= v);
         const level = rangeLabels[band < 0 ? d.ranges.length : band];
-        if (d.ranges.length && level) out.push({ label: 'Niveau', value: level });
+        if (d.ranges.length && level) out.push({ label: ctx.theme.texts.level, value: level });
         return { title: d.key, rows: out };
       },
     };
@@ -402,7 +402,7 @@ export const led: MarkDefinition = {
         if (!d || tx < 0 || tx > 1) return null;
         const out = [{ label: fieldLabel(ctx, vf), value: d.text }];
         if (tf && Number.isFinite(d.target)) out.push({ label: fieldLabel(ctx, tf), value: ctx.format(d.target, vf) });
-        out.push({ label: 'Niveau', value: percent(clamp01((d.value - style.min) / (d.max - style.min || 1))) });
+        out.push({ label: ctx.theme.texts.level, value: percent(clamp01((d.value - style.min) / (d.max - style.min || 1))) });
         return { title: d.key, rows: out };
       },
     };
@@ -645,7 +645,7 @@ export const liquid: MarkDefinition = {
         if (!c) return null;
         const out = [{ label: fieldLabel(ctx, vf), value: ctx.format(c.value, vf) }];
         if (tf && Number.isFinite(c.target)) out.push({ label: fieldLabel(ctx, tf), value: ctx.format(c.target, vf) });
-        out.push({ label: 'Remplissage', value: percent(c.share) });
+        out.push({ label: ctx.theme.texts.fill, value: percent(c.share) });
         return { title: c.key, rows: out };
       },
       animate: animated
@@ -804,8 +804,8 @@ export const activity: MarkDefinition = {
       title: g.key,
       rows: [
         { label: fieldLabel(ctx, vf), value: ctx.format(g.value, vf) },
-        { label: tf ? fieldLabel(ctx, tf) : 'Objectif', value: ctx.format(g.goal, vf) },
-        { label: 'Réalisé', value: percent(g.share) },
+        { label: tf ? fieldLabel(ctx, tf) : ctx.theme.texts.target, value: ctx.format(g.goal, vf) },
+        { label: ctx.theme.texts.achieved, value: percent(g.share) },
       ],
     });
     return {

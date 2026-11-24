@@ -91,7 +91,7 @@ export const bubbles: MarkDefinition = {
         const y = ctx.y.invert(ty);
         const c = circles.find((q) => Math.hypot(q.x - x, q.y - y) <= q.r);
         if (!c) return null;
-        const rows = [{ label: fieldLabel(ctx, vf), value: ctx.format(c.d.value, vf) }, { label: 'Part du total', value: share(c.d.value, total) }];
+        const rows = [{ label: fieldLabel(ctx, vf), value: ctx.format(c.d.value, vf) }, { label: ctx.theme.texts.shareOfTotal, value: share(c.d.value, total) }];
         if (gf) rows.unshift({ label: fieldLabel(ctx, gf), value: c.d.group });
         return { title: c.d.key, rows };
       },
@@ -180,12 +180,12 @@ export const arcDiagram: MarkDefinition = {
         const y = ctx.y.invert(ty);
         if (Math.abs(y) < 0.03) {
           const i = names.findIndex((_, k) => Math.abs(xOf(k) - x) < 0.02);
-          if (i >= 0) return { title: names[i], rows: [{ label: vf ? fieldLabel(ctx, vf) : 'Liens', value: ctx.format(flow[i], vf) }] };
+          if (i >= 0) return { title: names[i], rows: [{ label: vf ? fieldLabel(ctx, vf) : ctx.theme.texts.links, value: ctx.format(flow[i], vf) }] };
         }
         if (y < 0) return null;
         const g = geo.filter((q) => Math.abs(Math.hypot(x - q.cx, y) - q.r) <= Math.max(q.w / 2, 4 * pxUnit)).sort((p, q) => p.w - q.w)[0];
         if (!g) return null;
-        return { title: `${names[g.a]} → ${names[g.b]}`, rows: [{ label: vf ? fieldLabel(ctx, vf) : 'Lien', value: ctx.format(g.v, vf) }] };
+        return { title: `${names[g.a]} → ${names[g.b]}`, rows: [{ label: vf ? fieldLabel(ctx, vf) : ctx.theme.texts.link, value: ctx.format(g.v, vf) }] };
       },
     };
   },
@@ -255,7 +255,7 @@ export const pyramid: MarkDefinition = {
       pick(tx, ty): ShapeHit | null {
         const b = bands.find((q) => ty >= q.y0 && ty <= q.y1);
         if (!b || Math.abs(tx - cx) > half(ty)) return null;
-        return { title: b.d.key, rows: [{ label: fieldLabel(ctx, vf), value: ctx.format(b.d.value, vf) }, { label: 'Part', value: share(b.d.value, total) }] };
+        return { title: b.d.key, rows: [{ label: fieldLabel(ctx, vf), value: ctx.format(b.d.value, vf) }, { label: ctx.theme.texts.share, value: share(b.d.value, total) }] };
       },
     };
   },
@@ -685,8 +685,8 @@ export const pivot: MarkDefinition = {
       const cx = nameW + (c + 0.5) * cellW;
       if (c % every === 0) labels.push({ tx: X(cx), ty: Y(headH / 2), text: colLabel(k), color: theme.text.muted, size: 11, weight: 600, align: 'center', baseline: 'middle' });
     });
-    if (style.totals) labels.push({ tx: X(nameW + C * cellW + totalW - 8), ty: Y(headH / 2), text: 'Total', color: theme.text.muted, size: 11, weight: 600, align: 'right', baseline: 'middle' });
-    if (style.sparkline) labels.push({ tx: X(W - sparkW / 2), ty: Y(headH / 2), text: 'Tendance', color: theme.text.muted, size: 11, weight: 600, align: 'center', baseline: 'middle' });
+    if (style.totals) labels.push({ tx: X(nameW + C * cellW + totalW - 8), ty: Y(headH / 2), text: ctx.theme.texts.total, color: theme.text.muted, size: 11, weight: 600, align: 'right', baseline: 'middle' });
+    if (style.sparkline) labels.push({ tx: X(W - sparkW / 2), ty: Y(headH / 2), text: ctx.theme.texts.trend, color: theme.text.muted, size: 11, weight: 600, align: 'center', baseline: 'middle' });
     pushSegment(lines, 0, Y(headH), 1, Y(headH), grid, 1);
     const bodyH = headH + R * rowH;
     rows.forEach((name, r) => {
@@ -741,13 +741,13 @@ export const pivot: MarkDefinition = {
         const r = Math.floor((y - headH) / rowH);
         const c = Math.floor((x - nameW) / cellW);
         if (r < 0 || r >= R) return null;
-        if (c < 0 || c >= C) return { title: rows[r], rows: [{ label: 'Total', value: ctx.format(totals[r], vf) }] };
+        if (c < 0 || c >= C) return { title: rows[r], rows: [{ label: ctx.theme.texts.total, value: ctx.format(totals[r], vf) }] };
         const v = cell[r * C + c];
         return {
           title: `${rows[r]} · ${colLabel(colKeys[c])}`,
           rows: [
             { label: ctx.fields[vf]?.label ?? vf, value: Number.isNaN(v) ? '–' : ctx.format(v, vf) },
-            { label: 'Part de la ligne', value: Number.isNaN(v) ? '–' : share(v, totals[r]) },
+            { label: ctx.theme.texts.shareOfRow, value: Number.isNaN(v) ? '–' : share(v, totals[r]) },
           ],
         };
       },

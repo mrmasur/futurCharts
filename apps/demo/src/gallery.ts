@@ -34,6 +34,10 @@ const themeFor = (): ChartSpec['theme'] => {
   return { extends: mode, palette: { categorical: mode === 'dark' ? p.dark : p.light, sequential: mode === 'dark' ? [...p.ramp].reverse() : p.ramp } };
 };
 
+/** The gallery's theme over the spec's own one: an example may set its `texts` (or anything else the gallery leaves alone). */
+const ownTheme = (spec: { theme?: ChartSpec['theme'] }, theme: ChartSpec['theme']): ChartSpec['theme'] =>
+  spec.theme && typeof spec.theme === 'object' ? { ...spec.theme, ...(typeof theme === 'string' ? { extends: theme } : theme) } : theme;
+
 
 // ------------------------------------------------------------- navigation
 
@@ -73,8 +77,8 @@ interface Mounted {
 let mounted: Mounted[] = [];
 let current: { dashboard?: Dashboard; family?: (typeof families)[number] } = {};
 
-const withTheme = (spec: ChartSpec): ChartSpec => ({ ...spec, title: undefined, subtitle: undefined, theme: themeFor() });
-const tileSpec = (spec: ChartSpec): ChartSpec => ({ ...spec, theme: themeFor() });
+const withTheme = (spec: ChartSpec): ChartSpec => ({ ...spec, title: undefined, subtitle: undefined, theme: ownTheme(spec, themeFor()) });
+const tileSpec = (spec: ChartSpec): ChartSpec => ({ ...spec, theme: ownTheme(spec, themeFor()) });
 
 function cardsForFamily(f: (typeof families)[number]): Card[] {
   return f.entries.map((e) => {
@@ -183,7 +187,7 @@ function refresh() {
       const specs = m.card.tiles ?? [m.card.spec];
       m.charts.forEach((c, i) => c.update(m.card.tiles ? tileSpec(specs[i]) : withTheme(specs[i])));
     }
-    for (const c of thumbCharts) c.update({ ...c.getSpec(), theme: thumbTheme() });
+    for (const c of thumbCharts) c.update({ ...c.getSpec(), theme: ownTheme(c.getSpec(), thumbTheme()) });
     for (const s of sheets) {
       const cur = s.getSpec();
       s.update('sheets' in cur ? ({ ...cur, theme: themeFor(), sheets: cur.sheets.map((x) => ({ ...x, theme: undefined })) } as WorkbookSpec) : { ...cur, theme: themeFor() });
@@ -274,7 +278,7 @@ function renderGallery(board: HTMLElement, only?: (typeof families)[number]) {
         const spec = e.tiles ? e.tiles[0] : e.spec!;
         // Fewer bars in a race preview, so each name stays legible.
         const layers = spec.layers.map((l) => (l.mark === 'race' ? { ...l, style: { ...l.style, top: 6 } } : l));
-        createChart(box, { ...spec, layers, title: undefined, subtitle: undefined, theme: thumbTheme(), interactions: { tooltip: false, player: false } })
+        createChart(box, { ...spec, layers, title: undefined, subtitle: undefined, theme: ownTheme(spec, thumbTheme()), interactions: { tooltip: false, player: false } })
           .then((c) => thumbCharts.push(c))
           .catch((error) => (box.textContent = String(error)));
       }

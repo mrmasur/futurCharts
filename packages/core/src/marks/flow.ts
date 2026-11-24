@@ -15,15 +15,10 @@ import { layoutFlow, type FlowLayout } from './flowLayout';
 import { fitRoutes, labelAnchor, layoutLanes, roundCorners, routeOrthogonal, type FlowLane } from './flowRoute';
 import { pushArc, pushRect, pushSegment, pushVertex } from './primitives';
 import { emptyHit, type BuildContext, type BuiltMark, type MarkDefinition, type MarkLabel, type ShapeHit } from './registry';
+import type { Theme } from '../theme/theme';
 
-const SHAPE_NAMES: Record<FlowShape, string> = {
-  step: 'Étape',
-  start: 'Début',
-  end: 'Fin',
-  decision: 'Décision',
-  io: 'Entrée / sortie',
-  subprocess: 'Sous-processus',
-};
+const shapeName = (t: Theme['texts'], shape: FlowShape): string =>
+  ({ step: t.flowStep, start: t.flowStart, end: t.flowEnd, decision: t.flowDecision, io: t.flowIo, subprocess: t.flowSubprocess })[shape];
 /** Default palette slot per shape, when nodes carry no group. */
 const SHAPE_SLOT: Record<FlowShape, number> = { step: 0, start: 2, end: 2, decision: 3, io: 4, subprocess: 6 };
 
@@ -453,13 +448,13 @@ export const flow: MarkDefinition = {
         const y = (1 - py) * H;
         const n = nodeAt(x, y);
         if (n) {
-          const rows = [{ label: 'Type', value: SHAPE_NAMES[n.shape ?? 'step'] }];
-          if (n.value !== undefined) rows.push({ label: ctx.fields[layer.encode.value ?? '']?.label ?? 'Valeur', value: ctx.format(n.value, layer.encode.value) });
+          const rows = [{ label: ctx.theme.texts.type, value: shapeName(ctx.theme.texts, n.shape ?? 'step') }];
+          if (n.value !== undefined) rows.push({ label: ctx.fields[layer.encode.value ?? '']?.label ?? ctx.theme.texts.value, value: ctx.format(n.value, layer.encode.value) });
           const ins = edges.filter((e) => e.to === n.id).length;
           const outs = edges.filter((e) => e.from === n.id).length;
-          rows.push({ label: 'Entrées / sorties', value: `${ins} / ${outs}` });
-          if (n.group) rows.push({ label: 'Groupe', value: n.group });
-          if (n.description) rows.push({ label: 'Note', value: n.description });
+          rows.push({ label: ctx.theme.texts.inputsOutputs, value: `${ins} / ${outs}` });
+          if (n.group) rows.push({ label: ctx.theme.texts.group, value: n.group });
+          if (n.description) rows.push({ label: ctx.theme.texts.note, value: n.description });
           return { title: n.label ?? n.id, rows };
         }
         // The closest arrow within a few pixels.
@@ -473,8 +468,8 @@ export const flow: MarkDefinition = {
         if (!best) return null;
         const e = best.e;
         const rows: { label: string; value: string }[] = [];
-        if (e.label) rows.push({ label: 'Condition', value: e.label });
-        if (e.value !== undefined) rows.push({ label: ctx.fields[layer.encode.value ?? '']?.label ?? 'Volume', value: ctx.format(e.value, layer.encode.value) });
+        if (e.label) rows.push({ label: ctx.theme.texts.condition, value: e.label });
+        if (e.value !== undefined) rows.push({ label: ctx.fields[layer.encode.value ?? '']?.label ?? ctx.theme.texts.volume, value: ctx.format(e.value, layer.encode.value) });
         return { title: `${name(e.from)} → ${name(e.to)}`, rows };
       },
       click(px, py) {
@@ -753,11 +748,11 @@ function buildPipeline(ctx: BuildContext, layer: LayerSpec, m: Model): ReturnTyp
       const y = (1 - py) * H;
       const n = nodeAt(x, y);
       if (n) {
-        const rows = [{ label: 'Type', value: PIPE_NAMES[n.shape ?? 'step'] }];
-        if (n.value !== undefined) rows.push({ label: ctx.fields[layer.encode.value ?? '']?.label ?? 'Valeur', value: ctx.format(n.value, layer.encode.value) });
+        const rows = [{ label: ctx.theme.texts.type, value: pipeName(ctx.theme.texts, n.shape ?? 'step') }];
+        if (n.value !== undefined) rows.push({ label: ctx.fields[layer.encode.value ?? '']?.label ?? ctx.theme.texts.value, value: ctx.format(n.value, layer.encode.value) });
         const ins = edges.filter((e) => e.to === n.id).map((e) => name(e.from));
-        if (ins.length) rows.push({ label: 'Depuis', value: ins.join(', ') });
-        if (n.group) rows.push({ label: 'Groupe', value: n.group });
+        if (ins.length) rows.push({ label: ctx.theme.texts.from, value: ins.join(', ') });
+        if (n.group) rows.push({ label: ctx.theme.texts.group, value: n.group });
         return { title: n.label ?? n.id, rows };
       }
       let best: { e: FlowEdge; d: number } | undefined;
@@ -770,8 +765,8 @@ function buildPipeline(ctx: BuildContext, layer: LayerSpec, m: Model): ReturnTyp
       if (!best) return null;
       const e = best.e;
       const rows: { label: string; value: string }[] = [];
-      if (e.label) rows.push({ label: 'Condition', value: e.label });
-      if (e.value !== undefined) rows.push({ label: ctx.fields[layer.encode.value ?? '']?.label ?? 'Volume', value: ctx.format(e.value, layer.encode.value) });
+      if (e.label) rows.push({ label: ctx.theme.texts.condition, value: e.label });
+      if (e.value !== undefined) rows.push({ label: ctx.fields[layer.encode.value ?? '']?.label ?? ctx.theme.texts.volume, value: ctx.format(e.value, layer.encode.value) });
       return { title: `${name(e.from)} → ${name(e.to)}`, rows };
     },
     click(px, py) {
@@ -813,11 +808,5 @@ function buildPipeline(ctx: BuildContext, layer: LayerSpec, m: Model): ReturnTyp
 }
 
 /** Pipeline vocabulary: the same shapes, named for data flows. */
-const PIPE_NAMES: Record<FlowShape, string> = {
-  start: 'Source',
-  step: 'Étape',
-  subprocess: 'Sous-flux',
-  decision: 'Jointure / choix',
-  io: 'Union',
-  end: 'Sortie',
-};
+const pipeName = (t: Theme['texts'], shape: FlowShape): string =>
+  ({ start: t.pipeSource, step: t.pipeStep, subprocess: t.pipeSubflow, decision: t.pipeJoin, io: t.pipeUnion, end: t.pipeOutput })[shape];
