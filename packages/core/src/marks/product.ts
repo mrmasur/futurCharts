@@ -187,19 +187,27 @@ export const decomposition: MarkDefinition = {
     // Columns, px. The total opens the tree when there is room for one more column.
     const withRoot = W / (path.length + 1) >= 118;
     const nCols = path.length + (withRoot ? 1 : 0);
+    const rootName: string = style.rootLabel || 'Total';
     const linkW = W < 480 ? 16 : Math.min(48, W * 0.05);
-    const colW = Math.min(250, (W - linkW * (nCols - 1)) / nCols);
+    const evenW = Math.min(250, (W - linkW * (nCols - 1)) / nCols);
     const headerH = 20;
-    const narrow = colW < 140;
+    const narrow = evenW < 140;
+    // The total holds a single node: it keeps only the width it needs, the levels share the rest.
+    const rootNeed = Math.ceil(textWidth(rootName, `600 11.5px ${family}`) + textWidth(text(root), `600 11px ${family}`)) + 24;
+    const rootW = withRoot ? (narrow ? evenW : Math.min(evenW, Math.max(90, rootNeed))) : 0;
+    const colW = withRoot && !narrow ? Math.min(250, (W - linkW * (nCols - 1) - rootW) / path.length) : evenW;
+    /** Width of column `c`, px (column 0 is the total when it is shown). */
+    const cw = (c: number) => (withRoot && c === 0 ? rootW : colW);
     // A narrow column needs two full lines per node (name, then bar and value).
-    const rowH = Math.max(narrow ? 33 : 26, Math.min(style.rowHeight, (H - headerH) / 4));
-    const maxRows = Math.max(2, Math.floor((H - headerH + 2) / rowH));
-    const colX = (c: number) => c * (colW + linkW);
+    const baseRowH = Math.max(narrow ? 33 : 26, Math.min(style.rowHeight, (H - headerH) / 4));
+    const maxRows = Math.max(2, Math.floor((H - headerH + 2) / baseRowH));
+    /** Row pitch, px: stretched (up to half as much again) when the longest column leaves the frame half empty. */
+    let rowH = baseRowH;
+    const colX = (c: number) => (withRoot ? (c === 0 ? 0 : rootW + linkW + (c - 1) * (colW + linkW)) : c * (colW + linkW));
     const barY = (i: number) => headerH + i * rowH + (narrow ? 24 : 21);
     const accent = ctx.categorical(vf ? fieldLabel(ctx, vf) : 'value');
     const track = mix(ctx.surface, parseColor(theme.grid.y.color), 0.6);
     const linkColor = mix(ctx.surface, parseColor(theme.text.muted), 0.55);
-    const rootName: string = style.rootLabel || 'Total';
     const everyNode: HNode[] = [];
     const collect = (n: HNode) => n.children.forEach((c) => (everyNode.push(c), collect(c)));
     collect(root);
@@ -213,11 +221,14 @@ export const decomposition: MarkDefinition = {
 
     const render = () => {
       columns = decompositionColumns(root, chosen, maxRows);
+      const longest = Math.max(1, ...columns.map((c) => c.nodes.length + (c.more ? 1 : 0)));
+      rowH = Math.max(baseRowH, Math.min(baseRowH * 1.5, (H - headerH) / longest));
       const r: number[] = [];
       const l: number[] = [];
       labels.length = 0;
       const node = (c: number, i: number, name: string, value: string, part: number, open: boolean, row: number | undefined) => {
         const x = colX(c);
+        const colW = cw(c);
         const top = headerH + i * rowH;
         const valueW = Math.ceil(textWidth(value, `600 11px ${family}`));
         // A narrow column keeps the first line for the name: the value goes beside the bar.
@@ -234,7 +245,7 @@ export const decomposition: MarkDefinition = {
       };
       /** Curved link from the bar of row `i` of column `c` to the bar of row `j` of the next one. */
       const link = (c: number, i: number, j: number) => {
-        const xa = colX(c) + colW + 3, xb = colX(c + 1) - 3;
+        const xa = colX(c) + cw(c) + 3, xb = colX(c + 1) - 3;
         const ya = barY(i), yb = barY(j);
         let lx = xa, ly = ya;
         for (let k = 1; k <= 16; k++) {
@@ -248,7 +259,7 @@ export const decomposition: MarkDefinition = {
         }
       };
       const head = (c: number, label: string) =>
-        labels.push({ tx: colX(c) * px, ty: ty(7), text: label, align: 'left', baseline: 'middle', size: 10, color: theme.text.muted, maxWidth: colW });
+        labels.push({ tx: colX(c) * px, ty: ty(7), text: label, align: 'left', baseline: 'middle', size: 10, color: theme.text.muted, maxWidth: cw(c) });
       const shift = withRoot ? 1 : 0;
       if (withRoot) {
         head(0, vf ? fieldLabel(ctx, vf) : rootName);
@@ -278,8 +289,9 @@ export const decomposition: MarkDefinition = {
       const x = tx / px;
       const y = (1 - t) / py - headerH;
       if (x < 0 || y < 0) return undefined;
-      const c = Math.floor(x / (colW + linkW));
-      if (x - colX(c) > colW) return undefined;
+      let c = 0;
+      while (c + 1 < nCols && x >= colX(c + 1)) c++;
+      if (x - colX(c) > cw(c)) return undefined;
       const i = Math.floor(y / rowH);
       const level = c - (withRoot ? 1 : 0);
       if (level < 0) return i === 0 ? { node: root, level } : undefined;

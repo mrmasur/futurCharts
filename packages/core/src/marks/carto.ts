@@ -4,9 +4,9 @@ import { LAYOUTS } from '../render/layouts';
 import type { RGBA } from '../render/types';
 import { LinearScale, MercatorScale } from '../scale/scales';
 import type { LayerSpec } from '../spec/types';
-import { parseColor, withAlpha } from '../util/color';
+import { mix, parseColor, withAlpha } from '../util/color';
 import { batches, need, share } from './charts';
-import { pushArc, pushRect, pushSegment, pushVertex } from './primitives';
+import { luminance, pushArc, pushRect, pushSegment, pushVertex } from './primitives';
 import { emptyHit, type BuildContext, type LegendRamp, type MarkDefinition, type MarkDraw, type MarkLabel, type MarkScales, type ShapeHit } from './registry';
 
 const TAU = Math.PI * 2;
@@ -400,9 +400,22 @@ export const dorling: MarkDefinition = {
     const data = new Float32Array(arcs);
     batch.update(data, arcs.length / LAYOUTS.arc.stride);
     const draw: MarkDraw = { batch, data, keys: order.map((i) => nodes[i].key) };
+    const draws: MarkDraw[] = [draw];
+    // Rim inside each circle, its fill pulled towards the ink: a pale or dark circle stays apart
+    // from a basemap of the same tone.
+    if (style.outline > 0 && order.length) {
+      const ink = parseColor(ctx.theme.text.primary);
+      const w = style.outline * ctx.pixel[0];
+      const pull = luminance(ctx.surface) < 0.2 ? 0.55 : 0.28;
+      const rims: number[] = [];
+      order.forEach((i, k) => pushArc(rims, cx[i], cy[i], Math.max(0, rr[i] - w), rr[i], 0, TAU, 0, withAlpha(mix(fills[k], ink, pull), 1)));
+      const rb = ctx.renderer.createBatch('arc');
+      rb.update(new Float32Array(rims), rims.length / LAYOUTS.arc.stride);
+      draws.push({ batch: rb });
+    }
 
     return {
-      draws: [draw],
+      draws,
       hit: emptyHit(),
       labels,
       legend: legendKeys.map((k) => ({ key: k, color: ctx.categorical(k) })),

@@ -43,7 +43,7 @@ Mettre ces documents à jour quand un chantier avance.
   nouveau type de graphique y reçoit un exemple (`library.ts` : `entries` et `GROUPS`). Depuis le 2026-11-23 un
   nouvel exemple va dans `apps/demo/src/examples/<famille>.ts`.
 - **État au 2026-11-23** : la branche `graphiques-2026-11-23` (non fusionnée dans `main`) porte les tests visuels,
-  47 marques et 100 exemples nouveaux (214 en tout), le double axe (`scales.secondary`) et un contrat des marques
+  50 marques et 103 exemples nouveaux (217 en tout), le double axe (`scales.secondary`) et un contrat des marques
   complété (`MarkLabel.rotate` / `ellipsis`, `BuiltMark.hover`, `legendRamp`). Reste à faire, dans l'ordre :
   `docs/RECOMMANDATIONS.md` § Priorité 0.
 - **Sources d'inspiration** pour les nouveaux graphiques (rappelées le 2026-11-23) : Tableau, Apache ECharts et

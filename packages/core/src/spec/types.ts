@@ -350,6 +350,9 @@ export type MarkStyle = { color?: string } & DeepPartial<
     Theme['marks']['variwide'] &
     Theme['marks']['barRank'] &
     Theme['marks']['barInBar'] &
+    Theme['marks']['bridge'] &
+    Theme['marks']['variance'] &
+    Theme['marks']['periodBars'] &
     Theme['marks']['table'] &
     Theme['marks']['matrix'] &
     Theme['marks']['confusion'] &

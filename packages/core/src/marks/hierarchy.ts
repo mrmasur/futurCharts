@@ -112,23 +112,67 @@ export const voronoi: MarkDefinition = {
         return hi - lo > 2 * pad ? [lo + pad, hi - pad] : null;
       };
       const font = (size: number) => `600 ${size}px ${theme.font.family}`;
-      /** A name cut to a couple of letters says nothing: the whole name, or at least 48 px of it. */
-      const worth = (text: string, span: [number, number]) => (span[1] - span[0]) * ux >= Math.min(48, textWidth(text, font(11)) + 1);
+      /** The name on one line, or split on two at the space that balances the lines best. */
+      const splits = (text: string): string[][] => {
+        const out: string[][] = [[text]];
+        const words = text.split(' ');
+        let best: string[] | null = null;
+        let bestW = Infinity;
+        for (let i = 1; i < words.length; i++) {
+          const a = words.slice(0, i).join(' ');
+          const b = words.slice(i).join(' ');
+          const w = Math.max(textWidth(a, font(11)), textWidth(b, font(11)));
+          if (w < bestW) (bestW = w), (best = [a, b]);
+        }
+        if (best) out.push(best);
+        return out;
+      };
+      /**
+       * Whole names only: on one line or two, with the value under it when there is room, a size smaller
+       * when needed; a cut name says nothing ("Rout…"), so the ellipsis only drops the last letters.
+       */
       const put = (poly: Pt[], text: string, value: string | undefined, fill: RGBA) => {
-        const [, cy] = polygonCentroid(poly);
-        const name = { text, on: fill, align: 'center' as const, baseline: 'middle' as const, size: 11, weight: 600, ellipsis: true };
-        const two = value !== undefined ? room(poly, [cy + line * 1.15, cy - line * 1.15]) : null;
-        if (two && worth(text, two) && (two[1] - two[0]) * ux >= textWidth(value!, font(10)) + 2) {
-          const tx = X((two[0] + two[1]) / 2);
-          const box = (y0: number, y1: number): [number, number, number, number] => [X(two[0]), Math.min(Y(y0), Y(y1)), X(two[1]), Math.max(Y(y0), Y(y1))];
-          labels.push({ ...name, tx, ty: Y(cy + line / 2), box: box(cy - line * 0.1, cy + line * 1.15) });
-          labels.push({ tx, ty: Y(cy - line / 2), text: value!, on: fill, align: 'center', baseline: 'middle', size: 10, box: box(cy - line * 1.15, cy + line * 0.1) });
-          return;
+        const [, cy0] = polygonCentroid(poly);
+        const valueW = value !== undefined ? textWidth(value, font(10)) + 2 : 0;
+        const tries: { lines: string[]; withValue: boolean; size: number }[] = [];
+        for (const size of [11, 10])
+          for (const withValue of value !== undefined ? [true, false] : [false])
+            for (const lines of splits(text)) tries.push({ lines, withValue, size });
+        const place = (lines: string[], withValue: boolean, span: [number, number], ellipsis: boolean, size: number, cy: number) => {
+          const step = (size + 3) / uy;
+          const tx = X((span[0] + span[1]) / 2);
+          const k = lines.length + (withValue ? 1 : 0);
+          const box = (yc: number): [number, number, number, number] => [X(span[0] - pad), Math.min(Y(yc - step * 0.62), Y(yc + step * 0.62)), X(span[1] + pad), Math.max(Y(yc - step * 0.62), Y(yc + step * 0.62))];
+          const name = { on: fill, align: 'center' as const, baseline: 'middle' as const, size, weight: 600 };
+          lines.forEach((t, j) => {
+            const yc = cy + step * ((k - 1) / 2 - j);
+            labels.push({ ...name, text: t, tx, ty: Y(yc), box: box(yc), ellipsis });
+          });
+          if (withValue) {
+            const yc = cy - step * ((k - 1) / 2);
+            labels.push({ tx, ty: Y(yc), text: value!, on: fill, align: 'center', baseline: 'middle', size: 10, box: box(yc) });
+          }
+        };
+        // Around the centroid first, then a little higher or lower where the cell may be wider.
+        const shifts = [0, 0.5, -0.5, 1, -1, 1.5, -1.5];
+        for (const { lines, withValue, size } of tries) {
+          const step = (size + 3) / uy;
+          const k = lines.length + (withValue ? 1 : 0);
+          const half = step * (k / 2 + 0.15);
+          for (const sh of shifts) {
+            const cy = cy0 + sh * step;
+            const span = room(poly, [cy + half, cy - half]);
+            if (!span) continue;
+            const w = (span[1] - span[0]) * ux;
+            if (w >= Math.max(...lines.map((t) => textWidth(t, font(size)) + 3), withValue ? valueW + 1 : 0)) {
+              place(lines, withValue, span, true, size, cy);
+              return;
+            }
+          }
         }
-        const one = room(poly, [cy + line * 0.6, cy - line * 0.6]);
-        if (one && worth(text, one)) {
-          labels.push({ ...name, tx: X((one[0] + one[1]) / 2), ty: Y(cy), box: [X(one[0]), Math.min(Y(cy - line * 0.6), Y(cy + line * 0.6)), X(one[1]), Math.max(Y(cy - line * 0.6), Y(cy + line * 0.6))] });
-        }
+        // Last resort: one line losing only its last letters (at least 80 % of the name shows).
+        const one = room(poly, [cy0 + line * 0.6, cy0 - line * 0.6]);
+        if (one && (one[1] - one[0]) * ux >= 0.8 * textWidth(text, font(11)) + 3 + textWidth('…', font(11))) place([text], false, one, true, 11, cy0);
       };
       // A small circle (a phone, a thumbnail) has no room for the leaves: it names the groups instead.
       if (2 * ux < 230 && groups.length > 1) {

@@ -21,7 +21,7 @@ import {
   variwideColumns,
   type TornadoItem,
 } from './compareLayout';
-import { pushRect, pushSegment } from './primitives';
+import { luminance, pushRect, pushSegment } from './primitives';
 import { emptyHit, type BuildContext, type MarkDefinition, type MarkDraw, type MarkLabel, type ShapeHit } from './registry';
 import { textWidth } from './shapes';
 
@@ -96,12 +96,15 @@ export const likert: MarkDefinition = {
     const mid = n % 2 === 1 ? (n - 1) / 2 : -1;
 
     const ink = parseColor(theme.text.primary);
+    // On a dark surface, fading towards the surface muddies the middle levels (brown, navy): they fade
+    // towards a pale tint instead, so they stay bright and still read as weaker than the extremes.
+    const dark = luminance(ctx.surface) < 0.2;
     const colors = likertColors(
       n,
       parseColor(auto(style.negative, theme.palette.categorical[1])),
       parseColor(auto(style.positive, theme.palette.categorical[0])),
-      mix(ctx.surface, ink, 0.2),
-      ctx.surface,
+      mix(ctx.surface, ink, dark ? 0.3 : 0.2),
+      dark ? mix(ctx.surface, ink, 0.9) : ctx.surface,
     );
     // The legend follows the scale, from the most unfavourable answer to the most favourable.
     const legend = levels.map((key, i) => {

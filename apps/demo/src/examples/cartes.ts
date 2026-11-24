@@ -195,7 +195,7 @@ export const FAMILIES: Family[] = [
           fields: { millions: { label: 'Population', format: { suffix: ' M' } }, pib: { label: 'PIB par habitant', format: { suffix: ' k€' } } },
           layers: [
             { mark: 'geoshape', geo: countriesGeo, encode: {} },
-            { mark: 'dorling', geo: countriesGeo, encode: { key: 'name', value: 'millions', color: 'pib' }, style: { label: 'pays', shortLabel: 'code', values: false, coverage: 0.22, opacity: 0.94 } },
+            { mark: 'dorling', geo: countriesGeo, encode: { key: 'name', value: 'millions', color: 'pib' }, style: { label: 'pays', shortLabel: 'code', values: false, coverage: 0.22, opacity: 0.94, outline: 1.5 } },
           ],
         },
       },

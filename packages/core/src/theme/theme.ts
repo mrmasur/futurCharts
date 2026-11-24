@@ -361,6 +361,8 @@ export interface Theme {
       values: boolean;
       /** Fill opacity. */
       opacity: number;
+      /** px of rim inside each circle, its fill pulled towards the ink (0: none); keeps circles apart from a basemap. */
+      outline: number;
     };
     /** Pies on a map: one per place, its area by the total of its slices. */
     mapPie: {
@@ -1060,6 +1062,65 @@ export interface Theme {
       /** Color of a goal missed (`auto`: the KPI bad color). */
       bad: string;
     };
+    /** Profit bridge: floating changes between running levels, subtotals as solid bars from zero. */
+    bridge: {
+      /** Keys of the steps that are totals: solid bars from zero (their value, or the running level when empty). */
+      subtotals: string[];
+      /** A boolean field that flags the totals, in addition to `subtotals` (empty: none). */
+      totalField: string;
+      /** One row per step (long account names) instead of one column. */
+      horizontal: boolean;
+      /** Thin lines joining each bar to the next at the running level. */
+      connectors: boolean;
+      /** The figure of each step, above or below its bar (beside it when horizontal). */
+      labels: boolean;
+      /** Largest width of a bar, px. */
+      thickness: number;
+      /** Corner radius of the bars, px. */
+      radius: number;
+      /** Whether a rise is good news (a cost bridge: false); it picks the color of the changes. */
+      upIsGood: boolean;
+      /** Color of a favourable change (`auto`: the KPI good color, `$up`). */
+      good: string;
+      /** Color of an unfavourable change (`auto`: the KPI bad color, `$down`). */
+      bad: string;
+    };
+    /** Actual against budget per row: solid actual over the budget outline, absolute and relative variances. */
+    variance: {
+      /** A column of absolute variances, as bars around zero. */
+      absolute: boolean;
+      /** A column of relative variances, as pins around zero. */
+      relative: boolean;
+      /** A total row at the bottom (sums of actual and budget). */
+      total: boolean;
+      /** Figures beside the bars and pins. */
+      labels: boolean;
+      /** Largest thickness of a row's bars, px. */
+      thickness: number;
+      /** Corner radius of the bar ends, px. */
+      radius: number;
+      /** Whether actual above budget is good news (costs: false). */
+      upIsGood: boolean;
+      /** Color of a favourable variance (`auto`: the KPI good color, `$up`). */
+      good: string;
+      /** Color of an unfavourable variance (`auto`: the KPI bad color, `$down`). */
+      bad: string;
+    };
+    /** Columns per period: previous year, budget and actual side by side, the variance above each past period. */
+    periodBars: {
+      /** Width of a period's group of bars, as a share of its slot. */
+      width: number;
+      /** Corner radius of the column tops, px. */
+      radius: number;
+      /** The variance to budget above each past period. */
+      labels: boolean;
+      /** Whether actual above budget is good news (costs: false). */
+      upIsGood: boolean;
+      /** Color of a favourable variance (`auto`: the KPI good color, `$up`). */
+      good: string;
+      /** Color of an unfavourable variance (`auto`: the KPI bad color, `$down`). */
+      bad: string;
+    };
     flow: {
       variant: 'pipeline' | 'boxes';
       /** Steps can be dragged; the chart then emits `layout` with every position. */
@@ -1190,7 +1251,7 @@ export const lightTheme: Theme = {
     connected: { width: 2, size: 6, arrows: true, arrowSize: 9, labels: true },
     marginal: { size: 5, opacity: 0.7, bins: 20, share: 0.2, gap: 1, radius: 2, fillOpacity: 0.85, labels: true },
     tilemap: { hex: true, gap: 2, labels: true },
-    dorling: { coverage: 0.36, iterations: 140, gap: 1.5, labels: true, label: '', shortLabel: '', values: true, opacity: 1 },
+    dorling: { coverage: 0.36, iterations: 140, gap: 1.5, labels: true, label: '', shortLabel: '', values: true, opacity: 1, outline: 0 },
     mapPie: { sizeRange: [16, 46], innerRadius: 0, gap: 1, outline: 1.5, labels: true, opacity: 1 },
     spike: { height: 90, width: 9, opacity: 0.4, strokeWidth: 1.25, labels: true, top: 6 },
     mapBars: { height: 44, thickness: 7, gap: 1, radius: 1.5, outline: 1, labels: true, opacity: 1 },
@@ -1245,6 +1306,9 @@ export const lightTheme: Theme = {
     variwide: { gap: 2, radius: 3, labels: true, sorted: false },
     barRank: { top: 0, upIsGood: true, good: 'auto', bad: 'auto', thickness: 18, radius: 3, labels: true },
     barInBar: { inner: 0.42, thickness: 24, radius: 3, labels: true, sorted: false, upIsGood: true, good: 'auto', bad: 'auto' },
+    bridge: { subtotals: [], totalField: '', horizontal: false, connectors: true, labels: true, thickness: 44, radius: 2, upIsGood: true, good: 'auto', bad: 'auto' },
+    variance: { absolute: true, relative: true, total: false, labels: true, thickness: 20, radius: 2, upIsGood: true, good: 'auto', bad: 'auto' },
+    periodBars: { width: 0.78, radius: 2, labels: true, upIsGood: true, good: 'auto', bad: 'auto' },
     flow: { variant: 'pipeline', editable: true, direction: 'LR', rankGap: 56, nodeGap: 28, fontSize: 13, edge: 'auto', edgeWidth: 1.5, tint: 0.16, radius: 6, lanes: false, laneOrder: [], routing: 'curved' },
   },
   tooltip: {

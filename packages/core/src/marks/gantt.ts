@@ -369,13 +369,23 @@ function slotMark(name: 'schedule' | 'swimlane', fill: boolean): MarkDefinition 
         labels.push(...fixed);
         if (!style.labels) return;
         const titleFont = `600 11px ${family}`;
+        // No slot tall enough for the usual titles: smaller ones rather than none at all.
+        const thin = !fill && boxes.every((b) => (b.y1 - b.y0) / py < 14);
         for (const b of boxes) {
           const s = m.slots[b.k];
           if (!shown(b.k) || !s.label) continue;
           const left = Math.max(b.x0, v0);
           const room = (Math.min(b.x1, v1) - left) / ux - style.gap - 12;
           const tall = (b.y1 - b.y0) / py;
-          if (room < 22 || tall < 14) continue;
+          if (room < 22 || tall < (thin ? 9 : 14)) continue;
+          if (thin) {
+            // Every slot thin (a phone): a smaller title, only where the slot shows enough of it to be read.
+            if (fill) continue;
+            const small = ellipsize(s.label, `600 9px ${family}`, room);
+            if (small.replace('…', '').length < Math.min(s.label.length, 6)) continue;
+            labels.push({ tx: left, ty: b.yc, text: small, on: b.fill, size: 9, weight: 600, align: 'left', dx: 5 });
+            continue;
+          }
           // A state is named in full or not at all (the legend names it anyway); a booking's title is cut.
           const text = fill ? (textWidth(s.label, titleFont) <= room ? s.label : '') : ellipsize(s.label, titleFont, room);
           if (!text) continue;

@@ -92,7 +92,7 @@ Le builder ne produit qu'une `ChartSpec`. Tout ce qu'il exprime peut s'écrire d
 |---|---|
 | `render/` | Contrat de rendu indépendant du moteur (`types.ts`, `layouts.ts`) et moteur `webgl2/` |
 | `scale/` | Échelles linéaire, log, temps, bandes, Mercator. Elles produisent des positions normalisées, jamais des pixels |
-| `marks/` | Les 100 marques du cœur (`geoshape` est dans `@futurcharts/geo`), contrat dans `registry.ts`, enregistrées par `ensureBuiltinMarks` ; `registerMark` pour les vôtres |
+| `marks/` | Les 103 marques du cœur (`geoshape` est dans `@futurcharts/geo`), contrat dans `registry.ts`, enregistrées par `ensureBuiltinMarks` ; `registerMark` pour les vôtres |
 | `data/` | `Table` (colonnes typées) et transformations de la spec |
 | `theme/` | Thèmes `light` / `dark`, `registerTheme`, surcharge feuille par feuille ; options de style documentées dans `Theme['marks']` |
 | `spec/` | Types de la spec (référence commentée de toutes les options) et builder |
@@ -162,6 +162,9 @@ Démo : `http://localhost:5273/gallery.html`, une application de tableau de bord
 | Barres à largeur variable | `variwide` (hauteur `value`, largeur `encode.size`, noms décalés sous les barres étroites ; `encode.color` pour des familles) |
 | Classement avant / après | `barRank` (rang, places gagnées ou perdues, barre actuelle, trait à `encode.previous`, variation colorée ; `top`, `upIsGood`) |
 | Barre dans la barre | `barInBar` (barre fine `value` dans une barre large `encode.target`, part atteinte en bout de ligne) |
+| Pont de résultat | `bridge` (une étape par `key`, variation `value` ; `subtotals` ou `totalField` : totaux repartant de zéro en aplat ; traits de liaison, `horizontal`, `upIsGood`) |
+| Écarts au budget | `variance` (une ligne par `key` : réel `value` plein sur budget `encode.target` en contour, écart absolu en barres et relatif en épingles colorés ; `absolute`, `relative`, `total`, `upIsGood`) |
+| Réel, budget, année précédente | `periodBars` (une colonne par période `x` : année précédente `encode.previous` en gris, budget `encode.target` en contour, réel `value` devant ; périodes futures en budget seul, écart coloré au-dessus) |
 | Jauge à remplissage | `liquid` (un contenant par ligne rempli à valeur / `encode.target` ou `max`, surface en vague, `container` rond ou arrondi, `zones` ; `animated` pour une vague en mouvement) |
 | Anneaux d'activité | `activity` (un anneau par objectif, piste teintée, bouts arrondis, second tour au-delà de 100 % ; un seul anneau : la part au centre) |
 | Compteur à segments | `led` (segments allumés jusqu'à la valeur, `zones` : couleur par niveau) |

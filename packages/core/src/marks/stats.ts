@@ -438,11 +438,53 @@ export const contour: MarkDefinition = {
   // Only the points depend on the size (they thin out on a small chart): the bands are in scale space.
   sizeDependent: (layer) => layer.style?.points !== false,
   symbol: 'square',
-  scales({ layer, table, fields }) {
+  scales({ layer, table, fields, style }) {
     const xf = need(layer, 'x', 'contour');
     const yf = need(layer, 'y', 'contour');
-    const [x0, x1] = paddedDomain(...extent(numbers(table, xf)), 0.1);
-    const [y0, y1] = paddedDomain(...extent(numbers(table, yf)), 0.1);
+    const xs = numbers(table, xf);
+    const ys = numbers(table, yf);
+    let [x0, x1] = paddedDomain(...extent(xs), 0.1);
+    let [y0, y1] = paddedDomain(...extent(ys), 0.1);
+    // A domain held at 0 would cut the outer band flat along the axis: where that band reaches the
+    // edge, the domain goes on below 0, as far as the kernel spreads.
+    const st = (style ?? layer.style ?? {}) as { levels?: number; smoothing?: number };
+    const levels = Math.max(1, Math.min(24, Math.round(st.levels ?? 6)));
+    const smoothing = (st.smoothing ?? 1) > 0 ? (st.smoothing ?? 1) : 1;
+    const cf = layer.encode.color;
+    const cv = cf ? table.column(cf).values : undefined;
+    const groups = new Map<string, number[]>();
+    for (let r = 0; r < table.length; r++) {
+      if (!Number.isFinite(xs[r] + ys[r])) continue;
+      const k = cv ? String(cv[r]) : '';
+      groups.get(k)?.push(r) ?? groups.set(k, [r]);
+    }
+    const NX = 96, NY = 72;
+    let nx0 = x0, ny0 = y0;
+    for (const rows of groups.values()) {
+      if (rows.length < 3 || (x0 !== 0 && y0 !== 0)) continue;
+      const vx = rows.map((r) => xs[r]);
+      const vy = rows.map((r) => ys[r]);
+      const hx = Math.max(scott(vx) * smoothing, ((x1 - x0) / (NX - 1)) * 1.5);
+      const hy = Math.max(scott(vy) * smoothing, ((y1 - y0) / (NY - 1)) * 1.5);
+      // On a frame widened by the kernel's reach, where does the outer band end?
+      const ex0 = x0 === 0 ? x0 - 4 * hx : x0;
+      const ey0 = y0 === 0 ? y0 - 4 * hy : y0;
+      const g = density2d(vx, vy, { x0: ex0, x1, y0: ey0, y1 }, NX, NY, hx, hy);
+      let max = 0;
+      for (const v of g) if (v > max) max = v;
+      const level = max / (levels + 1);
+      if (!(level > 0)) continue;
+      let left = NX, bottom = NY;
+      for (let j = 0; j < NY; j++)
+        for (let i = 0; i < NX; i++)
+          if (g[j * NX + i] >= level) (left = Math.min(left, i)), (bottom = Math.min(bottom, j));
+      const xEdge = ex0 + (left * (x1 - ex0)) / (NX - 1);
+      const yEdge = ey0 + (bottom * (y1 - ey0)) / (NY - 1);
+      if (xEdge < x0) nx0 = Math.min(nx0, xEdge - 0.25 * hx);
+      if (yEdge < y0) ny0 = Math.min(ny0, yEdge - 0.25 * hy);
+    }
+    if (nx0 < x0) x0 = niceDomain(nx0, x1, 12)[0];
+    if (ny0 < y0) y0 = niceDomain(ny0, y1, 12)[0];
     return { x: new LinearScale(x0, x1, fields[xf]?.format), y: new LinearScale(y0, y1, fields[yf]?.format), axes: { x: true, y: true }, grid: { y: true } };
   },
   build(ctx) {

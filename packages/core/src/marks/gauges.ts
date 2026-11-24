@@ -209,11 +209,14 @@ export const bullet: MarkDefinition = {
       for (const r of rows) r.domain = [lo, hi];
     }
 
-    const nameWidth = Math.min(W * 0.36, Math.max(0, ...rows.map((r) => textWidth(r.key, nameFont))) + 16);
+    const widest = Math.max(0, ...rows.map((r) => textWidth(r.key, nameFont))) + 16;
+    const nameWidth = Math.min(W * 0.36, widest);
     const valueWidth = Math.max(0, ...rows.map((r) => textWidth(r.text, valueFont))) + 14;
-    const base = { width: W, height: H, rows: rows.length, nameWidth, valueWidth, maxThickness: style.thickness as number };
+    // A phone: a graduated axis under every row only clutters, and a cut name goes above its bar.
+    const compact = W < 420;
+    const base = { width: W, height: H, rows: rows.length, nameWidth, valueWidth, maxThickness: style.thickness as number, ...(compact && widest > nameWidth ? { minBar: Infinity } : {}) };
     // Ticks under every row when each has its own scale, once under the last row when they share one.
-    let ticksPerRow = !!style.axis && !style.shared;
+    let ticksPerRow = !!style.axis && !style.shared && !compact;
     const footer = style.axis && style.shared ? 18 : 0;
     let L = rowsLayout({ ...base, below: ticksPerRow ? 15 : 0, footer });
     if (ticksPerRow && L.thickness < 12) {
@@ -738,11 +741,15 @@ export const activity: MarkDefinition = {
     for (const g of rings) {
       const track = style.track === 'auto' ? withAlpha(g.color, 0.18) : parseColor(style.track);
       pushArc(tracks, cx, cy, X(g.inner), X(g.outer), 0, TAU, 0, track);
-      pushArc(arcs, cx, cy, X(g.inner), X(g.outer), 0, Math.min(1, g.share) * TAU, 0, g.color, corner);
-      // Past the goal: a second lap, a shade darker, over the start of the first.
+      // A closed ring has no ends to round (a rounded end would show a seam at the top).
+      pushArc(arcs, cx, cy, X(g.inner), X(g.outer), 0, Math.min(1, g.share) * TAU, 0, g.color, g.share >= 1 ? 0 : corner);
+      // Past the goal: a second lap of the same color over the start of the first, its end cut out of
+      // it by a thin notch of the surface (a darker lap would read as the track on a dark theme).
       if (g.share > 1) {
-        const dark = mix(g.color, [0, 0, 0, g.color[3]], 0.26);
-        pushArc(laps, cx, cy, X(g.inner), X(g.outer), 0, Math.min(1, g.share - 1) * TAU, 0, dark, corner);
+        const end = Math.min(1, g.share - 1) * TAU;
+        const notch = 3 / ((g.inner + g.outer) / 2);
+        if (end + notch < TAU) pushArc(laps, cx, cy, X(g.inner), X(g.outer), Math.min(notch, end / 2), end + notch, 0, ctx.surface, corner);
+        pushArc(laps, cx, cy, X(g.inner), X(g.outer), 0, end, 0, g.color, corner);
       }
     }
 
