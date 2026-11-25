@@ -30,6 +30,58 @@ sont dans [REPRISE.md](REPRISE.md) § 4.
 - Le développement a été très rapide (une quarantaine de commits en 8 jours, dont 50 marques écrites, sur deux jours, en un après-midi par des agents en parallèle) : beaucoup de fonctionnalités, peu de
   consolidation. Certaines marques (`advanced.ts`, `more.ts`, `shapes.ts`) font 800 à 1 150 lignes.
 
+## Essai d'intégration dans une application (2026-11-25)
+
+Premier usage hors de la galerie : une trentaine de graphiques d'une application React existante (thème clair et
+sombre, palette de l'application), redessinés à côté de leur version d'origine sur des données réelles. Trois
+écrans : un panneau de 19 courbes temporelles synchronisées, un tableau de bord de barres empilées et d'anneau,
+une synthèse mêlant rivière, puces, carte de chaleur, bulles en échelle log et double axe. Plus la traduction
+d'une description de graphique écrite par un serveur en `ChartSpec`, validée par le schéma avant le rendu.
+
+**Ce que l'essai confirme**
+
+- La spec JSON et son schéma tiennent leur promesse : traduire une description tierce prend une cinquantaine de
+  lignes, une description fausse est refusée avec sa raison, une retouche (aire, seuil) tient en trois lignes.
+- Une page de 19 graphiques synchronisés tient sur le contexte partagé, zones de tracé alignées, sans réglage.
+- Légende sur une ligne, dates dans la langue du navigateur, étiquettes d'axe jamais superposées : sans rien demander.
+
+**Défauts trouvés et corrigés dans cette branche** (un à trois par écran : la lib est encore en rodage)
+
+| Défaut | Correction |
+|---|---|
+| Axe des valeurs sans unité : un `FormatSpec` JSON ne sait pas dire « octets en Go, ms en s » | `options.format.value` / `secondary` : une fonction de l'application, hors de la spec (`withFormatter`) |
+| Sur une page pleine de graphiques, la molette zoomait au lieu de faire défiler | `interactions.zoom.wheel: 'modifier'` (Ctrl / Cmd, pincement compris) |
+| Libellé d'une ligne verticale d'annotation perdu près du bord droit | il passe à gauche du trait dans le dernier cinquième |
+| Clic sans effet sur une marque sans données (nœud de Sankey, pays, tuile) | l'événement `click` porte `shape` |
+| Axe en échelle log : domaine arrondi à 0, tous les points écrasés sur un bord | pas de `nice` sur un axe log |
+| `heatmap` ignorait `scales.x.categories` / `scales.y.categories` | ordre de la spec respecté, catégorie absente gardée en bande vide (`orderedCategories`) |
+| Fond `transparent` en thème sombre : surface supposée blanche, plages des puces éblouissantes | surface déduite de l'encre (`opaqueSurfaceOf`) |
+
+**Manques constatés, non traités** (par ordre de gêne pour une application)
+
+1. **Sélection d'une plage à la souris** (glisser pour choisir une période, événement avec les deux bornes) : le
+   zoom ne la remplace pas quand la plage choisie doit recharger des données. `select: 'rect'` donne des marques,
+   pas un intervalle.
+2. **Infobulle** : `options.tooltip` rend une chaîne HTML ; chaque application réécrit le même gabarit (puce de
+   couleur, nom, valeur). Proposer un formateur de valeur et de titre (`options.format.tooltipValue`, `title`), et
+   une option pour retirer les lignes à zéro d'une pile de nombreuses séries.
+3. **`validateSpec`** sans dépendance (point 8) : l'application a dû apporter ajv elle-même.
+4. **Format de l'axe des catégories en fonction** : `options.format` ne couvre que les axes de valeurs ; une
+   application qui a ses propres libellés de période ne peut pas les imposer.
+5. **Libellés longs** : les catégories trop longues sont coupées par « … ». Prévoir le retour à la ligne sur
+   deux lignes (barres horizontales, lignes de carte de chaleur) comme alternative à l'ellipse.
+6. **Sankey** : sous 8 px de haut un nœud perd son nom, et deux petits nœuds voisins se touchent. Un mode
+   « hauteur minimale par nœud » rendrait lisible une liste longue, au prix de la proportion exacte.
+7. **Puces (`bullet`)** : pas de domaine explicite (il a fallu le déduire des plages), un seul format pour toutes
+   les lignes : trois unités ont demandé trois graphiques.
+8. **Export SVG / PDF** (point 16) : bloquant pour les rapports générés côté serveur.
+9. Aucun test ne construit les échelles cartésiennes : le défaut de l'axe log n'était visible qu'à l'écran. Un
+   banc `cartesianScales` (ou le `Renderer` factice du point 7) l'aurait attrapé.
+
+**Vérifié dans cette branche** : typecheck, 442 tests unitaires, 888 captures (aucune référence modifiée),
+robustesse et interactions par le hook de push. Non vérifié : un vrai pavé tactile pour la molette, un autre
+navigateur que Chromium, les performances sur l'application.
+
 ## Priorité 0 — refermer la journée du 2026-11-23
 
 La branche `graphiques-2026-11-23` (tests visuels, 103 exemples nouveaux, robustesse, accessibilité) a été

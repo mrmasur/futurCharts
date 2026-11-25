@@ -479,6 +479,12 @@ export interface InteractionSpec {
     max?: number;
     /** Zoomed along x, the value axis fits what is visible. Default true. */
     fitY?: boolean;
+    /**
+     * `modifier`: the wheel zooms only with Ctrl or Cmd held (a trackpad pinch counts), and scrolls
+     * the page otherwise: for a page full of charts, where the wheel must keep scrolling. Dragging
+     * still pans, double-click still resets. Default `always`.
+     */
+    wheel?: 'always' | 'modifier';
   };
   /**
    * Drag to select marks: freehand `lasso` (default) or `rect`. Hold Shift to

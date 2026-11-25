@@ -7751,6 +7751,14 @@
                 "fitY": {
                   "type": "boolean",
                   "description": "Zoomed along x, the value axis fits what is visible. Default true."
+                },
+                "wheel": {
+                  "type": "string",
+                  "enum": [
+                    "always",
+                    "modifier"
+                  ],
+                  "description": "`modifier`: the wheel zooms only with Ctrl or Cmd held (a trackpad pinch counts), and scrolls the page otherwise: for a page full of charts, where the wheel must keep scrolling. Dragging still pans, double-click still resets. Default `always`."
                 }
               },
               "additionalProperties": false

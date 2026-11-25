@@ -157,7 +157,8 @@ export function cartesianScales(input: CartesianInput): { cat: Scale; val: Scale
       c1 += step / 2;
     }
     const onlyPoints = spec.layers.every((l) => l.mark === 'point');
-    if (catType !== 'time' && (catSpec.nice ?? (onlyPoints && !banded))) [c0, c1] = niceDomain(c0, c1, 8);
+    // Never on a log axis: rounding 200 … 2e10 to [0, 2e10] puts log(0) in the domain and crushes every point on one edge.
+    if (catType !== 'time' && catType !== 'log' && (catSpec.nice ?? (onlyPoints && !banded))) [c0, c1] = niceDomain(c0, c1, 8);
     if (catSpec.zero) [c0, c1] = [Math.min(0, c0), Math.max(0, c1)];
     c0 = catSpec.domain?.[0] ?? c0;
     c1 = catSpec.domain?.[1] ?? c1;

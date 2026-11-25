@@ -19,6 +19,13 @@ export function zoomConfig(spec: ChartSpec, minViewWidth: number | undefined, zo
   return { axes: (typeof z === 'object' && z.axes) || 'x', max: (typeof z === 'object' && z.max) || 200 };
 }
 
+/** Does this wheel event zoom the chart? With `zoom.wheel: 'modifier'`, only with Ctrl or Cmd held. */
+export function wheelZooms(spec: ChartSpec, e: { ctrlKey?: boolean; metaKey?: boolean }): boolean {
+  const z = spec.interactions?.zoom;
+  if (typeof z === 'object' && z.wheel === 'modifier') return !!(e.ctrlKey || e.metaKey);
+  return true;
+}
+
 /** Keep the view over the data: no panning past either end. */
 export function clampPan(z: Zoom): void {
   z.tx = Math.min(0, Math.max(1 - z.kx, z.tx));

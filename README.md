@@ -503,6 +503,21 @@ plage : on y glisse une fenêtre (bords redimensionnables), un clic remet tout. 
 ce qui est visible (seule la transformation de vue change) ; `interactions.zoom.fitY: false` pour l'en empêcher.
 Une échelle log avec un `domain` explicite le garde tel quel, avec des graduations 1-2-5 sur un court intervalle.
 
+## Page pleine de graphiques, formats de l'application
+
+- `"interactions": { "zoom": { "axes": "x", "wheel": "modifier" } }` : la molette ne zoome qu'avec Ctrl ou ⌘ (un
+  pincement au pavé tactile compte) et fait défiler la page sinon. Glisser déplace toujours, double-clic revient.
+- `options.format` (à la création, hors de la spec) : `{ value: (v) => octets(v), secondary: … }` écrit les
+  graduations de l'axe des valeurs avec une fonction de l'application, pour ce qu'un `FormatSpec` JSON ne sait pas
+  dire (une unité qui change avec la grandeur : octets en Go, ms en s). L'infobulle se remplace par `options.tooltip`.
+- Le libellé d'une ligne verticale d'annotation passe à gauche du trait dans le dernier cinquième du graphique,
+  où il ne tiendrait pas à droite.
+- Un clic sur une marque sans données (nœud ou flux de Sankey, pays, tuile) émet `click` avec `shape` (son titre et
+  ses lignes d'infobulle) et `items` vide.
+- `heatmap` suit `scales.x.categories` et `scales.y.categories` ; une catégorie demandée mais absente garde sa bande, vide.
+- Fond `transparent` : la surface avec laquelle les marques se mélangent est déduite de l'encre (sombre sous un
+  texte clair). Un axe en échelle log n'arrondit plus son domaine.
+
 ## Course de barres
 
 ```json

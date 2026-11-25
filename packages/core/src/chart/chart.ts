@@ -7,7 +7,7 @@ import { getMark, type LegendRamp, type ShapeHit, type Timeline } from '../marks
 import { createRenderer } from '../render';
 import { LAYOUTS } from '../render/layouts';
 import type { Batch, ClipRect, DrawCall, Renderer } from '../render/types';
-import { LinearScale, type Scale } from '../scale/scales';
+import { LinearScale, withFormatter, type Scale } from '../scale/scales';
 import type { AxisSpec, ChartSpec } from '../spec/types';
 import { resolveTheme, type Theme } from '../theme/theme';
 import { parseColor } from '../util/color';
@@ -30,7 +30,7 @@ import { drawLasso, lassoPolygon, selectionMasks, selectionPayload, setLayerSele
 import { broadcast, groupMargins, joinGroup, leaveGroup, reportMargins, type SyncMargins, type SyncMember } from './sync';
 import { fillTooltip, tooltipPosition } from './tooltip';
 import { sizeDependent, type Built, type ChartEvents, type ChartOptions, type HoverItem, type Layout, type LegendEntry, type Picked, type Point, type SelectionPayload, type TooltipContext, type Zoom } from './types';
-import { clampPan, fitY, panBy, visibleX, zoomAt, zoomConfig, type ZoomConfig } from './zoom';
+import { clampPan, fitY, panBy, visibleX, wheelZooms, zoomAt, zoomConfig, type ZoomConfig } from './zoom';
 
 export type { ChartEvents, ChartOptions, HoverItem, SelectionPayload, TooltipContext } from './types';
 
@@ -489,9 +489,13 @@ export class Chart implements SyncMember {
       this.val = this.yScale;
     } else {
       const scales = cartesianScales({ ...plan, spec, theme, layers, tableOf, categories });
-      const { cat, val } = scales;
+      const { cat } = scales;
+      // Function formatters of the host app (`options.format`), over the JSON formats of the spec.
+      const valueFmt = this.options.format?.value;
+      const secondFmt = this.options.format?.secondary;
+      const val = valueFmt && scales.val.type !== 'time' ? withFormatter(scales.val, valueFmt) : scales.val;
       xStep = scales.xStep;
-      if (dual) this.val2 = scales.val2;
+      if (dual) this.val2 = secondFmt && scales.val2 && scales.val2.type !== 'time' ? withFormatter(scales.val2, secondFmt) : scales.val2;
       this.cat = cat;
       this.val = val;
       this.xScale = horizontal ? val : cat;
@@ -1191,14 +1195,17 @@ export class Chart implements SyncMember {
       }
     }
     const picked = this.pick(p);
-    if (picked.length) this.emit('click', { items: this.describe(picked), x: p.x, y: p.y });
+    if (picked.length) return this.emit('click', { items: this.describe(picked), x: p.x, y: p.y });
+    // A mark made of surfaces (sankey node or flow, country, treemap tile) has no datum to describe: the shape under the click.
+    const shape = this.pickShape(p);
+    if (shape) this.emit('click', { items: [], x: p.x, y: p.y, shape });
   }
 
   private onWheel(e: WheelEvent): void {
     const cfg = this.zoomConfig();
     const p = this.local(e);
     // Without zoom in the spec, the wheel scrolls the page.
-    if (!cfg || !this.inPlot(p) || !this.spec.interactions?.zoom) return;
+    if (!cfg || !this.inPlot(p) || !this.spec.interactions?.zoom || !wheelZooms(this.spec, e)) return;
     e.preventDefault();
     this.userZoomed = true;
     const z = this.zoom;
