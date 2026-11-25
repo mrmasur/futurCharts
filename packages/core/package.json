@@ -16,5 +16,6 @@
     "dist",
     "schema"
   ],
-  "sideEffects": false
+  "sideEffects": false,
+  "license": "UNLICENSED"
 }

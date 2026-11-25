@@ -25,5 +25,6 @@
     "apache-arrow": {
       "optional": true
     }
-  }
+  },
+  "license": "UNLICENSED"
 }

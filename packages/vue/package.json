@@ -20,5 +20,6 @@
   },
   "peerDependencies": {
     "vue": ">=3.3"
-  }
+  },
+  "license": "UNLICENSED"
 }

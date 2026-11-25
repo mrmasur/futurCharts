@@ -20,5 +20,6 @@
   },
   "peerDependencies": {
     "react": ">=18"
-  }
+  },
+  "license": "UNLICENSED"
 }

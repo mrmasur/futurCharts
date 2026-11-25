@@ -73,7 +73,9 @@ fusionnée dans `main` le 2026-11-24, à la demande de l'utilisateur, sans tour 
 4. ~~Tests visuels de non-régression~~ : **fait le 2026-11-23** (`npm run test:visual`, voir
    [ARCHITECTURE.md](ARCHITECTURE.md) § 6). Reste à les brancher sur la CI (point 2) : les références actuelles
    sont celles de macOS, il faudra en générer pour la plateforme de la CI (Linux), dans un conteneur Playwright.
-5. **Licence** (MIT ou autre, à décider), `LICENSE`, champ `license` dans chaque `package.json`.
+5. **Licence** : dépôt public sur GitHub (`mrmasur/futurCharts`) depuis le 2026-11-25, **tous droits réservés**
+   (`LICENSE`, `"license": "UNLICENSED"`). Une licence MIT a été publiée quelques minutes le 2026-11-25, puis remplacée et effacée de
+   l'historique par un push forcé (une copie faite entre-temps resterait sous MIT). À décider avant toute diffusion réelle : licence définitive.
 
 ## Priorité 2 — consolider
 
