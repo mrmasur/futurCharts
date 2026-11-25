@@ -23,6 +23,18 @@ export interface Scale {
   readonly band: number;
 }
 
+/**
+ * The same scale with its labels written by `fn` (graduations and `format`). Positions, domain and
+ * type are untouched: only the text changes. The value of a tick is read back from its position,
+ * rounded to 12 significant digits so that 0.30000000000000004 formats as 0.3.
+ */
+export function withFormatter<S extends Scale>(scale: S, fn: (v: number) => string): S {
+  const out = Object.create(scale) as S;
+  out.ticks = (t0, t1, count) => scale.ticks(t0, t1, count).map((t) => ({ ...t, label: fn(Number(scale.invert(t.t).toPrecision(12)) + 0) }));
+  out.format = fn;
+  return out;
+}
+
 export function niceStep(span: number, count: number): number {
   const raw = span / Math.max(1, count);
   const pow = Math.pow(10, Math.floor(Math.log10(raw)));

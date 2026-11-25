@@ -92,15 +92,25 @@ export function valueColor(ctx: BuildContext, v: number, lo: number, hi: number,
   return [s[0] + (end[0] - s[0]) * k, s[1] + (end[1] - s[1]) * k, s[2] + (end[2] - s[2]) * k, 1];
 }
 
+/**
+ * Categories in the order the spec asks for (`scales.x.categories`), then the others in data order.
+ * A category asked for but absent from the data keeps its place: an empty row or column.
+ */
+export function orderedCategories(have: string[], want: string[] | undefined): string[] {
+  if (!want?.length) return have;
+  const asked = new Set(want);
+  return [...want, ...have.filter((c) => !asked.has(c))];
+}
+
 export const heatmap: MarkDefinition = {
   standalone: true,
   symbol: 'square',
   // Dots are sized in px.
   sizeDependent: (layer) => !!(layer.style as { circles?: boolean } | undefined)?.circles,
-  scales({ layer, table }) {
+  scales({ layer, table, scales }) {
     return {
-      x: new BandScale(categoriesOf(table, need(layer, 'x', 'heatmap')), 0, 0),
-      y: new BandScale(categoriesOf(table, need(layer, 'y', 'heatmap')), 0, 0, true),
+      x: new BandScale(orderedCategories(categoriesOf(table, need(layer, 'x', 'heatmap')), scales?.x?.categories), 0, 0),
+      y: new BandScale(orderedCategories(categoriesOf(table, need(layer, 'y', 'heatmap')), scales?.y?.categories), 0, 0, true),
       axes: { x: true, y: true },
     };
   },

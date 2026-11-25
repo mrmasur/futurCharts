@@ -44,7 +44,7 @@ export type {
   RGBA,
 } from './render';
 
-export { LinearScale, LogScale, TimeScale, BandScale, MercatorScale, niceDomain, niceStep } from './scale/scales';
+export { LinearScale, LogScale, TimeScale, BandScale, MercatorScale, niceDomain, niceStep, withFormatter } from './scale/scales';
 export type { Scale, Tick } from './scale/scales';
 
 export { parseColor, withAlpha, sampleRamp, toCss } from './util/color';

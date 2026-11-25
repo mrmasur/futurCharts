@@ -116,7 +116,11 @@ export function buildAnnotations(list: AnnotationSpec[], ctx: AnnotationContext,
       if (a.text) labels.push({ tx: 1, ty: ys, text: a.text, color: ink(a.color), size: 11, weight: 600, align: 'right', baseline: 'bottom', dy: -4, background: surface });
     } else if (typeof xs === 'number' && Number.isFinite(xs)) {
       pen.segment(xs, -FAR, xs, FAR);
-      if (a.text) labels.push({ tx: xs, ty: 1, text: a.text, color: ink(a.color), size: 11, weight: 600, align: 'left', baseline: 'top', dx: 6, dy: 4, background: surface });
+      if (a.text) {
+        // Right of the line, or left of it near the right edge: there it would not fit and be dropped.
+        const right = xs > 0.8;
+        labels.push({ tx: xs, ty: 1, text: a.text, color: ink(a.color), size: 11, weight: 600, align: right ? 'right' : 'left', baseline: 'top', dx: right ? -6 : 6, dy: 4, background: surface });
+      }
     }
   }
 

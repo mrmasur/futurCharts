@@ -45,12 +45,20 @@ export interface ChartOptions {
   /** Replace the tooltip content. Return an element, an HTML string, or null to hide. */
   tooltip?: (ctx: TooltipContext) => HTMLElement | string | null;
   devicePixelRatio?: number;
+  /**
+   * Formatters as functions, for what a JSON `FormatSpec` cannot say (a unit that changes with the
+   * magnitude: bytes to Go, ms to s). They write the graduations of the value axis and what
+   * `Scale.format` returns; `secondary` is the second value axis of a dual-axis chart. Read once, on
+   * creation. The spec stays plain JSON: a function never goes in it.
+   */
+  format?: { value?: (v: number) => string; secondary?: (v: number) => string };
 }
 
 export interface ChartEvents {
   hover: { items: HoverItem[]; x: number; y: number };
   leave: {};
-  click: { items: HoverItem[]; x: number; y: number };
+  /** `shape`: set, with no `items`, when the click lands on a surface without datums (a sankey node or flow, a country, a tile). */
+  click: { items: HoverItem[]; x: number; y: number; shape?: ShapeHit };
   zoom: { kx: number; ky: number; tx: number; ty: number };
   legend: { series: string; hidden: boolean };
   select: SelectionPayload;

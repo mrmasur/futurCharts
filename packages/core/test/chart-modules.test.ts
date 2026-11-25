@@ -1,3 +1,4 @@
+import { opaqueSurfaceOf } from '../src/chart/build';
 import { describe, expect, it } from 'vitest';
 import { gridLines } from '../src/chart/axes';
 import { projectionScales } from '../src/chart/cartesian';
@@ -10,7 +11,7 @@ import { applyResponsive, mergeSpec, sameMarks } from '../src/chart/responsive';
 import { insidePolygon, lassoPolygon } from '../src/chart/selection';
 import { tooltipPosition } from '../src/chart/tooltip';
 import type { Layout, Zoom } from '../src/chart/types';
-import { clampPan, panBy, visibleX, zoomAt, zoomConfig } from '../src/chart/zoom';
+import { clampPan, panBy, visibleX, wheelZooms, zoomAt, zoomConfig } from '../src/chart/zoom';
 import { Table } from '../src/data/table';
 import type { ChartSpec } from '../src/spec/types';
 import { resolveTheme } from '../src/theme/theme';
@@ -114,6 +115,16 @@ describe('chart/morph', () => {
 });
 
 describe('chart/zoom', () => {
+  it('the wheel zooms always by default, only with Ctrl or Cmd under `wheel: modifier`', () => {
+    const always: ChartSpec = { layers: [], interactions: { zoom: { axes: 'x' } } };
+    const modifier: ChartSpec = { layers: [], interactions: { zoom: { axes: 'x', wheel: 'modifier' } } };
+    expect(wheelZooms(always, {})).toBe(true);
+    expect(wheelZooms({ layers: [], interactions: { zoom: true } }, {})).toBe(true);
+    expect(wheelZooms(modifier, {})).toBe(false);
+    expect(wheelZooms(modifier, { ctrlKey: true })).toBe(true);
+    expect(wheelZooms(modifier, { metaKey: true })).toBe(true);
+  });
+
   it('a wheel zoom keeps the point under the pointer in place', () => {
     const z: Zoom = { kx: 1, ky: 1, tx: 0, ty: 0 };
     const view = { x: 50, y: 20, width: 400, height: 200 };
@@ -245,5 +256,15 @@ describe('chart/hover, tooltip, frame, axes', () => {
     expect(eq.x.norm(0)).toBe(0.5);
     const merc = projectionScales({});
     expect(merc.aspect).toBeGreaterThan(1);
+  });
+});
+
+describe('chart/build', () => {
+  it('a transparent background blends with white on a light theme, with a dark surface under light ink', () => {
+    expect(opaqueSurfaceOf({ background: '#102030', text: { primary: '#fff', secondary: '#fff', muted: '#fff' } })[0]).toBeCloseTo(16 / 255);
+    expect(opaqueSurfaceOf({ background: 'transparent', text: { primary: '#343741', secondary: '#000', muted: '#000' } })).toEqual([1, 1, 1, 1]);
+    const dark = opaqueSurfaceOf({ background: 'transparent', text: { primary: '#CAD3E2', secondary: '#000', muted: '#000' } });
+    expect(dark[0]).toBeLessThan(0.2);
+    expect(dark[3]).toBe(1);
   });
 });

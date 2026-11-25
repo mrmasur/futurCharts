@@ -5,12 +5,26 @@ import { curvePoints } from '../src/marks/curve';
 import { getMark, registerMark } from '../src/marks/registry';
 import { prepareLayer } from '../src/marks/prepare';
 import { LAYOUTS } from '../src/render/layouts';
-import { BandScale, LinearScale, TimeScale, niceDomain } from '../src/scale/scales';
+import { BandScale, LinearScale, LogScale, TimeScale, niceDomain, withFormatter } from '../src/scale/scales';
 import { chart } from '../src/spec/builder';
 import { resolveTheme } from '../src/theme/theme';
 import { parseColor } from '../src/util/color';
 
 describe('scales', () => {
+  it('withFormatter rewrites the labels and nothing else', () => {
+    const base = new LinearScale(0, 0.3);
+    const s = withFormatter(base, (v) => `${v} Go`);
+    expect(s.type).toBe('linear');
+    expect(s.norm(0.15)).toBeCloseTo(0.5);
+    expect(s.format(2)).toBe('2 Go');
+    const ticks = s.ticks(0, 1, 3);
+    expect(ticks.map((t) => t.t)).toEqual(base.ticks(0, 1, 3).map((t) => t.t));
+    // 3 × 0.1 is 0.30000000000000004: the label must not show it.
+    expect(ticks.map((t) => t.label)).toEqual(['0 Go', '0.1 Go', '0.2 Go', '0.3 Go']);
+    const log = withFormatter(new LogScale(1, 1000), (v) => `${v} ms`);
+    expect(log.ticks(0, 1, 4).map((t) => t.label)).toEqual(['1 ms', '10 ms', '100 ms', '1000 ms']);
+  });
+
   it('nice domain rounds outwards', () => {
     expect(niceDomain(3, 97)).toEqual([0, 100]);
   });

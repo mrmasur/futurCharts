@@ -10,7 +10,8 @@ import { standaloneLayer } from '../marks/prepare';
 import type { Renderer, RGBA } from '../render/types';
 import type { Scale } from '../scale/scales';
 import type { AnnotationSpec, AxisSpec, FieldSpec } from '../spec/types';
-import type { Theme } from '../theme/theme';
+import { darkTheme, type Theme } from '../theme/theme';
+import { luminance } from '../marks/primitives';
 import { parseColor, sampleRamp } from '../util/color';
 import { numberFormatter } from '../util/format';
 import { deepMerge } from '../util/merge';
@@ -41,12 +42,22 @@ export interface LayerBuildInput {
   view: { width: number; height: number };
 }
 
+/**
+ * The opaque color the marks blend with (range bands, strokes around dots…). A transparent background lets
+ * the host page show through, so its color is unknown: guessed from the ink. Light text means a dark page,
+ * and blending with white there made range bands glare.
+ */
+export function opaqueSurfaceOf(theme: Pick<Theme, 'background' | 'text'>): RGBA {
+  const surface = parseColor(theme.background);
+  if (surface[3] !== 0) return surface;
+  return luminance(parseColor(theme.text.primary)) > 0.4 ? parseColor(darkTheme.background) : [1, 1, 1, 1];
+}
+
 /** Build one prepared layer with its mark. */
 export function buildLayer({ data, def }: { data: LayerData; def: MarkDefinition }, a: LayerBuildInput): Built {
   const { theme, horizontal, fields, view } = a;
   const { categorical, seriesColor, ramp } = a.colors;
-  const surface = parseColor(theme.background);
-  const opaqueSurface: RGBA = surface[3] === 0 ? [1, 1, 1, 1] : surface;
+  const opaqueSurface = opaqueSurfaceOf(theme);
   const pos = horizontal ? (c: number, v: number): [number, number] => [v, c] : (c: number, v: number): [number, number] => [c, v];
   const themeKey = def.themeKey ?? data.layer.mark;
   const style = deepMerge((theme.marks as Record<string, any>)[themeKey] ?? {}, data.layer.style ?? {});

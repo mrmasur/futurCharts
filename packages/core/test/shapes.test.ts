@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { annotationRaw } from '../src/chart/annotations';
 import { Table } from '../src/data/table';
+import { orderedCategories } from '../src/marks/charts';
 import { prepareLayer } from '../src/marks/prepare';
 import { dashed } from '../src/marks/primitives';
 import { lens, vennLayout } from '../src/marks/shapes';
@@ -144,5 +145,14 @@ describe('correlation', () => {
     expect(get('A', 'B')).toBeCloseTo(1, 3);
     expect(get('A', 'C')).toBeCloseTo(-1, 3);
     expect(Math.abs(get('A', 'D'))).toBeLessThan(0.3);
+  });
+});
+
+describe('heatmap', () => {
+  it('follows the category order of the spec, the others after, an absent one kept as an empty band', () => {
+    expect(orderedCategories(['b', 'a', 'c'], undefined)).toEqual(['b', 'a', 'c']);
+    expect(orderedCategories(['b', 'a', 'c'], [])).toEqual(['b', 'a', 'c']);
+    expect(orderedCategories(['b', 'a', 'c'], ['a', 'b'])).toEqual(['a', 'b', 'c']);
+    expect(orderedCategories(['b', 'a'], ['a', 'z', 'b'])).toEqual(['a', 'z', 'b']);
   });
 });
